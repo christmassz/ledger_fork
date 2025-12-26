@@ -2834,6 +2834,31 @@ body,
   color: var(--text-primary);
 }
 
+/* Stash Actions */
+.stash-actions {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.stash-actions .btn {
+  flex: 1;
+}
+
+.stash-actions .btn-danger {
+  background: transparent;
+  color: var(--danger);
+  border: 1px solid var(--danger);
+}
+
+.stash-actions .btn-danger:hover:not(:disabled) {
+  background: var(--danger);
+  color: white;
+}
+
 /* ========================================
    Modal
    ======================================== */
