@@ -1,7 +1,9 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import type { Branch, Worktree, BranchFilter, BranchSort, CheckoutResult, PullRequest, Commit, WorkingStatus, PRFilter, PRSort } from './types/electron'
+import type { Branch, Worktree, BranchFilter, BranchSort, CheckoutResult, PullRequest, Commit, WorkingStatus, PRFilter, PRSort, GraphCommit, CommitDiff, StashEntry } from './types/electron'
 import './styles/app.css'
 import { useWindowContext } from './components/window'
+
+type ViewMode = 'columns' | 'work'
 
 interface StatusMessage {
   type: 'success' | 'error' | 'info';
@@ -40,6 +42,24 @@ export default function App() {
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null)
   const [githubUrl, setGithubUrl] = useState<string | null>(null)
   const { setTitle } = useWindowContext()
+  
+  // View mode state
+  const [viewMode, setViewMode] = useState<ViewMode>('columns')
+  
+  // Work mode state
+  const [graphCommits, setGraphCommits] = useState<GraphCommit[]>([])
+  const [selectedCommit, setSelectedCommit] = useState<GraphCommit | null>(null)
+  const [commitDiff, setCommitDiff] = useState<CommitDiff | null>(null)
+  const [stashes, setStashes] = useState<StashEntry[]>([])
+  const [loadingDiff, setLoadingDiff] = useState(false)
+  
+  // Sidebar collapsed state
+  const [sidebarSections, setSidebarSections] = useState({
+    branches: true,
+    remotes: false,
+    worktrees: true,
+    stashes: false,
+  })
   
   // Filter and sort state
   const [localFilter, setLocalFilter] = useState<BranchFilter>('all')
@@ -105,13 +125,15 @@ export default function App() {
     setPrError(null)
 
     try {
-      const [branchResult, worktreeResult, prResult, commitResult, statusResult, ghUrl] = await Promise.all([
+      const [branchResult, worktreeResult, prResult, commitResult, statusResult, ghUrl, graphResult, stashResult] = await Promise.all([
         window.electronAPI.getBranchesWithMetadata(),
         window.electronAPI.getWorktrees(),
         window.electronAPI.getPullRequests(),
         window.electronAPI.getCommitHistory(15),
         window.electronAPI.getWorkingStatus(),
         window.electronAPI.getGitHubUrl(),
+        window.electronAPI.getCommitGraphHistory(100),
+        window.electronAPI.getStashes(),
       ])
 
       setGithubUrl(ghUrl)
@@ -146,12 +168,33 @@ export default function App() {
 
       setCommits(commitResult)
       setWorkingStatus(statusResult)
+      setGraphCommits(graphResult)
+      setStashes(stashResult)
     } catch (err) {
       setError((err as Error).message)
     } finally {
       setLoading(false)
     }
   }
+
+  // Fetch diff when a commit is selected
+  const handleSelectCommit = useCallback(async (commit: GraphCommit) => {
+    setSelectedCommit(commit)
+    setLoadingDiff(true)
+    try {
+      const diff = await window.electronAPI.getCommitDiff(commit.hash)
+      setCommitDiff(diff)
+    } catch (err) {
+      setCommitDiff(null)
+    } finally {
+      setLoadingDiff(false)
+    }
+  }, [])
+
+  // Toggle sidebar section
+  const toggleSidebarSection = useCallback((section: keyof typeof sidebarSections) => {
+    setSidebarSections(prev => ({ ...prev, [section]: !prev[section] }))
+  }, [])
 
   // Context menu handlers
   const handleContextMenu = (e: React.MouseEvent, type: ContextMenuType, data: PullRequest | Worktree | Branch | Commit) => {
@@ -197,28 +240,6 @@ export default function App() {
   }
 
   // Worktree context menu actions
-  const handleWorktreeApply = async (wt: Worktree) => {
-    closeContextMenu()
-    if (switching) return
-    
-    setSwitching(true)
-    setStatus({ type: 'info', message: `Copying changes from ${wt.displayName}...` })
-    
-    try {
-      const result: CheckoutResult = await window.electronAPI.applyWorktree(wt.path, wt.branch)
-      if (result.success) {
-        setStatus({ type: 'success', message: result.message, stashed: result.stashed })
-        await refresh()
-      } else {
-        setStatus({ type: 'error', message: result.message })
-      }
-    } catch (err) {
-      setStatus({ type: 'error', message: (err as Error).message })
-    } finally {
-      setSwitching(false)
-    }
-  }
-
   const handleWorktreeOpen = async (wt: Worktree) => {
     closeContextMenu()
     try {
@@ -230,28 +251,6 @@ export default function App() {
       }
     } catch (err) {
       setStatus({ type: 'error', message: (err as Error).message })
-    }
-  }
-
-  const handleWorktreeRemove = async (wt: Worktree) => {
-    closeContextMenu()
-    if (switching) return
-    
-    setSwitching(true)
-    setStatus({ type: 'info', message: `Removing worktree ${wt.displayName}...` })
-    
-    try {
-      const result = await window.electronAPI.removeWorktree(wt.path)
-      if (result.success) {
-        setStatus({ type: 'success', message: result.message })
-        await refresh()
-      } else {
-        setStatus({ type: 'error', message: result.message })
-      }
-    } catch (err) {
-      setStatus({ type: 'error', message: (err as Error).message })
-    } finally {
-      setSwitching(false)
     }
   }
 
@@ -348,9 +347,8 @@ export default function App() {
       case 'worktree': {
         const wt = contextMenu.data as Worktree
         return [
-          { label: 'Copy Changes Here', action: () => handleWorktreeApply(wt), disabled: switching },
+          { label: 'Check Out Worktree', action: () => handleWorktreeDoubleClick(wt), disabled: !wt.branch || wt.branch === currentBranch || switching },
           { label: 'Open in Finder', action: () => handleWorktreeOpen(wt) },
-          { label: 'Remove Worktree', action: () => handleWorktreeRemove(wt), disabled: switching },
         ]
       }
       case 'local-branch': {
@@ -407,13 +405,13 @@ export default function App() {
   }, [switching])
 
   const handleWorktreeDoubleClick = useCallback(async (worktree: Worktree) => {
-    if (switching) return
+    if (!worktree.branch || worktree.branch === currentBranch || switching) return
     
     setSwitching(true)
-    setStatus({ type: 'info', message: `Copying changes from ${worktree.displayName}...` })
+    setStatus({ type: 'info', message: `Checking out worktree ${worktree.displayName}...` })
     
     try {
-      const result: CheckoutResult = await window.electronAPI.applyWorktree(worktree.path, worktree.branch)
+      const result: CheckoutResult = await window.electronAPI.checkoutBranch(worktree.branch)
       if (result.success) {
         setStatus({ type: 'success', message: result.message, stashed: result.stashed })
         await refresh()
@@ -425,7 +423,7 @@ export default function App() {
     } finally {
       setSwitching(false)
     }
-  }, [switching])
+  }, [currentBranch, switching])
 
   const handlePRDoubleClick = useCallback(async (pr: PullRequest) => {
     handlePRViewRemote(pr)
@@ -532,19 +530,10 @@ export default function App() {
     return Array.from(parents).sort()
   }, [worktrees, repoPath])
 
-  // Filter worktrees by parent or time
+  // Filter worktrees by parent
   const filteredWorktrees = useMemo(() => {
     if (worktreeParentFilter === 'all') {
       return worktrees
-    }
-    if (worktreeParentFilter === 'today') {
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      return worktrees.filter(wt => {
-        const wtDate = new Date(wt.lastModified)
-        wtDate.setHours(0, 0, 0, 0)
-        return wtDate.getTime() === today.getTime()
-      })
     }
     return worktrees.filter(wt => {
       if (worktreeParentFilter === 'main') {
@@ -696,6 +685,24 @@ export default function App() {
           )}
         </div>
         <div className="header-actions">
+          {repoPath && (
+            <div className="view-toggle">
+              <button
+                className={`view-toggle-btn ${viewMode === 'columns' ? 'active' : ''}`}
+                onClick={() => setViewMode('columns')}
+                title="Column View"
+              >
+                <span className="view-icon">⊞</span>
+              </button>
+              <button
+                className={`view-toggle-btn ${viewMode === 'work' ? 'active' : ''}`}
+                onClick={() => setViewMode('work')}
+                title="Work View"
+              >
+                <span className="view-icon">☰</span>
+              </button>
+            </div>
+          )}
           <button onClick={selectRepo} className="btn btn-secondary">
             <span className="btn-icon">📁</span>
             {repoPath ? 'Change Repo' : 'Select Repository'}
@@ -731,7 +738,7 @@ export default function App() {
       )}
 
       {/* Main Content */}
-      {repoPath && !error && (
+      {repoPath && !error && viewMode === 'columns' && (
         <main className="ledger-content five-columns">
           {/* Pull Requests Column */}
           <section className="column pr-column">
@@ -845,14 +852,13 @@ export default function App() {
             {worktreeControlsOpen && (
               <div className="column-controls" onClick={(e) => e.stopPropagation()}>
                 <div className="control-group">
-                  <label>Filter</label>
+                  <label>Parent</label>
                   <select 
                     value={worktreeParentFilter} 
                     onChange={(e) => setWorktreeParentFilter(e.target.value)}
                     className="control-select"
                   >
                     <option value="all">All</option>
-                    <option value="today">Today</option>
                     {worktreeParents.map(parent => (
                       <option key={parent} value={parent}>{parent}</option>
                     ))}
@@ -1132,6 +1138,478 @@ export default function App() {
           </section>
         </main>
       )}
+
+      {/* Work Mode Layout */}
+      {repoPath && !error && viewMode === 'work' && (
+        <main className="work-mode-layout">
+          {/* Sidebar */}
+          <aside className="work-sidebar">
+            {/* Branches Section */}
+            <div className="sidebar-section">
+              <div 
+                className="sidebar-section-header"
+                onClick={() => toggleSidebarSection('branches')}
+              >
+                <span className={`sidebar-chevron ${sidebarSections.branches ? 'open' : ''}`}>▸</span>
+                <span className="sidebar-section-title">Branches</span>
+                <span className="sidebar-count">{localBranches.length}</span>
+              </div>
+              {sidebarSections.branches && (
+                <ul className="sidebar-list">
+                  {localBranches.map((branch) => (
+                    <li
+                      key={branch.name}
+                      className={`sidebar-item ${branch.current ? 'current' : ''} ${switching ? 'disabled' : ''}`}
+                      onDoubleClick={() => handleBranchDoubleClick(branch)}
+                    >
+                      {branch.current && <span className="sidebar-current-dot">●</span>}
+                      <span className="sidebar-item-name">{branch.name}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {/* Remotes Section */}
+            <div className="sidebar-section">
+              <div 
+                className="sidebar-section-header"
+                onClick={() => toggleSidebarSection('remotes')}
+              >
+                <span className={`sidebar-chevron ${sidebarSections.remotes ? 'open' : ''}`}>▸</span>
+                <span className="sidebar-section-title">Remotes</span>
+                <span className="sidebar-count">{remoteBranches.length}</span>
+              </div>
+              {sidebarSections.remotes && (
+                <ul className="sidebar-list">
+                  {remoteBranches.map((branch) => (
+                    <li
+                      key={branch.name}
+                      className={`sidebar-item ${switching ? 'disabled' : ''}`}
+                      onDoubleClick={() => handleRemoteBranchDoubleClick(branch)}
+                    >
+                      <span className="sidebar-item-name">{branch.name.replace('remotes/', '').replace(/^origin\//, '')}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {/* Worktrees Section */}
+            <div className="sidebar-section">
+              <div 
+                className="sidebar-section-header"
+                onClick={() => toggleSidebarSection('worktrees')}
+              >
+                <span className={`sidebar-chevron ${sidebarSections.worktrees ? 'open' : ''}`}>▸</span>
+                <span className="sidebar-section-title">Worktrees</span>
+                <span className="sidebar-count">{worktrees.length}</span>
+              </div>
+              {sidebarSections.worktrees && (
+                <ul className="sidebar-list">
+                  {worktrees.map((wt) => (
+                    <li
+                      key={wt.path}
+                      className={`sidebar-item ${wt.branch === currentBranch ? 'current' : ''} ${switching ? 'disabled' : ''}`}
+                      onDoubleClick={() => handleWorktreeDoubleClick(wt)}
+                    >
+                      {wt.branch === currentBranch && <span className="sidebar-current-dot">●</span>}
+                      <span className="sidebar-item-name">{wt.displayName}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            {/* Stashes Section */}
+            <div className="sidebar-section">
+              <div 
+                className="sidebar-section-header"
+                onClick={() => toggleSidebarSection('stashes')}
+              >
+                <span className={`sidebar-chevron ${sidebarSections.stashes ? 'open' : ''}`}>▸</span>
+                <span className="sidebar-section-title">Stashes</span>
+                <span className="sidebar-count">{stashes.length}</span>
+              </div>
+              {sidebarSections.stashes && (
+                <ul className="sidebar-list">
+                  {stashes.length === 0 ? (
+                    <li className="sidebar-empty">No stashes</li>
+                  ) : (
+                    stashes.map((stash) => (
+                      <li key={stash.index} className="sidebar-item">
+                        <span className="sidebar-item-name" title={stash.message}>
+                          stash@{`{${stash.index}}`}: {stash.message}
+                        </span>
+                      </li>
+                    ))
+                  )}
+                </ul>
+              )}
+            </div>
+          </aside>
+
+          {/* Main Content: Git Graph + Commit List */}
+          <div className="work-main">
+            <div className="work-main-header">
+              <h2>
+                <span className="column-icon">◉</span>
+                History
+                {currentBranch && <code className="commit-hash branch-badge">{currentBranch}</code>}
+              </h2>
+            </div>
+            <div className="git-graph-container">
+              <GitGraph 
+                commits={graphCommits} 
+                selectedCommit={selectedCommit}
+                onSelectCommit={handleSelectCommit}
+                formatRelativeTime={formatRelativeTime}
+              />
+            </div>
+          </div>
+
+          {/* Detail Panel */}
+          <aside className="work-detail">
+            {!selectedCommit ? (
+              <div className="detail-empty">
+                <span className="detail-empty-icon">◇</span>
+                <p>Select a commit to view details</p>
+              </div>
+            ) : loadingDiff ? (
+              <div className="detail-loading">Loading diff...</div>
+            ) : commitDiff ? (
+              <DiffPanel diff={commitDiff} formatRelativeTime={formatRelativeTime} />
+            ) : (
+              <div className="detail-error">Could not load diff</div>
+            )}
+          </aside>
+        </main>
+      )}
     </div>
   )
+}
+
+// ========================================
+// Git Graph Component
+// ========================================
+
+interface GitGraphProps {
+  commits: GraphCommit[];
+  selectedCommit: GraphCommit | null;
+  onSelectCommit: (commit: GraphCommit) => void;
+  formatRelativeTime: (date: string) => string;
+}
+
+// Lane colors for branches
+const LANE_COLORS = [
+  '#5B9BD5', // blue
+  '#70AD47', // green
+  '#ED7D31', // orange
+  '#7030A0', // purple
+  '#FFC000', // yellow
+  '#C00000', // red
+  '#00B0F0', // cyan
+  '#FF6699', // pink
+];
+
+function GitGraph({ commits, selectedCommit, onSelectCommit, formatRelativeTime }: GitGraphProps) {
+  // Calculate lane assignments for the graph
+  const { lanes, maxLane } = useMemo(() => {
+    const laneMap = new Map<string, number>();
+    const activeLanes = new Set<number>();
+    let maxLaneUsed = 0;
+
+    // Process commits in order (newest first)
+    for (const commit of commits) {
+      // Find or assign a lane for this commit
+      let lane = laneMap.get(commit.hash);
+      
+      if (lane === undefined) {
+        // Find first available lane
+        lane = 0;
+        while (activeLanes.has(lane)) lane++;
+        laneMap.set(commit.hash, lane);
+      }
+      
+      activeLanes.add(lane);
+      maxLaneUsed = Math.max(maxLaneUsed, lane);
+
+      // Assign lanes to parents
+      commit.parents.forEach((parentHash, idx) => {
+        if (!laneMap.has(parentHash)) {
+          if (idx === 0) {
+            // First parent stays in same lane
+            laneMap.set(parentHash, lane!);
+          } else {
+            // Other parents get new lanes
+            let parentLane = 0;
+            while (activeLanes.has(parentLane) || parentLane === lane) parentLane++;
+            laneMap.set(parentHash, parentLane);
+            activeLanes.add(parentLane);
+            maxLaneUsed = Math.max(maxLaneUsed, parentLane);
+          }
+        }
+      });
+
+      // If commit has no parents, release the lane
+      if (commit.parents.length === 0) {
+        activeLanes.delete(lane);
+      }
+    }
+
+    return { lanes: laneMap, maxLane: maxLaneUsed };
+  }, [commits]);
+
+  const LANE_WIDTH = 16;
+  const ROW_HEIGHT = 36;
+  const NODE_RADIUS = 4;
+  const graphWidth = (maxLane + 1) * LANE_WIDTH + 20;
+
+  // Build a map of commit hash to index for drawing lines
+  const commitIndexMap = useMemo(() => {
+    const map = new Map<string, number>();
+    commits.forEach((c, i) => map.set(c.hash, i));
+    return map;
+  }, [commits]);
+
+  return (
+    <div className="git-graph">
+      <svg 
+        className="git-graph-svg" 
+        width={graphWidth} 
+        height={commits.length * ROW_HEIGHT}
+        style={{ minWidth: graphWidth }}
+      >
+        {/* Draw connecting lines */}
+        {commits.map((commit, idx) => {
+          const lane = lanes.get(commit.hash) || 0;
+          const x = 10 + lane * LANE_WIDTH;
+          const y = idx * ROW_HEIGHT + ROW_HEIGHT / 2;
+          const color = LANE_COLORS[lane % LANE_COLORS.length];
+
+          return commit.parents.map((parentHash, pIdx) => {
+            const parentIdx = commitIndexMap.get(parentHash);
+            if (parentIdx === undefined) return null;
+            
+            const parentLane = lanes.get(parentHash) || 0;
+            const px = 10 + parentLane * LANE_WIDTH;
+            const py = parentIdx * ROW_HEIGHT + ROW_HEIGHT / 2;
+            const parentColor = LANE_COLORS[parentLane % LANE_COLORS.length];
+
+            // Draw curved line
+            if (lane === parentLane) {
+              // Straight line
+              return (
+                <line
+                  key={`${commit.hash}-${parentHash}`}
+                  x1={x}
+                  y1={y}
+                  x2={px}
+                  y2={py}
+                  stroke={color}
+                  strokeWidth={2}
+                />
+              );
+            } else {
+              // Curved line for merges/branches
+              const midY = (y + py) / 2;
+              return (
+                <path
+                  key={`${commit.hash}-${parentHash}-${pIdx}`}
+                  d={`M ${x} ${y} C ${x} ${midY}, ${px} ${midY}, ${px} ${py}`}
+                  stroke={pIdx === 0 ? color : parentColor}
+                  strokeWidth={2}
+                  fill="none"
+                />
+              );
+            }
+          });
+        })}
+
+        {/* Draw commit nodes */}
+        {commits.map((commit, idx) => {
+          const lane = lanes.get(commit.hash) || 0;
+          const x = 10 + lane * LANE_WIDTH;
+          const y = idx * ROW_HEIGHT + ROW_HEIGHT / 2;
+          const color = LANE_COLORS[lane % LANE_COLORS.length];
+          const isSelected = selectedCommit?.hash === commit.hash;
+
+          return (
+            <g key={commit.hash}>
+              {/* Selection ring */}
+              {isSelected && (
+                <circle
+                  cx={x}
+                  cy={y}
+                  r={NODE_RADIUS + 3}
+                  fill="none"
+                  stroke={color}
+                  strokeWidth={2}
+                  opacity={0.5}
+                />
+              )}
+              {/* Node */}
+              <circle
+                cx={x}
+                cy={y}
+                r={commit.isMerge ? NODE_RADIUS + 1 : NODE_RADIUS}
+                fill={commit.isMerge ? 'var(--bg-primary)' : color}
+                stroke={color}
+                strokeWidth={commit.isMerge ? 2 : 0}
+              />
+            </g>
+          );
+        })}
+      </svg>
+
+      {/* Commit list */}
+      <div className="git-graph-list" style={{ marginLeft: graphWidth }}>
+        {commits.map((commit, idx) => (
+          <div
+            key={commit.hash}
+            className={`graph-commit-row ${selectedCommit?.hash === commit.hash ? 'selected' : ''}`}
+            style={{ height: ROW_HEIGHT }}
+            onClick={() => onSelectCommit(commit)}
+          >
+            <div className="graph-commit-refs">
+              {commit.refs.map((ref, i) => {
+                const isHead = ref.includes('HEAD');
+                const isBranch = ref.includes('origin/') || !ref.includes('/');
+                const cleanRef = ref.replace('HEAD -> ', '').replace('origin/', '');
+                return (
+                  <span 
+                    key={i} 
+                    className={`graph-ref ${isHead ? 'head' : ''} ${isBranch ? 'branch' : 'tag'}`}
+                  >
+                    {cleanRef}
+                  </span>
+                );
+              })}
+            </div>
+            <span className="graph-commit-message" title={commit.message}>
+              {commit.message}
+            </span>
+            <span className="graph-commit-meta">
+              <code className="commit-hash">{commit.shortHash}</code>
+              <span className="graph-commit-author">{commit.author}</span>
+              <span className="graph-commit-date">{formatRelativeTime(commit.date)}</span>
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ========================================
+// Diff Panel Component
+// ========================================
+
+interface DiffPanelProps {
+  diff: CommitDiff;
+  formatRelativeTime: (date: string) => string;
+}
+
+function DiffPanel({ diff, formatRelativeTime }: DiffPanelProps) {
+  const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
+
+  const toggleFile = (path: string) => {
+    setExpandedFiles(prev => {
+      const next = new Set(prev);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
+  };
+
+  // Expand all files by default on mount or diff change
+  useEffect(() => {
+    setExpandedFiles(new Set(diff.files.map(f => f.file.path)));
+  }, [diff]);
+
+  return (
+    <div className="diff-panel">
+      {/* Commit header */}
+      <div className="diff-commit-header">
+        <div className="diff-commit-message">{diff.message}</div>
+        <div className="diff-commit-meta">
+          <code className="commit-hash">{diff.hash.slice(0, 7)}</code>
+          <span>{diff.author}</span>
+          <span>{formatRelativeTime(diff.date)}</span>
+        </div>
+        <div className="diff-commit-stats">
+          <span className="diff-stat-files">{diff.files.length} {diff.files.length === 1 ? 'file' : 'files'}</span>
+          <span className="diff-stat-additions">+{diff.totalAdditions}</span>
+          <span className="diff-stat-deletions">-{diff.totalDeletions}</span>
+        </div>
+      </div>
+
+      {/* File list with diffs */}
+      <div className="diff-files">
+        {diff.files.map((fileDiff) => (
+          <div key={fileDiff.file.path} className="diff-file">
+            <div 
+              className="diff-file-header"
+              onClick={() => toggleFile(fileDiff.file.path)}
+            >
+              <span className={`diff-file-chevron ${expandedFiles.has(fileDiff.file.path) ? 'open' : ''}`}>▸</span>
+              <span className={`diff-file-status diff-status-${fileDiff.file.status}`}>
+                {fileDiff.file.status === 'added' ? 'A' : 
+                 fileDiff.file.status === 'deleted' ? 'D' : 
+                 fileDiff.file.status === 'renamed' ? 'R' : 'M'}
+              </span>
+              <span className="diff-file-path">
+                {fileDiff.file.oldPath ? `${fileDiff.file.oldPath} → ` : ''}
+                {fileDiff.file.path}
+              </span>
+              <span className="diff-file-stats">
+                {fileDiff.file.additions > 0 && <span className="diff-additions">+{fileDiff.file.additions}</span>}
+                {fileDiff.file.deletions > 0 && <span className="diff-deletions">-{fileDiff.file.deletions}</span>}
+              </span>
+            </div>
+
+            {expandedFiles.has(fileDiff.file.path) && (
+              <div className="diff-file-content">
+                {fileDiff.isBinary ? (
+                  <div className="diff-binary">Binary file</div>
+                ) : fileDiff.hunks.length === 0 ? (
+                  <div className="diff-empty">No changes</div>
+                ) : (
+                  fileDiff.hunks.map((hunk, hunkIdx) => (
+                    <div key={hunkIdx} className="diff-hunk">
+                      <div className="diff-hunk-header">
+                        @@ -{hunk.oldStart},{hunk.oldLines} +{hunk.newStart},{hunk.newLines} @@
+                      </div>
+                      <div className="diff-hunk-lines">
+                        {hunk.lines.map((line, lineIdx) => (
+                          <div 
+                            key={lineIdx} 
+                            className={`diff-line diff-line-${line.type}`}
+                          >
+                            <span className="diff-line-number old">
+                              {line.oldLineNumber || ''}
+                            </span>
+                            <span className="diff-line-number new">
+                              {line.newLineNumber || ''}
+                            </span>
+                            <span className="diff-line-prefix">
+                              {line.type === 'add' ? '+' : line.type === 'delete' ? '-' : ' '}
+                            </span>
+                            <span className="diff-line-content">{line.content}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }

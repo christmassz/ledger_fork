@@ -470,161 +470,6 @@ export function getWorktreePath(worktreePath: string): string {
   return worktreePath;
 }
 
-// Helper to apply a git diff via stdin
-async function applyDiff(diff: string, targetDir: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const child = exec('git apply --3way -', { cwd: targetDir }, (error, _stdout, stderr) => {
-      if (error) {
-        // Include stderr in the error message for better debugging
-        const fullError = new Error(`${error.message}${stderr ? `: ${stderr}` : ''}`);
-        reject(fullError);
-      } else {
-        resolve();
-      }
-    });
-    child.stdin?.write(diff);
-    child.stdin?.end();
-  });
-}
-
-// Apply a worktree's changes to the current working directory (non-destructive copy)
-// This copies ALL changes from the worktree - both committed and uncommitted
-export async function applyWorktree(worktreePath: string, worktreeBranch: string | null): Promise<{ success: boolean; message: string; stashed?: string }> {
-  if (!git || !repoPath) throw new Error('No repository selected');
-  
-  const displayName = worktreeBranch || path.basename(worktreePath);
-  
-  try {
-    // First, stash any uncommitted changes in the main repo
-    const stashResult = await stashChanges();
-    
-    // Get the worktree's current HEAD commit
-    const { stdout: worktreeHead } = await execAsync('git rev-parse HEAD', { cwd: worktreePath });
-    const worktreeCommit = worktreeHead.trim();
-    
-    // Get our current HEAD commit
-    const { stdout: ourHead } = await execAsync('git rev-parse HEAD', { cwd: repoPath });
-    const ourCommit = ourHead.trim();
-    
-    // Strategy: Get the full diff between our current state and the worktree's current state
-    // This captures BOTH committed changes AND uncommitted changes
-    
-    // Step 1: Get uncommitted changes from the worktree (working directory vs HEAD)
-    const { stdout: worktreeUncommitted } = await execAsync('git diff HEAD', { cwd: worktreePath });
-    
-    // Step 2: Get committed changes - diff between our HEAD and the worktree's HEAD
-    let committedDiff = '';
-    if (worktreeCommit !== ourCommit) {
-      try {
-        // Direct diff between commits
-        const { stdout } = await execAsync(`git diff ${ourCommit} ${worktreeCommit}`, { cwd: repoPath });
-        committedDiff = stdout;
-      } catch {
-        // If that fails, try from the worktree's perspective
-        try {
-          const { stdout } = await execAsync(`git diff ${ourCommit} HEAD`, { cwd: worktreePath });
-          committedDiff = stdout;
-        } catch {
-          // Can't compare commits, will just use uncommitted changes
-        }
-      }
-    }
-    
-    const hasUncommitted = worktreeUncommitted.trim().length > 0;
-    const hasCommitted = committedDiff.trim().length > 0;
-    
-    if (!hasUncommitted && !hasCommitted) {
-      return {
-        success: true,
-        message: `No changes to copy from '${displayName}'`,
-        stashed: stashResult.stashed ? stashResult.message : undefined,
-      };
-    }
-    
-    // Apply committed changes first (if any)
-    if (hasCommitted) {
-      try {
-        await applyDiff(committedDiff, repoPath);
-      } catch (applyError) {
-        const msg = (applyError as Error).message;
-        if (msg.includes('patch does not apply') || msg.includes('conflict') || msg.includes('CONFLICT')) {
-          return {
-            success: false,
-            message: `Conflicts applying committed changes from '${displayName}'. Files may have diverged.`,
-            stashed: stashResult.stashed ? stashResult.message : undefined,
-          };
-        }
-        // For other errors, include the message
-        return {
-          success: false,
-          message: `Error applying changes: ${msg}`,
-          stashed: stashResult.stashed ? stashResult.message : undefined,
-        };
-      }
-    }
-    
-    // Apply uncommitted changes (if any)
-    if (hasUncommitted) {
-      try {
-        await applyDiff(worktreeUncommitted, repoPath);
-      } catch (applyError) {
-        const msg = (applyError as Error).message;
-        if (msg.includes('patch does not apply') || msg.includes('conflict') || msg.includes('CONFLICT')) {
-          return {
-            success: false,
-            message: `Conflicts applying uncommitted changes. Files may have diverged.`,
-            stashed: stashResult.stashed ? stashResult.message : undefined,
-          };
-        }
-        return {
-          success: false,
-          message: `Error applying uncommitted changes: ${msg}`,
-          stashed: stashResult.stashed ? stashResult.message : undefined,
-        };
-      }
-    }
-    
-    const parts = [];
-    if (hasCommitted) parts.push('committed');
-    if (hasUncommitted) parts.push('uncommitted');
-    
-    return {
-      success: true,
-      message: `Copied ${parts.join(' and ')} changes from '${displayName}'`,
-      stashed: stashResult.stashed ? stashResult.message : undefined,
-    };
-  } catch (error) {
-    return {
-      success: false,
-      message: (error as Error).message,
-    };
-  }
-}
-
-// Remove a worktree (after applying or when no longer needed)
-export async function removeWorktree(worktreePath: string, force: boolean = false): Promise<{ success: boolean; message: string }> {
-  if (!git) throw new Error('No repository selected');
-  
-  try {
-    const args = ['worktree', 'remove', worktreePath];
-    if (force) {
-      args.push('--force');
-    }
-    
-    await git.raw(args);
-    
-    return {
-      success: true,
-      message: `Removed worktree at ${worktreePath}`,
-    };
-  } catch (error) {
-    return {
-      success: false,
-      message: (error as Error).message,
-    };
-  }
-}
-
 // Pull Request types
 export interface PullRequest {
   number: number;
@@ -971,6 +816,168 @@ export async function resetToCommit(commitHash: string, mode: 'soft' | 'mixed' |
   }
 }
 
+// Get detailed information about a specific commit
+export interface CommitFileChange {
+  path: string;
+  status: 'added' | 'modified' | 'deleted' | 'renamed' | 'copied';
+  additions: number;
+  deletions: number;
+  oldPath?: string; // For renames
+}
+
+export interface CommitDetails {
+  hash: string;
+  shortHash: string;
+  message: string;
+  body: string;
+  author: string;
+  authorEmail: string;
+  date: string;
+  parentHashes: string[];
+  files: CommitFileChange[];
+  totalAdditions: number;
+  totalDeletions: number;
+}
+
+export async function getCommitDetails(commitHash: string): Promise<CommitDetails | null> {
+  if (!git) throw new Error('No repository selected');
+
+  try {
+    // Get commit info
+    const log = await git.log(['-1', commitHash]);
+    const commit = log.latest;
+    if (!commit) return null;
+
+    // Get parent hashes
+    const parentRaw = await git.raw(['rev-parse', `${commitHash}^@`]).catch(() => '');
+    const parentHashes = parentRaw.trim().split('\n').filter(Boolean);
+
+    // Get file changes with stats
+    const diffOutput = await git.raw(['diff-tree', '--no-commit-id', '--name-status', '-r', '--numstat', commitHash]);
+    
+    // Parse numstat for additions/deletions
+    const numstatOutput = await git.raw(['diff-tree', '--no-commit-id', '-r', '--numstat', commitHash]);
+    const numstatLines = numstatOutput.trim().split('\n').filter(Boolean);
+    const statMap = new Map<string, { additions: number; deletions: number }>();
+    
+    for (const line of numstatLines) {
+      const parts = line.split('\t');
+      if (parts.length >= 3) {
+        const additions = parts[0] === '-' ? 0 : parseInt(parts[0], 10) || 0;
+        const deletions = parts[1] === '-' ? 0 : parseInt(parts[1], 10) || 0;
+        const filePath = parts[parts.length - 1]; // Last part is file path (handles renames)
+        statMap.set(filePath, { additions, deletions });
+      }
+    }
+
+    // Parse name-status for file status
+    const nameStatusOutput = await git.raw(['diff-tree', '--no-commit-id', '-r', '--name-status', commitHash]);
+    const statusLines = nameStatusOutput.trim().split('\n').filter(Boolean);
+    
+    const files: CommitFileChange[] = [];
+    let totalAdditions = 0;
+    let totalDeletions = 0;
+
+    for (const line of statusLines) {
+      const parts = line.split('\t');
+      if (parts.length < 2) continue;
+
+      const statusChar = parts[0][0];
+      let status: CommitFileChange['status'] = 'modified';
+      let filePath = parts[1];
+      let oldPath: string | undefined;
+
+      switch (statusChar) {
+        case 'A':
+          status = 'added';
+          break;
+        case 'D':
+          status = 'deleted';
+          break;
+        case 'M':
+          status = 'modified';
+          break;
+        case 'R':
+          status = 'renamed';
+          oldPath = parts[1];
+          filePath = parts[2] || parts[1];
+          break;
+        case 'C':
+          status = 'copied';
+          oldPath = parts[1];
+          filePath = parts[2] || parts[1];
+          break;
+      }
+
+      const stats = statMap.get(filePath) || { additions: 0, deletions: 0 };
+      totalAdditions += stats.additions;
+      totalDeletions += stats.deletions;
+
+      files.push({
+        path: filePath,
+        status,
+        additions: stats.additions,
+        deletions: stats.deletions,
+        oldPath,
+      });
+    }
+
+    // Get full commit message (subject + body)
+    const fullMessage = await git.raw(['log', '-1', '--format=%B', commitHash]);
+    const messageLines = fullMessage.trim().split('\n');
+    const subject = messageLines[0] || '';
+    const body = messageLines.slice(1).join('\n').trim();
+
+    // Get author email
+    const authorEmail = await git.raw(['log', '-1', '--format=%ae', commitHash]);
+
+    return {
+      hash: commit.hash,
+      shortHash: commit.hash.slice(0, 7),
+      message: subject,
+      body,
+      author: commit.author_name,
+      authorEmail: authorEmail.trim(),
+      date: commit.date,
+      parentHashes,
+      files,
+      totalAdditions,
+      totalDeletions,
+    };
+  } catch (error) {
+    console.error('Error getting commit details:', error);
+    return null;
+  }
+}
+
+// Get commit history for a specific branch/ref
+export async function getCommitHistoryForRef(ref: string, limit: number = 50): Promise<CommitInfo[]> {
+  if (!git) throw new Error('No repository selected');
+
+  try {
+    const log = await git.log([ref, '-n', limit.toString()]);
+    
+    const commits: CommitInfo[] = [];
+    for (const commit of log.all) {
+      // Check if it's a merge commit
+      const isMerge = commit.body?.includes('Merge') || (commit.refs || '').includes('Merge');
+      
+      commits.push({
+        hash: commit.hash,
+        shortHash: commit.hash.slice(0, 7),
+        message: commit.message,
+        author: commit.author_name,
+        date: commit.date,
+        isMerge,
+      });
+    }
+    
+    return commits;
+  } catch {
+    return [];
+  }
+}
+
 // Checkout a PR branch (by branch name)
 export async function checkoutPRBranch(branchName: string): Promise<{ success: boolean; message: string; stashed?: string }> {
   if (!git) throw new Error('No repository selected');
@@ -1000,5 +1007,301 @@ export async function checkoutPRBranch(branchName: string): Promise<{ success: b
     };
   } catch (error) {
     return { success: false, message: (error as Error).message };
+  }
+}
+
+// ========================================
+// Work Mode APIs
+// ========================================
+
+// Commit with graph data (parent hashes for graph rendering)
+export interface GraphCommit {
+  hash: string;
+  shortHash: string;
+  message: string;
+  author: string;
+  date: string;
+  parents: string[];  // Parent commit hashes
+  refs: string[];     // Branch/tag refs pointing to this commit
+  isMerge: boolean;
+  filesChanged?: number;
+  additions?: number;
+  deletions?: number;
+}
+
+// Get commit history with parent info for git graph
+export async function getCommitGraphHistory(limit: number = 100): Promise<GraphCommit[]> {
+  if (!git) throw new Error('No repository selected');
+
+  try {
+    // Use raw git log with custom format to get parent hashes
+    const format = '%H|%h|%s|%an|%ci|%P|%D';
+    const output = await git.raw([
+      'log',
+      `--format=${format}`,
+      '-n', limit.toString(),
+      '--all'  // Include all branches
+    ]);
+
+    const lines = output.trim().split('\n').filter(Boolean);
+    const commits: GraphCommit[] = [];
+
+    for (const line of lines) {
+      const [hash, shortHash, message, author, date, parentStr, refsStr] = line.split('|');
+      const parents = parentStr ? parentStr.split(' ').filter(Boolean) : [];
+      const refs = refsStr ? refsStr.split(', ').filter(Boolean).map(r => r.trim()) : [];
+      
+      // Get stats for each commit (could be optimized with --stat in a batch)
+      let filesChanged = 0;
+      let additions = 0;
+      let deletions = 0;
+      
+      try {
+        const statOutput = await git.raw(['show', '--stat', '--format=', hash]);
+        const statLines = statOutput.trim().split('\n');
+        const summaryLine = statLines[statLines.length - 1];
+        const filesMatch = summaryLine.match(/(\d+) files? changed/);
+        const addMatch = summaryLine.match(/(\d+) insertions?\(\+\)/);
+        const delMatch = summaryLine.match(/(\d+) deletions?\(-\)/);
+        filesChanged = filesMatch ? parseInt(filesMatch[1]) : 0;
+        additions = addMatch ? parseInt(addMatch[1]) : 0;
+        deletions = delMatch ? parseInt(delMatch[1]) : 0;
+      } catch {
+        // Ignore stat errors
+      }
+
+      commits.push({
+        hash,
+        shortHash,
+        message,
+        author,
+        date,
+        parents,
+        refs,
+        isMerge: parents.length > 1,
+        filesChanged,
+        additions,
+        deletions,
+      });
+    }
+
+    return commits;
+  } catch {
+    return [];
+  }
+}
+
+// Diff file info
+export interface DiffFile {
+  path: string;
+  status: 'added' | 'modified' | 'deleted' | 'renamed';
+  additions: number;
+  deletions: number;
+  oldPath?: string;  // For renames
+}
+
+// Diff hunk (a section of changes)
+export interface DiffHunk {
+  oldStart: number;
+  oldLines: number;
+  newStart: number;
+  newLines: number;
+  lines: DiffLine[];
+}
+
+// A single line in a diff
+export interface DiffLine {
+  type: 'context' | 'add' | 'delete' | 'header';
+  content: string;
+  oldLineNumber?: number;
+  newLineNumber?: number;
+}
+
+// Full diff for a file
+export interface FileDiff {
+  file: DiffFile;
+  hunks: DiffHunk[];
+  isBinary: boolean;
+}
+
+// Commit diff result
+export interface CommitDiff {
+  hash: string;
+  message: string;
+  author: string;
+  date: string;
+  files: FileDiff[];
+  totalAdditions: number;
+  totalDeletions: number;
+}
+
+// Get diff for a specific commit
+export async function getCommitDiff(commitHash: string): Promise<CommitDiff | null> {
+  if (!git) throw new Error('No repository selected');
+
+  try {
+    // Get commit info
+    const logOutput = await git.raw(['show', '--format=%H|%s|%an|%ci', '-s', commitHash]);
+    const [hash, message, author, date] = logOutput.trim().split('|');
+
+    // Get diff with file stats
+    const diffOutput = await git.raw([
+      'show',
+      '--format=',
+      '--patch',
+      '--stat',
+      commitHash
+    ]);
+
+    // Parse the diff output
+    const files: FileDiff[] = [];
+    let totalAdditions = 0;
+    let totalDeletions = 0;
+
+    // Split by file diffs
+    const diffParts = diffOutput.split(/^diff --git /m).filter(Boolean);
+    
+    for (const part of diffParts) {
+      const lines = part.split('\n');
+      
+      // Parse file header
+      const headerMatch = lines[0].match(/a\/(.+) b\/(.+)/);
+      if (!headerMatch) continue;
+      
+      const oldPath = headerMatch[1];
+      const newPath = headerMatch[2];
+      
+      // Determine status
+      let status: 'added' | 'modified' | 'deleted' | 'renamed' = 'modified';
+      if (part.includes('new file mode')) status = 'added';
+      else if (part.includes('deleted file mode')) status = 'deleted';
+      else if (oldPath !== newPath) status = 'renamed';
+      
+      // Check for binary
+      const isBinary = part.includes('Binary files');
+      
+      // Parse hunks
+      const hunks: DiffHunk[] = [];
+      let fileAdditions = 0;
+      let fileDeletions = 0;
+      
+      if (!isBinary) {
+        const hunkMatches = part.matchAll(/@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)/g);
+        
+        for (const match of hunkMatches) {
+          const oldStart = parseInt(match[1]);
+          const oldLinesCount = match[2] ? parseInt(match[2]) : 1;
+          const newStart = parseInt(match[3]);
+          const newLinesCount = match[4] ? parseInt(match[4]) : 1;
+          
+          // Find the lines after this hunk header
+          const hunkStartIndex = part.indexOf(match[0]);
+          const hunkContent = part.slice(hunkStartIndex + match[0].length);
+          const hunkLines: DiffLine[] = [];
+          
+          let oldLine = oldStart;
+          let newLine = newStart;
+          
+          for (const line of hunkContent.split('\n')) {
+            if (line.startsWith('@@') || line.startsWith('diff --git')) break;
+            
+            if (line.startsWith('+') && !line.startsWith('+++')) {
+              hunkLines.push({ type: 'add', content: line.slice(1), newLineNumber: newLine });
+              newLine++;
+              fileAdditions++;
+            } else if (line.startsWith('-') && !line.startsWith('---')) {
+              hunkLines.push({ type: 'delete', content: line.slice(1), oldLineNumber: oldLine });
+              oldLine++;
+              fileDeletions++;
+            } else if (line.startsWith(' ')) {
+              hunkLines.push({ type: 'context', content: line.slice(1), oldLineNumber: oldLine, newLineNumber: newLine });
+              oldLine++;
+              newLine++;
+            }
+          }
+          
+          hunks.push({
+            oldStart,
+            oldLines: oldLinesCount,
+            newStart,
+            newLines: newLinesCount,
+            lines: hunkLines,
+          });
+        }
+      }
+
+      totalAdditions += fileAdditions;
+      totalDeletions += fileDeletions;
+
+      files.push({
+        file: {
+          path: newPath,
+          status,
+          additions: fileAdditions,
+          deletions: fileDeletions,
+          oldPath: status === 'renamed' ? oldPath : undefined,
+        },
+        hunks,
+        isBinary,
+      });
+    }
+
+    return {
+      hash,
+      message,
+      author,
+      date,
+      files,
+      totalAdditions,
+      totalDeletions,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// Stash entry
+export interface StashEntry {
+  index: number;
+  message: string;
+  branch: string;
+  date: string;
+}
+
+// Get list of stashes
+export async function getStashes(): Promise<StashEntry[]> {
+  if (!git) throw new Error('No repository selected');
+
+  try {
+    const output = await git.raw(['stash', 'list', '--format=%gd|%gs|%ci']);
+    
+    if (!output.trim()) {
+      return [];
+    }
+
+    const stashes: StashEntry[] = [];
+    const lines = output.trim().split('\n');
+
+    for (const line of lines) {
+      const [indexStr, message, date] = line.split('|');
+      // Parse stash@{0} to get index
+      const indexMatch = indexStr.match(/stash@\{(\d+)\}/);
+      const index = indexMatch ? parseInt(indexMatch[1]) : 0;
+      
+      // Extract branch from message if present (format: "WIP on branch: message" or "On branch: message")
+      const branchMatch = message.match(/(?:WIP )?[Oo]n ([^:]+):/);
+      const branch = branchMatch ? branchMatch[1] : '';
+
+      stashes.push({
+        index,
+        message: message.replace(/^(?:WIP )?[Oo]n [^:]+: /, ''),
+        branch,
+        date,
+      });
+    }
+
+    return stashes;
+  } catch {
+    return [];
   }
 }

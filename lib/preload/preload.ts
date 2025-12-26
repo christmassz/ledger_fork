@@ -14,8 +14,6 @@ const electronAPI = {
   checkoutBranch: (branchName: string) => ipcRenderer.invoke('checkout-branch', branchName),
   checkoutRemoteBranch: (remoteBranch: string) => ipcRenderer.invoke('checkout-remote-branch', remoteBranch),
   openWorktree: (worktreePath: string) => ipcRenderer.invoke('open-worktree', worktreePath),
-  applyWorktree: (worktreePath: string, worktreeBranch: string) => ipcRenderer.invoke('apply-worktree', worktreePath, worktreeBranch),
-  removeWorktree: (worktreePath: string, force?: boolean) => ipcRenderer.invoke('remove-worktree', worktreePath, force ?? false),
   // Pull requests
   getPullRequests: () => ipcRenderer.invoke('get-pull-requests'),
   openPullRequest: (url: string) => ipcRenderer.invoke('open-pull-request', url),
@@ -26,9 +24,15 @@ const electronAPI = {
   pullBranch: (remoteBranch: string) => ipcRenderer.invoke('pull-branch', remoteBranch),
   // Commit history and working status
   getCommitHistory: (limit?: number) => ipcRenderer.invoke('get-commit-history', limit),
+  getCommitHistoryForRef: (ref: string, limit?: number) => ipcRenderer.invoke('get-commit-history-for-ref', ref, limit),
+  getCommitDetails: (commitHash: string) => ipcRenderer.invoke('get-commit-details', commitHash),
   getWorkingStatus: () => ipcRenderer.invoke('get-working-status'),
   // Reset operations
   resetToCommit: (commitHash: string, mode: 'soft' | 'mixed' | 'hard') => ipcRenderer.invoke('reset-to-commit', commitHash, mode),
+  // Work mode APIs
+  getCommitGraphHistory: (limit?: number) => ipcRenderer.invoke('get-commit-graph-history', limit),
+  getCommitDiff: (commitHash: string) => ipcRenderer.invoke('get-commit-diff', commitHash),
+  getStashes: () => ipcRenderer.invoke('get-stashes'),
 }
 
 // Use `contextBridge` APIs to expose APIs to

@@ -2,8 +2,11 @@ import { app } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 
+type ViewMode = 'columns' | 'work';
+
 interface Settings {
   lastRepoPath?: string;
+  viewMode?: ViewMode;
 }
 
 const settingsPath = path.join(app.getPath('userData'), 'ledger-settings.json');
@@ -46,6 +49,17 @@ export function saveLastRepoPath(repoPath: string): void {
 export function clearLastRepoPath(): void {
   const settings = loadSettings();
   delete settings.lastRepoPath;
+  saveSettings(settings);
+}
+
+export function getViewMode(): ViewMode {
+  const settings = loadSettings();
+  return settings.viewMode || 'columns';
+}
+
+export function saveViewMode(viewMode: ViewMode): void {
+  const settings = loadSettings();
+  settings.viewMode = viewMode;
   saveSettings(settings);
 }
 
