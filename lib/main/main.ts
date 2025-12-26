@@ -18,8 +18,7 @@ import {
   getCommitHistory,
   getWorkingStatus,
   resetToCommit,
-  applyWorktree,
-  removeWorktree,
+  convertWorktreeToBranch,
 } from './git-service'
 import { getLastRepoPath, saveLastRepoPath } from './settings-service'
 
@@ -169,17 +168,9 @@ app.whenReady().then(() => {
     }
   });
 
-  ipcMain.handle('apply-worktree', async (_, worktreePath: string, worktreeBranch: string) => {
+  ipcMain.handle('convert-worktree-to-branch', async (_, worktreePath: string) => {
     try {
-      return await applyWorktree(worktreePath, worktreeBranch);
-    } catch (error) {
-      return { success: false, message: (error as Error).message };
-    }
-  });
-
-  ipcMain.handle('remove-worktree', async (_, worktreePath: string, force: boolean) => {
-    try {
-      return await removeWorktree(worktreePath, force);
+      return await convertWorktreeToBranch(worktreePath);
     } catch (error) {
       return { success: false, message: (error as Error).message };
     }

@@ -111,8 +111,6 @@ export interface ElectronAPI {
   checkoutBranch: (branchName: string) => Promise<CheckoutResult>;
   checkoutRemoteBranch: (remoteBranch: string) => Promise<CheckoutResult>;
   openWorktree: (worktreePath: string) => Promise<{ success: boolean; message: string }>;
-  applyWorktree: (worktreePath: string, worktreeBranch: string | null) => Promise<CheckoutResult>;
-  removeWorktree: (worktreePath: string, force?: boolean) => Promise<{ success: boolean; message: string }>;
   // Pull requests
   getPullRequests: () => Promise<PullRequestsResult>;
   openPullRequest: (url: string) => Promise<{ success: boolean; message: string }>;
@@ -126,6 +124,8 @@ export interface ElectronAPI {
   getWorkingStatus: () => Promise<WorkingStatus>;
   // Reset operations
   resetToCommit: (commitHash: string, mode: 'soft' | 'mixed' | 'hard') => Promise<CheckoutResult>;
+  // Worktree operations
+  convertWorktreeToBranch: (worktreePath: string) => Promise<{ success: boolean; message: string; branchName?: string }>;
 }
 
 declare global {

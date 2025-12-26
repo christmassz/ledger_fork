@@ -197,28 +197,6 @@ export default function App() {
   }
 
   // Worktree context menu actions
-  const handleWorktreeApply = async (wt: Worktree) => {
-    closeContextMenu()
-    if (switching) return
-    
-    setSwitching(true)
-    setStatus({ type: 'info', message: `Copying changes from ${wt.displayName}...` })
-    
-    try {
-      const result: CheckoutResult = await window.electronAPI.applyWorktree(wt.path, wt.branch)
-      if (result.success) {
-        setStatus({ type: 'success', message: result.message, stashed: result.stashed })
-        await refresh()
-      } else {
-        setStatus({ type: 'error', message: result.message })
-      }
-    } catch (err) {
-      setStatus({ type: 'error', message: (err as Error).message })
-    } finally {
-      setSwitching(false)
-    }
-  }
-
   const handleWorktreeOpen = async (wt: Worktree) => {
     closeContextMenu()
     try {
@@ -233,15 +211,16 @@ export default function App() {
     }
   }
 
-  const handleWorktreeRemove = async (wt: Worktree) => {
+  const handleWorktreeConvertToBranch = async (wt: Worktree) => {
     closeContextMenu()
     if (switching) return
     
     setSwitching(true)
-    setStatus({ type: 'info', message: `Removing worktree ${wt.displayName}...` })
+    const folderName = wt.path.split('/').pop() || 'worktree'
+    setStatus({ type: 'info', message: `Converting ${folderName} to branch...` })
     
     try {
-      const result = await window.electronAPI.removeWorktree(wt.path)
+      const result = await window.electronAPI.convertWorktreeToBranch(wt.path)
       if (result.success) {
         setStatus({ type: 'success', message: result.message })
         await refresh()
@@ -347,10 +326,11 @@ export default function App() {
       }
       case 'worktree': {
         const wt = contextMenu.data as Worktree
+        const hasChanges = wt.changedFileCount > 0 || wt.additions > 0 || wt.deletions > 0
         return [
-          { label: 'Copy Changes Here', action: () => handleWorktreeApply(wt), disabled: switching },
+          { label: 'Check Out Worktree', action: () => handleWorktreeDoubleClick(wt), disabled: !wt.branch || wt.branch === currentBranch || switching },
+          { label: 'Convert to Branch', action: () => handleWorktreeConvertToBranch(wt), disabled: !hasChanges || switching },
           { label: 'Open in Finder', action: () => handleWorktreeOpen(wt) },
-          { label: 'Remove Worktree', action: () => handleWorktreeRemove(wt), disabled: switching },
         ]
       }
       case 'local-branch': {
@@ -407,13 +387,13 @@ export default function App() {
   }, [switching])
 
   const handleWorktreeDoubleClick = useCallback(async (worktree: Worktree) => {
-    if (switching) return
+    if (!worktree.branch || worktree.branch === currentBranch || switching) return
     
     setSwitching(true)
-    setStatus({ type: 'info', message: `Copying changes from ${worktree.displayName}...` })
+    setStatus({ type: 'info', message: `Checking out worktree ${worktree.displayName}...` })
     
     try {
-      const result: CheckoutResult = await window.electronAPI.applyWorktree(worktree.path, worktree.branch)
+      const result: CheckoutResult = await window.electronAPI.checkoutBranch(worktree.branch)
       if (result.success) {
         setStatus({ type: 'success', message: result.message, stashed: result.stashed })
         await refresh()
@@ -425,7 +405,7 @@ export default function App() {
     } finally {
       setSwitching(false)
     }
-  }, [switching])
+  }, [currentBranch, switching])
 
   const handlePRDoubleClick = useCallback(async (pr: PullRequest) => {
     handlePRViewRemote(pr)
@@ -532,19 +512,10 @@ export default function App() {
     return Array.from(parents).sort()
   }, [worktrees, repoPath])
 
-  // Filter worktrees by parent or time
+  // Filter worktrees by parent
   const filteredWorktrees = useMemo(() => {
     if (worktreeParentFilter === 'all') {
       return worktrees
-    }
-    if (worktreeParentFilter === 'today') {
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      return worktrees.filter(wt => {
-        const wtDate = new Date(wt.lastModified)
-        wtDate.setHours(0, 0, 0, 0)
-        return wtDate.getTime() === today.getTime()
-      })
     }
     return worktrees.filter(wt => {
       if (worktreeParentFilter === 'main') {
@@ -845,14 +816,13 @@ export default function App() {
             {worktreeControlsOpen && (
               <div className="column-controls" onClick={(e) => e.stopPropagation()}>
                 <div className="control-group">
-                  <label>Filter</label>
+                  <label>Parent</label>
                   <select 
                     value={worktreeParentFilter} 
                     onChange={(e) => setWorktreeParentFilter(e.target.value)}
                     className="control-select"
                   >
                     <option value="all">All</option>
-                    <option value="today">Today</option>
                     {worktreeParents.map(parent => (
                       <option key={parent} value={parent}>{parent}</option>
                     ))}

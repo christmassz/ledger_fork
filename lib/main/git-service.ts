@@ -470,161 +470,6 @@ export function getWorktreePath(worktreePath: string): string {
   return worktreePath;
 }
 
-// Helper to apply a git diff via stdin
-async function applyDiff(diff: string, targetDir: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const child = exec('git apply --3way -', { cwd: targetDir }, (error, _stdout, stderr) => {
-      if (error) {
-        // Include stderr in the error message for better debugging
-        const fullError = new Error(`${error.message}${stderr ? `: ${stderr}` : ''}`);
-        reject(fullError);
-      } else {
-        resolve();
-      }
-    });
-    child.stdin?.write(diff);
-    child.stdin?.end();
-  });
-}
-
-// Apply a worktree's changes to the current working directory (non-destructive copy)
-// This copies ALL changes from the worktree - both committed and uncommitted
-export async function applyWorktree(worktreePath: string, worktreeBranch: string | null): Promise<{ success: boolean; message: string; stashed?: string }> {
-  if (!git || !repoPath) throw new Error('No repository selected');
-  
-  const displayName = worktreeBranch || path.basename(worktreePath);
-  
-  try {
-    // First, stash any uncommitted changes in the main repo
-    const stashResult = await stashChanges();
-    
-    // Get the worktree's current HEAD commit
-    const { stdout: worktreeHead } = await execAsync('git rev-parse HEAD', { cwd: worktreePath });
-    const worktreeCommit = worktreeHead.trim();
-    
-    // Get our current HEAD commit
-    const { stdout: ourHead } = await execAsync('git rev-parse HEAD', { cwd: repoPath });
-    const ourCommit = ourHead.trim();
-    
-    // Strategy: Get the full diff between our current state and the worktree's current state
-    // This captures BOTH committed changes AND uncommitted changes
-    
-    // Step 1: Get uncommitted changes from the worktree (working directory vs HEAD)
-    const { stdout: worktreeUncommitted } = await execAsync('git diff HEAD', { cwd: worktreePath });
-    
-    // Step 2: Get committed changes - diff between our HEAD and the worktree's HEAD
-    let committedDiff = '';
-    if (worktreeCommit !== ourCommit) {
-      try {
-        // Direct diff between commits
-        const { stdout } = await execAsync(`git diff ${ourCommit} ${worktreeCommit}`, { cwd: repoPath });
-        committedDiff = stdout;
-      } catch {
-        // If that fails, try from the worktree's perspective
-        try {
-          const { stdout } = await execAsync(`git diff ${ourCommit} HEAD`, { cwd: worktreePath });
-          committedDiff = stdout;
-        } catch {
-          // Can't compare commits, will just use uncommitted changes
-        }
-      }
-    }
-    
-    const hasUncommitted = worktreeUncommitted.trim().length > 0;
-    const hasCommitted = committedDiff.trim().length > 0;
-    
-    if (!hasUncommitted && !hasCommitted) {
-      return {
-        success: true,
-        message: `No changes to copy from '${displayName}'`,
-        stashed: stashResult.stashed ? stashResult.message : undefined,
-      };
-    }
-    
-    // Apply committed changes first (if any)
-    if (hasCommitted) {
-      try {
-        await applyDiff(committedDiff, repoPath);
-      } catch (applyError) {
-        const msg = (applyError as Error).message;
-        if (msg.includes('patch does not apply') || msg.includes('conflict') || msg.includes('CONFLICT')) {
-          return {
-            success: false,
-            message: `Conflicts applying committed changes from '${displayName}'. Files may have diverged.`,
-            stashed: stashResult.stashed ? stashResult.message : undefined,
-          };
-        }
-        // For other errors, include the message
-        return {
-          success: false,
-          message: `Error applying changes: ${msg}`,
-          stashed: stashResult.stashed ? stashResult.message : undefined,
-        };
-      }
-    }
-    
-    // Apply uncommitted changes (if any)
-    if (hasUncommitted) {
-      try {
-        await applyDiff(worktreeUncommitted, repoPath);
-      } catch (applyError) {
-        const msg = (applyError as Error).message;
-        if (msg.includes('patch does not apply') || msg.includes('conflict') || msg.includes('CONFLICT')) {
-          return {
-            success: false,
-            message: `Conflicts applying uncommitted changes. Files may have diverged.`,
-            stashed: stashResult.stashed ? stashResult.message : undefined,
-          };
-        }
-        return {
-          success: false,
-          message: `Error applying uncommitted changes: ${msg}`,
-          stashed: stashResult.stashed ? stashResult.message : undefined,
-        };
-      }
-    }
-    
-    const parts = [];
-    if (hasCommitted) parts.push('committed');
-    if (hasUncommitted) parts.push('uncommitted');
-    
-    return {
-      success: true,
-      message: `Copied ${parts.join(' and ')} changes from '${displayName}'`,
-      stashed: stashResult.stashed ? stashResult.message : undefined,
-    };
-  } catch (error) {
-    return {
-      success: false,
-      message: (error as Error).message,
-    };
-  }
-}
-
-// Remove a worktree (after applying or when no longer needed)
-export async function removeWorktree(worktreePath: string, force: boolean = false): Promise<{ success: boolean; message: string }> {
-  if (!git) throw new Error('No repository selected');
-  
-  try {
-    const args = ['worktree', 'remove', worktreePath];
-    if (force) {
-      args.push('--force');
-    }
-    
-    await git.raw(args);
-    
-    return {
-      success: true,
-      message: `Removed worktree at ${worktreePath}`,
-    };
-  } catch (error) {
-    return {
-      success: false,
-      message: (error as Error).message,
-    };
-  }
-}
-
 // Pull Request types
 export interface PullRequest {
   number: number;
@@ -965,6 +810,129 @@ export async function resetToCommit(commitHash: string, mode: 'soft' | 'mixed' |
       success: true,
       message: `Reset to ${shortHash} (${mode})`,
       stashed: stashResult.stashed ? stashResult.message : undefined,
+    };
+  } catch (error) {
+    return { success: false, message: (error as Error).message };
+  }
+}
+
+// Convert a worktree to a branch
+// Takes changes from a worktree, creates a new branch from master/main with the folder name, and applies the changes
+export async function convertWorktreeToBranch(worktreePath: string): Promise<{ success: boolean; message: string; branchName?: string }> {
+  if (!git) throw new Error('No repository selected');
+
+  try {
+    // Get the folder name from the worktree path to use as branch name
+    const folderName = path.basename(worktreePath);
+    
+    // Sanitize folder name for use as branch name (replace spaces and special chars)
+    const branchName = folderName
+      .replace(/[^a-zA-Z0-9_-]/g, '-')
+      .replace(/--+/g, '-')
+      .replace(/^-|-$/g, '');
+
+    if (!branchName) {
+      return { success: false, message: 'Could not derive a valid branch name from the folder' };
+    }
+
+    // Check if branch already exists
+    const branches = await git.branchLocal();
+    if (branches.all.includes(branchName)) {
+      return { success: false, message: `Branch '${branchName}' already exists` };
+    }
+
+    // Find the base branch (master or main)
+    let baseBranch = 'master';
+    try {
+      await git.raw(['rev-parse', '--verify', 'origin/master']);
+    } catch {
+      try {
+        await git.raw(['rev-parse', '--verify', 'origin/main']);
+        baseBranch = 'main';
+      } catch {
+        // Try local master/main
+        if (branches.all.includes('main')) {
+          baseBranch = 'main';
+        } else if (!branches.all.includes('master')) {
+          return { success: false, message: 'Could not find master or main branch' };
+        }
+      }
+    }
+
+    // Get the diff from the worktree as a patch
+    const { stdout: patchOutput } = await execAsync('git diff HEAD', { cwd: worktreePath });
+    
+    // Also get untracked files
+    const { stdout: untrackedOutput } = await execAsync('git ls-files --others --exclude-standard', { cwd: worktreePath });
+    const untrackedFiles = untrackedOutput.split('\n').filter(Boolean);
+
+    // Check if there are any changes
+    if (!patchOutput.trim() && untrackedFiles.length === 0) {
+      return { success: false, message: 'No changes to convert - worktree is clean' };
+    }
+
+    // Stash any changes in the main repo first
+    const stashResult = await stashChanges();
+
+    // Create a new branch from the base branch
+    const baseRef = branches.all.includes(baseBranch) ? baseBranch : `origin/${baseBranch}`;
+    await git.checkout(['-b', branchName, baseRef]);
+
+    // Apply the patch if there are tracked file changes
+    if (patchOutput.trim()) {
+      // Write patch to a temp file
+      const tempPatchFile = path.join(repoPath!, '.ledger-temp-patch');
+      try {
+        await fs.promises.writeFile(tempPatchFile, patchOutput);
+        await execAsync(`git apply --3way "${tempPatchFile}"`, { cwd: repoPath! });
+      } catch (applyError) {
+        // If apply fails, try to apply with less strict options
+        try {
+          await execAsync(`git apply --reject --whitespace=fix "${tempPatchFile}"`, { cwd: repoPath! });
+        } catch {
+          // Clean up and revert to the base branch
+          try {
+            await fs.promises.unlink(tempPatchFile);
+          } catch { /* ignore */ }
+          await git.checkout(stashResult.stashed ? '-' : baseBranch);
+          await git.branch(['-D', branchName]);
+          if (stashResult.stashed) {
+            await git.stash(['pop']);
+          }
+          return { success: false, message: `Failed to apply changes: ${(applyError as Error).message}` };
+        }
+      } finally {
+        // Clean up temp file
+        try {
+          await fs.promises.unlink(tempPatchFile);
+        } catch { /* ignore */ }
+      }
+    }
+
+    // Copy untracked files from worktree to main repo
+    for (const file of untrackedFiles) {
+      const srcPath = path.join(worktreePath, file);
+      const destPath = path.join(repoPath!, file);
+      
+      // Ensure destination directory exists
+      const destDir = path.dirname(destPath);
+      await fs.promises.mkdir(destDir, { recursive: true });
+      
+      // Copy the file
+      await fs.promises.copyFile(srcPath, destPath);
+    }
+
+    // Stage all changes
+    await git.add(['-A']);
+
+    // Commit the changes
+    const commitMessage = `Changes from worktree: ${folderName}`;
+    await git.commit(commitMessage);
+
+    return {
+      success: true,
+      message: `Created branch '${branchName}' with changes from worktree`,
+      branchName,
     };
   } catch (error) {
     return { success: false, message: (error as Error).message };
