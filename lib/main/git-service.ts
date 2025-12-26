@@ -408,8 +408,9 @@ export async function checkoutBranch(branchName: string): Promise<{ success: boo
     // Stash any uncommitted changes first
     const stashResult = await stashChanges();
     
-    // Checkout the branch
-    await git.checkout(branchName);
+    // Checkout the branch with --ignore-other-worktrees to allow checking out
+    // branches that are already checked out in other worktrees
+    await git.checkout(['--ignore-other-worktrees', branchName]);
     
     return {
       success: true,
@@ -510,8 +511,8 @@ export async function checkoutRemoteBranch(remoteBranch: string): Promise<{ succ
     // Check if local branch already exists
     const branches = await git.branchLocal();
     if (branches.all.includes(localBranchName)) {
-      // Just checkout existing local branch
-      await git.checkout(localBranchName);
+      // Just checkout existing local branch (allow even if checked out in worktree)
+      await git.checkout(['--ignore-other-worktrees', localBranchName]);
       return {
         success: true,
         message: `Switched to existing branch '${localBranchName}'`,
@@ -519,8 +520,8 @@ export async function checkoutRemoteBranch(remoteBranch: string): Promise<{ succ
       };
     }
     
-    // Create and checkout tracking branch
-    await git.checkout(['-b', localBranchName, '--track', remoteBranch.replace('remotes/', '')]);
+    // Create and checkout tracking branch (--ignore-other-worktrees for the checkout part)
+    await git.checkout(['--ignore-other-worktrees', '-b', localBranchName, '--track', remoteBranch.replace('remotes/', '')]);
     
     return {
       success: true,
@@ -1589,12 +1590,12 @@ export async function checkoutPRBranch(branchName: string): Promise<{ success: b
     // Check if local branch exists
     const branches = await git.branchLocal();
     if (branches.all.includes(branchName)) {
-      // Checkout and pull
-      await git.checkout(branchName);
+      // Checkout (allow even if checked out in worktree) and pull
+      await git.checkout(['--ignore-other-worktrees', branchName]);
       await git.pull('origin', branchName);
     } else {
-      // Create tracking branch
-      await git.checkout(['-b', branchName, '--track', `origin/${branchName}`]);
+      // Create tracking branch (--ignore-other-worktrees for the checkout part)
+      await git.checkout(['--ignore-other-worktrees', '-b', branchName, '--track', `origin/${branchName}`]);
     }
     
     return {

@@ -1514,9 +1514,13 @@ export default function App() {
                 formatRelativeTime={formatRelativeTime}
                 formatDate={formatDate}
                 currentBranch={currentBranch}
+                switching={switching}
                 onStatusChange={setStatus}
                 onRefresh={refresh}
                 onClearFocus={() => setSidebarFocus(null)}
+                onCheckoutBranch={handleBranchDoubleClick}
+                onCheckoutRemoteBranch={handleRemoteBranchDoubleClick}
+                onCheckoutWorktree={handleWorktreeDoubleClick}
               />
             ) : !selectedCommit ? (
               <div className="detail-empty">
@@ -1871,12 +1875,16 @@ interface SidebarDetailPanelProps {
   formatRelativeTime: (date: string) => string;
   formatDate: (date?: string) => string;
   currentBranch: string;
+  switching?: boolean;
   onStatusChange?: (status: StatusMessage | null) => void;
   onRefresh?: () => Promise<void>;
   onClearFocus?: () => void;
+  onCheckoutBranch?: (branch: Branch) => void;
+  onCheckoutRemoteBranch?: (branch: Branch) => void;
+  onCheckoutWorktree?: (worktree: Worktree) => void;
 }
 
-function SidebarDetailPanel({ focus, formatRelativeTime, formatDate, currentBranch, onStatusChange, onRefresh, onClearFocus }: SidebarDetailPanelProps) {
+function SidebarDetailPanel({ focus, formatRelativeTime, formatDate, currentBranch, switching, onStatusChange, onRefresh, onClearFocus, onCheckoutBranch, onCheckoutRemoteBranch, onCheckoutWorktree }: SidebarDetailPanelProps) {
   const [creatingPR, setCreatingPR] = useState(false);
   const [pushing, setPushing] = useState(false);
 
@@ -1973,6 +1981,15 @@ function SidebarDetailPanel({ focus, formatRelativeTime, formatDate, currentBran
           
           {/* Actions */}
           <div className="detail-actions">
+            {!branch.current && onCheckoutBranch && (
+              <button 
+                className="btn btn-primary"
+                onClick={() => onCheckoutBranch(branch)}
+                disabled={switching}
+              >
+                {switching ? 'Switching...' : 'Checkout'}
+              </button>
+            )}
             {branch.current && (
               <button 
                 className="btn btn-primary"
@@ -1998,12 +2015,6 @@ function SidebarDetailPanel({ focus, formatRelativeTime, formatDate, currentBran
               View on GitHub
             </button>
           </div>
-          
-          {!branch.current && (
-            <div className="detail-actions-hint">
-              Double-click to switch to this branch
-            </div>
-          )}
         </div>
       );
     }
@@ -2041,8 +2052,23 @@ function SidebarDetailPanel({ focus, formatRelativeTime, formatDate, currentBran
               <span className="meta-value">{branch.isMerged ? 'Yes' : 'No'}</span>
             </div>
           </div>
-          <div className="detail-actions-hint">
-            Double-click to checkout this branch
+          {/* Actions */}
+          <div className="detail-actions">
+            {onCheckoutRemoteBranch && (
+              <button 
+                className="btn btn-primary"
+                onClick={() => onCheckoutRemoteBranch(branch)}
+                disabled={switching}
+              >
+                {switching ? 'Checking out...' : 'Checkout'}
+              </button>
+            )}
+            <button 
+              className="btn btn-secondary"
+              onClick={() => window.electronAPI.openBranchInGitHub(branch.name)}
+            >
+              View on GitHub
+            </button>
           </div>
         </div>
       );
@@ -2054,9 +2080,11 @@ function SidebarDetailPanel({ focus, formatRelativeTime, formatDate, currentBran
         <WorktreeDetailPanel
           worktree={wt}
           currentBranch={currentBranch}
+          switching={switching}
           onStatusChange={onStatusChange}
           onRefresh={onRefresh}
           onClearFocus={onClearFocus}
+          onCheckoutWorktree={onCheckoutWorktree}
         />
       );
     }
@@ -2729,13 +2757,13 @@ function PRReviewPanel({ pr, formatRelativeTime }: PRReviewPanelProps) {
         )}
       </div>
 
-      {/* Footer with GitHub link */}
+      {/* Footer with actions */}
       <div className="pr-review-footer">
         <button 
-          className="btn btn-secondary"
+          className="btn btn-primary"
           onClick={() => window.electronAPI.openPullRequest(pr.url)}
         >
-          Open on GitHub
+          Open in GitHub
         </button>
       </div>
     </div>
@@ -2749,12 +2777,14 @@ function PRReviewPanel({ pr, formatRelativeTime }: PRReviewPanelProps) {
 interface WorktreeDetailPanelProps {
   worktree: Worktree;
   currentBranch: string;
+  switching?: boolean;
   onStatusChange?: (status: StatusMessage | null) => void;
   onRefresh?: () => Promise<void>;
   onClearFocus?: () => void;
+  onCheckoutWorktree?: (worktree: Worktree) => void;
 }
 
-function WorktreeDetailPanel({ worktree, currentBranch, onStatusChange, onRefresh, onClearFocus }: WorktreeDetailPanelProps) {
+function WorktreeDetailPanel({ worktree, currentBranch, switching, onStatusChange, onRefresh, onClearFocus, onCheckoutWorktree }: WorktreeDetailPanelProps) {
   const [actionInProgress, setActionInProgress] = useState(false);
   
   const isCurrent = worktree.branch === currentBranch;
@@ -2890,8 +2920,17 @@ function WorktreeDetailPanel({ worktree, currentBranch, onStatusChange, onRefres
       
       {/* Actions - matching stash panel layout */}
       <div className="detail-actions worktree-actions">
+        {!isCurrent && worktree.branch && onCheckoutWorktree && (
+          <button 
+            className="btn btn-primary"
+            onClick={() => onCheckoutWorktree(worktree)}
+            disabled={actionInProgress || switching}
+          >
+            {switching ? 'Checking out...' : 'Checkout'}
+          </button>
+        )}
         <button 
-          className="btn btn-primary"
+          className={`btn ${isCurrent || !worktree.branch ? 'btn-primary' : 'btn-secondary'}`}
           onClick={handleApply}
           disabled={actionInProgress || !hasChanges}
           title={hasChanges ? 'Apply changes to main repo' : 'No changes to apply'}
@@ -2923,12 +2962,6 @@ function WorktreeDetailPanel({ worktree, currentBranch, onStatusChange, onRefres
           </button>
         )}
       </div>
-      
-      {!isCurrent && worktree.branch && (
-        <div className="detail-actions-hint">
-          Double-click to checkout this worktree
-        </div>
-      )}
     </div>
   );
 }
