@@ -84,6 +84,69 @@ export interface Commit {
   deletions?: number;
 }
 
+// Graph commit with parent info for git graph visualization
+export interface GraphCommit {
+  hash: string;
+  shortHash: string;
+  message: string;
+  author: string;
+  date: string;
+  parents: string[];
+  refs: string[];
+  isMerge: boolean;
+  filesChanged?: number;
+  additions?: number;
+  deletions?: number;
+}
+
+// Diff types for commit detail view
+export interface DiffFile {
+  path: string;
+  status: 'added' | 'modified' | 'deleted' | 'renamed';
+  additions: number;
+  deletions: number;
+  oldPath?: string;
+}
+
+export interface DiffLine {
+  type: 'context' | 'add' | 'delete' | 'header';
+  content: string;
+  oldLineNumber?: number;
+  newLineNumber?: number;
+}
+
+export interface DiffHunk {
+  oldStart: number;
+  oldLines: number;
+  newStart: number;
+  newLines: number;
+  lines: DiffLine[];
+}
+
+export interface FileDiff {
+  file: DiffFile;
+  hunks: DiffHunk[];
+  isBinary: boolean;
+}
+
+export interface CommitDiff {
+  hash: string;
+  message: string;
+  author: string;
+  date: string;
+  files: FileDiff[];
+  totalAdditions: number;
+  totalDeletions: number;
+}
+
+// Stash entry
+export interface StashEntry {
+  index: number;
+  message: string;
+  branch: string;
+  date: string;
+}
+
 export interface UncommittedFile {
   path: string;
   status: 'modified' | 'added' | 'deleted' | 'renamed' | 'untracked';
@@ -124,6 +187,10 @@ export interface ElectronAPI {
   getWorkingStatus: () => Promise<WorkingStatus>;
   // Reset operations
   resetToCommit: (commitHash: string, mode: 'soft' | 'mixed' | 'hard') => Promise<CheckoutResult>;
+  // Work mode APIs
+  getCommitGraphHistory: (limit?: number) => Promise<GraphCommit[]>;
+  getCommitDiff: (commitHash: string) => Promise<CommitDiff | null>;
+  getStashes: () => Promise<StashEntry[]>;
   // Worktree operations
   convertWorktreeToBranch: (worktreePath: string) => Promise<{ success: boolean; message: string; branchName?: string }>;
 }

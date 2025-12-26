@@ -24,9 +24,15 @@ const electronAPI = {
   pullBranch: (remoteBranch: string) => ipcRenderer.invoke('pull-branch', remoteBranch),
   // Commit history and working status
   getCommitHistory: (limit?: number) => ipcRenderer.invoke('get-commit-history', limit),
+  getCommitHistoryForRef: (ref: string, limit?: number) => ipcRenderer.invoke('get-commit-history-for-ref', ref, limit),
+  getCommitDetails: (commitHash: string) => ipcRenderer.invoke('get-commit-details', commitHash),
   getWorkingStatus: () => ipcRenderer.invoke('get-working-status'),
   // Reset operations
   resetToCommit: (commitHash: string, mode: 'soft' | 'mixed' | 'hard') => ipcRenderer.invoke('reset-to-commit', commitHash, mode),
+  // Work mode APIs
+  getCommitGraphHistory: (limit?: number) => ipcRenderer.invoke('get-commit-graph-history', limit),
+  getCommitDiff: (commitHash: string) => ipcRenderer.invoke('get-commit-diff', commitHash),
+  getStashes: () => ipcRenderer.invoke('get-stashes'),
   // Worktree operations
   convertWorktreeToBranch: (worktreePath: string) => ipcRenderer.invoke('convert-worktree-to-branch', worktreePath),
 }

@@ -18,6 +18,10 @@ import {
   getCommitHistory,
   getWorkingStatus,
   resetToCommit,
+  // Work mode APIs
+  getCommitGraphHistory,
+  getCommitDiff,
+  getStashes,
   convertWorktreeToBranch,
 } from './git-service'
 import { getLastRepoPath, saveLastRepoPath } from './settings-service'
@@ -168,11 +172,36 @@ app.whenReady().then(() => {
     }
   });
 
+  // Work mode APIs
+  ipcMain.handle('get-commit-graph-history', async (_, limit?: number) => {
+    try {
+      return await getCommitGraphHistory(limit);
+    } catch (error) {
+      return [];
+    }
+  });
+
+  ipcMain.handle('get-commit-diff', async (_, commitHash: string) => {
+    try {
+      return await getCommitDiff(commitHash);
+    } catch (error) {
+      return null;
+    }
+  });
+
   ipcMain.handle('convert-worktree-to-branch', async (_, worktreePath: string) => {
     try {
       return await convertWorktreeToBranch(worktreePath);
     } catch (error) {
-      return { success: false, message: (error as Error).message };
+      return null;
+    }
+  });
+
+  ipcMain.handle('get-stashes', async () => {
+    try {
+      return await getStashes();
+    } catch (error) {
+      return [];
     }
   });
 
