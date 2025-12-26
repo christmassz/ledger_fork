@@ -376,12 +376,14 @@ export async function getEnhancedWorktrees(): Promise<EnhancedWorktree[]> {
   return enhanced;
 }
 
-// Check if there are uncommitted changes
+// Check if there are uncommitted changes (including untracked files)
 export async function hasUncommittedChanges(): Promise<boolean> {
   if (!git) throw new Error('No repository selected');
-  
+
   const status = await git.status();
-  return !status.isClean();
+  // isClean() only checks tracked file changes, not untracked files
+  // We also need to check not_added (untracked files) to preserve them during checkout
+  return !status.isClean() || status.not_added.length > 0;
 }
 
 // Stash uncommitted changes
