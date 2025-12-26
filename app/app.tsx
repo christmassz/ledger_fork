@@ -1464,6 +1464,7 @@ export default function App() {
             {sidebarFocus?.type === 'uncommitted' && workingStatus ? (
               <StagingPanel 
                 workingStatus={workingStatus}
+                currentBranch={currentBranch}
                 onRefresh={refresh}
                 onStatusChange={setStatus}
               />
@@ -1479,6 +1480,8 @@ export default function App() {
                 formatDate={formatDate}
                 currentBranch={currentBranch}
                 onStatusChange={setStatus}
+                onRefresh={refresh}
+                onClearFocus={() => setSidebarFocus(null)}
               />
             ) : !selectedCommit ? (
               <div className="detail-empty">
@@ -1834,9 +1837,11 @@ interface SidebarDetailPanelProps {
   formatDate: (date?: string) => string;
   currentBranch: string;
   onStatusChange?: (status: StatusMessage | null) => void;
+  onRefresh?: () => Promise<void>;
+  onClearFocus?: () => void;
 }
 
-function SidebarDetailPanel({ focus, formatRelativeTime, formatDate, currentBranch, onStatusChange }: SidebarDetailPanelProps) {
+function SidebarDetailPanel({ focus, formatRelativeTime, formatDate, currentBranch, onStatusChange, onRefresh, onClearFocus }: SidebarDetailPanelProps) {
   const [creatingPR, setCreatingPR] = useState(false);
   const [pushing, setPushing] = useState(false);
 
@@ -2067,7 +2072,10 @@ function SidebarDetailPanel({ focus, formatRelativeTime, formatDate, currentBran
       return (
         <StashDetailPanel 
           stash={stash} 
-          formatRelativeTime={formatRelativeTime} 
+          formatRelativeTime={formatRelativeTime}
+          onStatusChange={onStatusChange}
+          onRefresh={onRefresh}
+          onClearFocus={onClearFocus}
         />
       );
     }
@@ -2088,17 +2096,19 @@ function SidebarDetailPanel({ focus, formatRelativeTime, formatDate, currentBran
 
 interface StagingPanelProps {
   workingStatus: WorkingStatus;
+  currentBranch: string;
   onRefresh: () => Promise<void>;
   onStatusChange: (status: StatusMessage | null) => void;
 }
 
-function StagingPanel({ workingStatus, onRefresh, onStatusChange }: StagingPanelProps) {
+function StagingPanel({ workingStatus, currentBranch, onRefresh, onStatusChange }: StagingPanelProps) {
   const [selectedFile, setSelectedFile] = useState<UncommittedFile | null>(null);
   const [fileDiff, setFileDiff] = useState<StagingFileDiff | null>(null);
   const [loadingDiff, setLoadingDiff] = useState(false);
   const [commitMessage, setCommitMessage] = useState('');
   const [commitDescription, setCommitDescription] = useState('');
   const [isCommitting, setIsCommitting] = useState(false);
+  const [pushAfterCommit, setPushAfterCommit] = useState(true);
 
   const stagedFiles = workingStatus.files.filter(f => f.staged);
   const unstagedFiles = workingStatus.files.filter(f => !f.staged);
@@ -2169,23 +2179,36 @@ function StagingPanel({ workingStatus, onRefresh, onStatusChange }: StagingPanel
     }
   };
 
-  // Commit changes
+  // Commit changes (and optionally push)
   const handleCommit = async () => {
     if (!commitMessage.trim() || stagedFiles.length === 0) return;
 
     setIsCommitting(true);
     try {
-      const result = await window.electronAPI.commitChanges(
+      const commitResult = await window.electronAPI.commitChanges(
         commitMessage.trim(),
         commitDescription.trim() || undefined
       );
-      if (result.success) {
-        onStatusChange({ type: 'success', message: result.message });
+      
+      if (commitResult.success) {
+        // If push after commit is enabled, push the branch
+        if (pushAfterCommit && currentBranch) {
+          onStatusChange({ type: 'info', message: 'Pushing to remote...' });
+          const pushResult = await window.electronAPI.pushBranch(currentBranch, true);
+          if (pushResult.success) {
+            onStatusChange({ type: 'success', message: `Committed and pushed to ${currentBranch}` });
+          } else {
+            // Commit succeeded but push failed
+            onStatusChange({ type: 'error', message: `Committed, but push failed: ${pushResult.message}` });
+          }
+        } else {
+          onStatusChange({ type: 'success', message: commitResult.message });
+        }
         setCommitMessage('');
         setCommitDescription('');
         await onRefresh();
       } else {
-        onStatusChange({ type: 'error', message: result.message });
+        onStatusChange({ type: 'error', message: commitResult.message });
       }
     } catch (error) {
       onStatusChange({ type: 'error', message: (error as Error).message });
@@ -2228,6 +2251,12 @@ function StagingPanel({ workingStatus, onRefresh, onStatusChange }: StagingPanel
             <span className="diff-deletions">-{workingStatus.deletions}</span>
           </span>
         </div>
+        {currentBranch && (
+          <div className="staging-branch-indicator">
+            <span className="staging-branch-label">Committing to</span>
+            <code className="staging-branch-name">{currentBranch}</code>
+          </div>
+        )}
       </div>
 
       {/* File Lists */}
@@ -2374,12 +2403,28 @@ function StagingPanel({ workingStatus, onRefresh, onStatusChange }: StagingPanel
           onChange={(e) => setCommitDescription(e.target.value)}
           rows={3}
         />
+        <div className="commit-options">
+          <label className="commit-option-checkbox">
+            <input
+              type="checkbox"
+              checked={pushAfterCommit}
+              onChange={(e) => setPushAfterCommit(e.target.checked)}
+            />
+            <span>Push to <code>{currentBranch || 'remote'}</code> after commit</span>
+          </label>
+        </div>
         <button
           className="btn btn-primary commit-btn"
           onClick={handleCommit}
           disabled={!commitMessage.trim() || stagedFiles.length === 0 || isCommitting}
         >
-          {isCommitting ? 'Committing...' : `Commit ${stagedFiles.length} file${stagedFiles.length !== 1 ? 's' : ''}`}
+          {isCommitting 
+            ? (pushAfterCommit ? 'Committing & Pushing...' : 'Committing...') 
+            : (pushAfterCommit 
+                ? `Commit & Push ${stagedFiles.length} file${stagedFiles.length !== 1 ? 's' : ''}` 
+                : `Commit ${stagedFiles.length} file${stagedFiles.length !== 1 ? 's' : ''}`
+              )
+          }
         </button>
       </div>
     </div>
@@ -2747,14 +2792,88 @@ function PRReviewPanel({ pr, formatRelativeTime }: PRReviewPanelProps) {
 interface StashDetailPanelProps {
   stash: StashEntry;
   formatRelativeTime: (date: string) => string;
+  onStatusChange?: (status: StatusMessage | null) => void;
+  onRefresh?: () => Promise<void>;
+  onClearFocus?: () => void;
 }
 
-function StashDetailPanel({ stash, formatRelativeTime }: StashDetailPanelProps) {
+function StashDetailPanel({ stash, formatRelativeTime, onStatusChange, onRefresh, onClearFocus }: StashDetailPanelProps) {
   const [files, setFiles] = useState<StashFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [fileDiff, setFileDiff] = useState<string | null>(null);
   const [loadingDiff, setLoadingDiff] = useState(false);
+  const [actionInProgress, setActionInProgress] = useState(false);
+  const [showBranchModal, setShowBranchModal] = useState(false);
+  const [branchName, setBranchName] = useState('');
+
+  // Handle Apply stash
+  const handleApply = async () => {
+    setActionInProgress(true);
+    onStatusChange?.({ type: 'info', message: `Applying stash@{${stash.index}}...` });
+    
+    try {
+      const result = await window.electronAPI.applyStash(stash.index);
+      if (result.success) {
+        onStatusChange?.({ type: 'success', message: result.message });
+        await onRefresh?.();
+      } else {
+        onStatusChange?.({ type: 'error', message: result.message });
+      }
+    } catch (error) {
+      onStatusChange?.({ type: 'error', message: (error as Error).message });
+    } finally {
+      setActionInProgress(false);
+    }
+  };
+
+  // Handle Drop stash
+  const handleDrop = async () => {
+    if (!confirm(`Drop stash@{${stash.index}}? This cannot be undone.`)) return;
+    
+    setActionInProgress(true);
+    onStatusChange?.({ type: 'info', message: `Dropping stash@{${stash.index}}...` });
+    
+    try {
+      const result = await window.electronAPI.dropStash(stash.index);
+      if (result.success) {
+        onStatusChange?.({ type: 'success', message: result.message });
+        onClearFocus?.();
+        await onRefresh?.();
+      } else {
+        onStatusChange?.({ type: 'error', message: result.message });
+      }
+    } catch (error) {
+      onStatusChange?.({ type: 'error', message: (error as Error).message });
+    } finally {
+      setActionInProgress(false);
+    }
+  };
+
+  // Handle Create branch from stash
+  const handleCreateBranch = async () => {
+    if (!branchName.trim()) return;
+    
+    setActionInProgress(true);
+    onStatusChange?.({ type: 'info', message: `Creating branch '${branchName}' from stash...` });
+    
+    try {
+      const result = await window.electronAPI.stashToBranch(stash.index, branchName.trim());
+      if (result.success) {
+        onStatusChange?.({ type: 'success', message: result.message });
+        setShowBranchModal(false);
+        setBranchName('');
+        onClearFocus?.();
+        await onRefresh?.();
+      } else {
+        onStatusChange?.({ type: 'error', message: result.message });
+      }
+    } catch (error) {
+      onStatusChange?.({ type: 'error', message: (error as Error).message });
+    } finally {
+      setActionInProgress(false);
+    }
+  };
 
   // Load stash files
   useEffect(() => {
@@ -2877,6 +2996,80 @@ function StashDetailPanel({ stash, formatRelativeTime }: StashDetailPanelProps) 
             ) : (
               <div className="stash-diff-empty">Could not load diff</div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Action Buttons */}
+      <div className="stash-actions">
+        <button 
+          className="btn btn-primary"
+          onClick={handleApply}
+          disabled={actionInProgress}
+        >
+          Apply
+        </button>
+        <button 
+          className="btn btn-secondary"
+          onClick={() => setShowBranchModal(true)}
+          disabled={actionInProgress}
+        >
+          Create Branch
+        </button>
+        <button 
+          className="btn btn-danger"
+          onClick={handleDrop}
+          disabled={actionInProgress}
+        >
+          Drop
+        </button>
+      </div>
+
+      {/* Create Branch Modal */}
+      {showBranchModal && (
+        <div className="modal-overlay" onClick={() => setShowBranchModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3 className="modal-title">Create Branch from Stash</h3>
+              <button className="modal-close" onClick={() => setShowBranchModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <label className="modal-label">
+                Branch Name
+                <input
+                  type="text"
+                  className="modal-input"
+                  value={branchName}
+                  onChange={(e) => setBranchName(e.target.value)}
+                  placeholder="feature/my-branch"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && branchName.trim()) {
+                      handleCreateBranch();
+                    }
+                  }}
+                />
+              </label>
+              <p className="modal-hint">
+                This will create a new branch from the commit where this stash was created, apply the stashed changes, and remove the stash.
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button 
+                className="btn btn-secondary" 
+                onClick={() => setShowBranchModal(false)}
+                disabled={actionInProgress}
+              >
+                Cancel
+              </button>
+              <button 
+                className="btn btn-primary" 
+                onClick={handleCreateBranch}
+                disabled={actionInProgress || !branchName.trim()}
+              >
+                Create Branch
+              </button>
+            </div>
           </div>
         </div>
       )}
