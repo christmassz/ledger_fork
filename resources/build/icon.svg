@@ -1,25 +1,38 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-  <!-- Background with rounded corners -->
-  <rect x="0" y="0" width="1024" height="1024" rx="180" ry="180" fill="#000000"/>
+  <!-- 
+    Ledger App Icon - macOS compliant with proper margins
+    Based on updated brand design - centered
+  -->
   
-  <!-- Subtle vertical guide lines in background -->
-  <line x1="512" y1="80" x2="512" y2="944" stroke="#2a2a2a" stroke-width="16"/>
-  <line x1="740" y1="80" x2="740" y2="944" stroke="#2a2a2a" stroke-width="16"/>
+  <!-- Transparent background -->
+  <rect x="0" y="0" width="1024" height="1024" fill="transparent"/>
   
-  <!-- Main branch line (vertical) - from top node down to branch point -->
-  <line x1="340" y1="300" x2="340" y2="620" stroke="#ffffff" stroke-width="36" stroke-linecap="round"/>
+  <!-- Icon background squircle - with proper margins for macOS dock -->
+  <rect x="56" y="56" width="912" height="912" rx="195" ry="195" fill="#000000"/>
   
-  <!-- Branch line (horizontal from branch point to right node) -->
-  <line x1="340" y1="620" x2="620" y2="620" stroke="#ffffff" stroke-width="36" stroke-linecap="round"/>
+  <!-- Gray vertical rail lines (background) - extend top to bottom -->
+  <!-- Left rail - behind white branch -->
+  <line x1="370" y1="120" x2="370" y2="904" stroke="#3a3a3a" stroke-width="28" stroke-linecap="round"/>
+  <!-- Right rail - aligned with right node -->
+  <line x1="656" y1="120" x2="656" y2="904" stroke="#3a3a3a" stroke-width="28" stroke-linecap="round"/>
   
-  <!-- Commit nodes -->
+  <!-- Dark gray node on right branch -->
+  <circle cx="656" cy="290" r="72" fill="#4a4a4a"/>
+  
+  <!-- Main white branch line (vertical) - from top node down to branch point -->
+  <line x1="370" y1="290" x2="370" y2="734" stroke="#ffffff" stroke-width="36" stroke-linecap="round"/>
+  
+  <!-- White branch line (horizontal from branch point to right node) -->
+  <line x1="370" y1="734" x2="656" y2="734" stroke="#ffffff" stroke-width="36" stroke-linecap="round"/>
+  
+  <!-- White commit nodes -->
   <!-- Top node on main branch -->
-  <circle cx="340" cy="300" r="72" fill="#ffffff"/>
+  <circle cx="370" cy="290" r="72" fill="#ffffff"/>
   
   <!-- Branch point node (bottom of main, start of horizontal) -->
-  <circle cx="340" cy="620" r="72" fill="#ffffff"/>
+  <circle cx="370" cy="734" r="72" fill="#ffffff"/>
   
-  <!-- Node at end of feature branch -->
-  <circle cx="620" cy="620" r="72" fill="#ffffff"/>
+  <!-- Node at end of feature branch (on top of gray line) -->
+  <circle cx="656" cy="734" r="72" fill="#ffffff"/>
 </svg>
