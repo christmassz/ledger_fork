@@ -14,13 +14,14 @@ const electronAPI = {
   // Checkout operations
   checkoutBranch: (branchName: string) => ipcRenderer.invoke('checkout-branch', branchName),
   createBranch: (branchName: string, checkout?: boolean) => ipcRenderer.invoke('create-branch', branchName, checkout),
-  pushBranch: (branchName?: string, setUpstream?: boolean) => ipcRenderer.invoke('push-branch', branchName, setUpstream),
+  pushBranch: (branchName?: string, setUpstream?: boolean) =>
+    ipcRenderer.invoke('push-branch', branchName, setUpstream),
   checkoutRemoteBranch: (remoteBranch: string) => ipcRenderer.invoke('checkout-remote-branch', remoteBranch),
   openWorktree: (worktreePath: string) => ipcRenderer.invoke('open-worktree', worktreePath),
   // Pull requests
   getPullRequests: () => ipcRenderer.invoke('get-pull-requests'),
   openPullRequest: (url: string) => ipcRenderer.invoke('open-pull-request', url),
-  createPullRequest: (options: { title: string; body?: string; baseBranch?: string; draft?: boolean; web?: boolean }) => 
+  createPullRequest: (options: { title: string; body?: string; baseBranch?: string; draft?: boolean; web?: boolean }) =>
     ipcRenderer.invoke('create-pull-request', options),
   checkoutPRBranch: (branchName: string) => ipcRenderer.invoke('checkout-pr-branch', branchName),
   // Remote operations
@@ -33,23 +34,28 @@ const electronAPI = {
   getCommitDetails: (commitHash: string) => ipcRenderer.invoke('get-commit-details', commitHash),
   getWorkingStatus: () => ipcRenderer.invoke('get-working-status'),
   // Reset operations
-  resetToCommit: (commitHash: string, mode: 'soft' | 'mixed' | 'hard') => ipcRenderer.invoke('reset-to-commit', commitHash, mode),
+  resetToCommit: (commitHash: string, mode: 'soft' | 'mixed' | 'hard') =>
+    ipcRenderer.invoke('reset-to-commit', commitHash, mode),
   // Focus mode APIs
-  getCommitGraphHistory: (limit?: number, skipStats?: boolean) => ipcRenderer.invoke('get-commit-graph-history', limit, skipStats),
+  getCommitGraphHistory: (limit?: number, skipStats?: boolean) =>
+    ipcRenderer.invoke('get-commit-graph-history', limit, skipStats),
   getCommitDiff: (commitHash: string) => ipcRenderer.invoke('get-commit-diff', commitHash),
   getBranchDiff: (branchName: string) => ipcRenderer.invoke('get-branch-diff', branchName),
   getStashes: () => ipcRenderer.invoke('get-stashes'),
   getStashFiles: (stashIndex: number) => ipcRenderer.invoke('get-stash-files', stashIndex),
-  getStashFileDiff: (stashIndex: number, filePath: string) => ipcRenderer.invoke('get-stash-file-diff', stashIndex, filePath),
+  getStashFileDiff: (stashIndex: number, filePath: string) =>
+    ipcRenderer.invoke('get-stash-file-diff', stashIndex, filePath),
   getStashDiff: (stashIndex: number) => ipcRenderer.invoke('get-stash-diff', stashIndex),
   applyStash: (stashIndex: number) => ipcRenderer.invoke('apply-stash', stashIndex),
   popStash: (stashIndex: number) => ipcRenderer.invoke('pop-stash', stashIndex),
   dropStash: (stashIndex: number) => ipcRenderer.invoke('drop-stash', stashIndex),
-  stashToBranch: (stashIndex: number, branchName: string) => ipcRenderer.invoke('stash-to-branch', stashIndex, branchName),
+  stashToBranch: (stashIndex: number, branchName: string) =>
+    ipcRenderer.invoke('stash-to-branch', stashIndex, branchName),
   // Worktree operations
   convertWorktreeToBranch: (worktreePath: string) => ipcRenderer.invoke('convert-worktree-to-branch', worktreePath),
   applyWorktreeChanges: (worktreePath: string) => ipcRenderer.invoke('apply-worktree-changes', worktreePath),
-  removeWorktree: (worktreePath: string, force?: boolean) => ipcRenderer.invoke('remove-worktree', worktreePath, force ?? false),
+  removeWorktree: (worktreePath: string, force?: boolean) =>
+    ipcRenderer.invoke('remove-worktree', worktreePath, force ?? false),
   // Staging & commit operations
   stageFile: (filePath: string) => ipcRenderer.invoke('stage-file', filePath),
   unstageFile: (filePath: string) => ipcRenderer.invoke('unstage-file', filePath),

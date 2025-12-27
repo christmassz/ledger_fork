@@ -2,26 +2,26 @@
 
 :root {
   /* Mac Classic Light theme */
-  --bg-primary: #FFFFFF;
-  --bg-secondary: #F5F5F5;
-  --bg-tertiary: #EDEDED;
-  --bg-hover: #E5E5E5;
-  
+  --bg-primary: #ffffff;
+  --bg-secondary: #f5f5f5;
+  --bg-tertiary: #ededed;
+  --bg-hover: #e5e5e5;
+
   --text-primary: #000000;
   --text-secondary: #666666;
   --text-muted: #999999;
-  
+
   /* Softer Mac Mail-style blue */
-  --accent: #5B9BD5;
-  --accent-dim: #4A8BC4;
+  --accent: #5b9bd5;
+  --accent-dim: #4a8bc4;
   --accent-glow: rgba(91, 155, 213, 0.12);
-  
-  --success: #4A8C50;
-  --error: #C5060B;
-  
-  --border: #CCCCCC;
-  --border-subtle: #DDDDDD;
-  
+
+  --success: #4a8c50;
+  --error: #c5060b;
+
+  --border: #cccccc;
+  --border-subtle: #dddddd;
+
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;
@@ -139,19 +139,37 @@ body,
   transition: transform 0.3s ease;
 }
 
+.btn-icon-svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.view-icon-svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
 .btn-icon.spinning,
 .view-icon.spinning {
   animation: spin 1s linear infinite;
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .btn-primary {
   background: var(--accent);
-  color: #FFFFFF;
+  color: #ffffff;
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -159,7 +177,7 @@ body,
 }
 
 .btn-primary:active:not(:disabled) {
-  background: #0044BB;
+  background: #0044bb;
 }
 
 .btn-primary:disabled {
@@ -203,8 +221,8 @@ body,
   align-items: center;
   gap: 8px;
   padding: 10px 16px;
-  background: #F8D7DA;
-  border-bottom: 1px solid #F5A8AD;
+  background: #f8d7da;
+  border-bottom: 1px solid #f5a8ad;
   color: var(--error);
   font-size: 12px;
 }
@@ -477,9 +495,15 @@ body,
 
 /* Column-specific colors - using graph colors from MacClassic */
 /* Greyscale icons for a cleaner look */
-.worktrees-column .column-icon { color: #888888; }
-.branches-column .column-icon { color: #888888; }
-.remotes-column .column-icon { color: #888888; }
+.worktrees-column .column-icon {
+  color: #888888;
+}
+.branches-column .column-icon {
+  color: #888888;
+}
+.remotes-column .column-icon {
+  color: #888888;
+}
 
 /* Column Title with Count */
 .column-title {
@@ -537,7 +561,7 @@ body,
 }
 
 .control-select:hover {
-  border-color: #AAAAAA;
+  border-color: #aaaaaa;
 }
 
 .control-select:focus {
@@ -563,7 +587,7 @@ body,
 }
 
 .control-search:hover {
-  border-color: #AAAAAA;
+  border-color: #aaaaaa;
 }
 
 .control-search:focus {
@@ -594,17 +618,17 @@ body,
 }
 
 .badge-local {
-  background: #E8F0F8;
-  color: #5B9BD5;
+  background: #e8f0f8;
+  color: #5b9bd5;
 }
 
 .badge-unmerged {
-  background: #FEF3E6;
+  background: #fef3e6;
   color: var(--text-muted);
 }
 
 .badge-draft {
-  background: #E8E8E8;
+  background: #e8e8e8;
   color: #666666;
 }
 
@@ -664,21 +688,21 @@ body,
 }
 
 .status-success {
-  background: #D4EDDA;
-  color: #036A07;
-  border: 1px solid #A8E6A1;
+  background: #d4edda;
+  color: #036a07;
+  border: 1px solid #a8e6a1;
 }
 
 .status-error {
-  background: #F8D7DA;
-  color: #C5060B;
-  border: 1px solid #F5A8AD;
+  background: #f8d7da;
+  color: #c5060b;
+  border: 1px solid #f5a8ad;
 }
 
 .status-info {
-  background: #E3ECFF;
-  color: #0066FF;
-  border: 1px solid #B3D1FF;
+  background: #e3ecff;
+  color: #0066ff;
+  border: 1px solid #b3d1ff;
 }
 
 .status-icon {
@@ -793,11 +817,11 @@ body,
 }
 
 .pr-additions {
-  color: #4A8C50;
+  color: #4a8c50;
 }
 
 .pr-deletions {
-  color: #A85050;
+  color: #a85050;
 }
 
 /* Worktree Styles */
@@ -806,12 +830,12 @@ body,
 }
 
 .diff-additions {
-  color: #4A8C50;
+  color: #4a8c50;
   font-weight: 500;
 }
 
 .diff-deletions {
-  color: #A85050;
+  color: #a85050;
   font-weight: 500;
 }
 
@@ -904,18 +928,18 @@ body,
 
 /* Review status badges */
 .badge-approved {
-  background: #E6F0E6;
-  color: #4A8C50;
+  background: #e6f0e6;
+  color: #4a8c50;
 }
 
 .badge-changes {
-  background: #F5EFE0;
-  color: #8C7040;
+  background: #f5efe0;
+  color: #8c7040;
 }
 
 .badge-review {
-  background: #E8F0F8;
-  color: #5B9BD5;
+  background: #e8f0f8;
+  color: #5b9bd5;
 }
 
 /* Context Menu */
@@ -958,7 +982,7 @@ body,
 
 .context-menu-item:hover:not(.disabled) {
   background: var(--accent);
-  color: #FFFFFF;
+  color: #ffffff;
 }
 
 .context-menu-item.disabled {
@@ -1059,7 +1083,7 @@ body,
 /* Merge commit indicator */
 .commit-item.merge .commit-message::before {
   content: '⎇ ';
-  color: #7C4DFF;
+  color: #7c4dff;
 }
 
 /* ========================================
@@ -1097,7 +1121,7 @@ body,
 
 .view-toggle-btn.active {
   background: var(--accent);
-  color: #FFFFFF;
+  color: #ffffff;
 }
 
 .view-icon {
@@ -1250,7 +1274,7 @@ body,
 }
 
 .sidebar-filter-select:hover {
-  border-color: #AAAAAA;
+  border-color: #aaaaaa;
 }
 
 .sidebar-filter-select:focus {
@@ -1333,7 +1357,7 @@ body,
 }
 
 .sidebar-empty.sidebar-error {
-  color: var(--error);
+  color: var(--text-secondary);
   font-style: normal;
 }
 
@@ -1581,7 +1605,7 @@ body,
   cursor: pointer;
 }
 
-.pr-form-checkbox input[type="checkbox"] {
+.pr-form-checkbox input[type='checkbox'] {
   width: 14px;
   height: 14px;
   cursor: pointer;
@@ -1674,11 +1698,21 @@ body,
   color: var(--text-secondary);
 }
 
-.uncommitted-file.file-added .file-status-icon { color: var(--success); }
-.uncommitted-file.file-deleted .file-status-icon { color: var(--error); }
-.uncommitted-file.file-modified .file-status-icon { color: var(--accent); }
-.uncommitted-file.file-renamed .file-status-icon { color: #7030A0; }
-.uncommitted-file.file-untracked .file-status-icon { color: var(--text-muted); }
+.uncommitted-file.file-added .file-status-icon {
+  color: var(--success);
+}
+.uncommitted-file.file-deleted .file-status-icon {
+  color: var(--error);
+}
+.uncommitted-file.file-modified .file-status-icon {
+  color: var(--accent);
+}
+.uncommitted-file.file-renamed .file-status-icon {
+  color: #7030a0;
+}
+.uncommitted-file.file-untracked .file-status-icon {
+  color: var(--text-muted);
+}
 
 .uncommitted-cta {
   margin-top: auto;
@@ -2114,18 +2148,18 @@ body,
 }
 
 .graph-ref.branch {
-  background: #E8F0F8;
-  color: #5B9BD5;
+  background: #e8f0f8;
+  color: #5b9bd5;
 }
 
 .graph-ref.head {
-  background: #E6F0E6;
-  color: #4A8C50;
+  background: #e6f0e6;
+  color: #4a8c50;
 }
 
 .graph-ref.tag {
-  background: #FEF3E6;
-  color: #C08030;
+  background: #fef3e6;
+  color: #c08030;
 }
 
 .graph-commit-message {
@@ -2233,12 +2267,12 @@ body,
 }
 
 .diff-stat-additions {
-  color: #4A8C50;
+  color: #4a8c50;
   font-weight: 500;
 }
 
 .diff-stat-deletions {
-  color: #A85050;
+  color: #a85050;
   font-weight: 500;
 }
 
@@ -2294,23 +2328,23 @@ body,
 }
 
 .diff-status-added {
-  background: #D4EDDA;
-  color: #4A8C50;
+  background: #d4edda;
+  color: #4a8c50;
 }
 
 .diff-status-deleted {
-  background: #F8D7DA;
-  color: #A85050;
+  background: #f8d7da;
+  color: #a85050;
 }
 
 .diff-status-modified {
-  background: #FEF3E6;
-  color: #C08030;
+  background: #fef3e6;
+  color: #c08030;
 }
 
 .diff-status-renamed {
-  background: #E8F0F8;
-  color: #5B9BD5;
+  background: #e8f0f8;
+  color: #5b9bd5;
 }
 
 .diff-file-path {
@@ -2331,11 +2365,11 @@ body,
 }
 
 .diff-additions {
-  color: #4A8C50;
+  color: #4a8c50;
 }
 
 .diff-deletions {
-  color: #A85050;
+  color: #a85050;
 }
 
 .diff-file-content {
@@ -2383,11 +2417,11 @@ body,
 }
 
 .diff-line-add {
-  background: #E6F6E6;
+  background: #e6f6e6;
 }
 
 .diff-line-delete {
-  background: #FFEBE9;
+  background: #ffebe9;
 }
 
 .diff-line-number {
@@ -2401,11 +2435,11 @@ body,
 }
 
 .diff-line-add .diff-line-number.new {
-  background: #D4EDDA;
+  background: #d4edda;
 }
 
 .diff-line-delete .diff-line-number.old {
-  background: #F8D7DA;
+  background: #f8d7da;
 }
 
 .diff-line-prefix {
@@ -2416,11 +2450,11 @@ body,
 }
 
 .diff-line-add .diff-line-prefix {
-  color: #4A8C50;
+  color: #4a8c50;
 }
 
 .diff-line-delete .diff-line-prefix {
-  color: #A85050;
+  color: #a85050;
 }
 
 .diff-line-content {
@@ -2565,17 +2599,17 @@ body,
 }
 
 .pr-review-badge.approved {
-  background: #D4EDDA;
+  background: #d4edda;
   color: #155724;
 }
 
 .pr-review-badge.changes {
-  background: #F8D7DA;
-  color: #721C24;
+  background: #f8d7da;
+  color: #721c24;
 }
 
 .pr-review-badge.commented {
-  background: #FFF3CD;
+  background: #fff3cd;
   color: #856404;
 }
 
@@ -2721,16 +2755,16 @@ body,
 }
 
 .pr-comment.pr-review {
-  border-left-color: #28A745;
+  border-left-color: #28a745;
 }
 
 .pr-comment.pr-review.changes {
-  border-left-color: #DC3545;
+  border-left-color: #dc3545;
 }
 
 .pr-comment.ai-comment {
   opacity: 0.7;
-  border-left-color: #6C757D;
+  border-left-color: #6c757d;
 }
 
 .pr-comment-header {
@@ -3176,23 +3210,23 @@ body,
 }
 
 .stash-file-status.status-added {
-  background: #D4EDDA;
+  background: #d4edda;
   color: #155724;
 }
 
 .stash-file-status.status-modified {
-  background: #FFF3CD;
+  background: #fff3cd;
   color: #856404;
 }
 
 .stash-file-status.status-deleted {
-  background: #F8D7DA;
-  color: #721C24;
+  background: #f8d7da;
+  color: #721c24;
 }
 
 .stash-file-status.status-renamed {
-  background: #D1ECF1;
-  color: #0C5460;
+  background: #d1ecf1;
+  color: #0c5460;
 }
 
 .stash-file-path {
@@ -3452,55 +3486,57 @@ body,
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  width: 20px;
-  height: 48px;
-  background: #3C3C3C;
-  border: none;
-  border-radius: 0 4px 4px 0;
+  width: 16px;
+  height: 40px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 0 6px 6px 0;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 20;
   transition: all 0.15s ease;
-  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.2);
+  box-shadow: 1px 0 4px rgba(0, 0, 0, 0.08);
 }
 
 .panel-toggle:hover {
-  background: #4C4C4C;
-  width: 24px;
+  background: var(--bg-hover);
+  width: 20px;
 }
 
 .panel-toggle-left {
   left: 0;
-  border-radius: 0 4px 4px 0;
+  border-radius: 0 6px 6px 0;
+  border-left: none;
 }
 
 .panel-toggle-right {
   right: 0;
-  border-radius: 4px 0 0 4px;
-  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.2);
+  border-radius: 6px 0 0 6px;
+  border-right: none;
+  box-shadow: -1px 0 4px rgba(0, 0, 0, 0.08);
 }
 
 .panel-toggle-icon {
-  color: #999;
-  font-size: 10px;
+  color: var(--text-muted);
+  font-size: 9px;
   transition: color 0.15s ease;
 }
 
 .panel-toggle:hover .panel-toggle-icon {
-  color: #FFF;
+  color: var(--text-secondary);
 }
 
 /* Panel Collapse Buttons (inside panels) */
 .panel-collapse-btn {
   position: absolute;
   bottom: 12px;
-  width: 20px;
-  height: 48px;
-  background: #3C3C3C;
-  border: none;
-  border-radius: 4px;
+  width: 16px;
+  height: 40px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -3516,16 +3552,16 @@ body,
 }
 
 .panel-collapse-btn:hover {
-  background: #4C4C4C;
+  background: var(--bg-hover);
 }
 
 .panel-collapse-icon {
-  color: #999;
-  font-size: 10px;
+  color: var(--text-muted);
+  font-size: 9px;
 }
 
 .panel-collapse-btn:hover .panel-collapse-icon {
-  color: #FFF;
+  color: var(--text-secondary);
 }
 
 /* Position collapse buttons */
@@ -3553,7 +3589,10 @@ body,
 
 .column {
   position: relative;
-  transition: transform 0.15s ease, opacity 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    transform 0.15s ease,
+    opacity 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .column.dragging {
@@ -3591,7 +3630,9 @@ body,
   color: var(--text-muted);
   cursor: grab;
   opacity: 0;
-  transition: opacity 0.15s ease, color 0.15s ease;
+  transition:
+    opacity 0.15s ease,
+    color 0.15s ease;
   z-index: 10;
   letter-spacing: -2px;
   user-select: none;

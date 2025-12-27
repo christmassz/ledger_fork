@@ -132,9 +132,48 @@ JSON file at `~/Library/Application Support/ledger/ledger-settings.json`:
 
 ## Build & Distribution
 
-- Built DMG at `dist/Ledger-{version}-arm64.dmg`
-- Published to GitHub Releases
-- Currently unsigned (users must right-click → Open)
+### Development Build
+```bash
+npm run build:mac:arm64  # Build unsigned for local testing
+```
+
+### Release Build (Signed + Notarized + Published)
+```bash
+APPLE_KEYCHAIN_PROFILE="AC_PASSWORD" npm run release
+```
+
+This builds, signs, notarizes, and publishes to GitHub Releases.
+
+### Notarization Setup
+
+**Important:** The `notarize` option in `electron-builder.yml` must be a **boolean** (`true`/`false`), not an object. Credentials are passed via environment variables.
+
+```yaml
+# electron-builder.yml
+mac:
+  identity: "Peter Thomson (R4RRG93J68)"
+  notarize: true  # Must be boolean, not object!
+```
+
+**Required credentials** (one of these sets via env vars):
+1. `APPLE_KEYCHAIN_PROFILE` - keychain profile name (recommended)
+2. `APPLE_ID` + `APPLE_APP_SPECIFIC_PASSWORD` + `APPLE_TEAM_ID`
+3. `APPLE_API_KEY` + `APPLE_API_KEY_ID` + `APPLE_API_ISSUER`
+
+**One-time setup** to store credentials in keychain:
+```bash
+xcrun notarytool store-credentials "AC_PASSWORD" \
+  --apple-id "your@email.com" \
+  --team-id "YOUR_TEAM_ID"
+# Enter app-specific password when prompted
+```
+
+**During signing:** macOS may show a keychain access dialog - click "Always Allow" to prevent it blocking future builds.
+
+### Build Artifacts
+- DMG: `dist/Ledger-{version}-arm64.dmg`
+- ZIP: `dist/Ledger-{version}-arm64-mac.zip`
+- Published to GitHub Releases automatically
 
 ## Code Style
 

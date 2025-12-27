@@ -22,7 +22,8 @@ export default defineConfig({
     resolve: {
       alias: aliases,
     },
-    plugins: [externalizeDepsPlugin()],
+    // Exclude ESM-only packages from externalization so they get bundled properly
+    plugins: [externalizeDepsPlugin({ exclude: ['fix-path', 'shell-path', 'strip-ansi'] })],
   },
   preload: {
     build: {

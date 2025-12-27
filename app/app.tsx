@@ -1,36 +1,56 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import type { Branch, Worktree, BranchFilter, BranchSort, CheckoutResult, PullRequest, Commit, WorkingStatus, UncommittedFile, PRFilter, PRSort, GraphCommit, CommitDiff, StashEntry, StagingFileDiff, PRDetail, PRReviewComment, StashFile, BranchDiff } from './types/electron'
+import type {
+  Branch,
+  Worktree,
+  BranchFilter,
+  BranchSort,
+  CheckoutResult,
+  PullRequest,
+  Commit,
+  WorkingStatus,
+  UncommittedFile,
+  PRFilter,
+  PRSort,
+  GraphCommit,
+  CommitDiff,
+  StashEntry,
+  StagingFileDiff,
+  PRDetail,
+  PRReviewComment,
+  StashFile,
+  BranchDiff,
+} from './types/electron'
 import './styles/app.css'
 import { useWindowContext } from './components/window'
 
 type ViewMode = 'radar' | 'focus'
 
 interface StatusMessage {
-  type: 'success' | 'error' | 'info';
-  message: string;
-  stashed?: string;
+  type: 'success' | 'error' | 'info'
+  message: string
+  stashed?: string
 }
 
-type ContextMenuType = 'pr' | 'worktree' | 'local-branch' | 'remote-branch' | 'commit' | 'uncommitted';
+type ContextMenuType = 'pr' | 'worktree' | 'local-branch' | 'remote-branch' | 'commit' | 'uncommitted'
 
 interface ContextMenu {
-  type: ContextMenuType;
-  x: number;
-  y: number;
-  data: PullRequest | Worktree | Branch | Commit | WorkingStatus;
+  type: ContextMenuType
+  x: number
+  y: number
+  data: PullRequest | Worktree | Branch | Commit | WorkingStatus
 }
 
 interface MenuItem {
-  label: string;
-  action: () => void;
-  disabled?: boolean;
+  label: string
+  action: () => void
+  disabled?: boolean
 }
 
-type SidebarFocusType = 'pr' | 'branch' | 'remote' | 'worktree' | 'stash' | 'uncommitted';
+type SidebarFocusType = 'pr' | 'branch' | 'remote' | 'worktree' | 'stash' | 'uncommitted'
 
 interface SidebarFocus {
-  type: SidebarFocusType;
-  data: PullRequest | Branch | Worktree | StashEntry | WorkingStatus;
+  type: SidebarFocusType
+  data: PullRequest | Branch | Worktree | StashEntry | WorkingStatus
 }
 
 export default function App() {
@@ -52,10 +72,10 @@ export default function App() {
   const [creatingBranch, setCreatingBranch] = useState(false)
   const [githubUrl, setGithubUrl] = useState<string | null>(null)
   const { setTitle } = useWindowContext()
-  
+
   // View mode state
   const [viewMode, setViewMode] = useState<ViewMode>('radar')
-  
+
   // Focus mode state
   const [graphCommits, setGraphCommits] = useState<GraphCommit[]>([])
   const [selectedCommit, setSelectedCommit] = useState<GraphCommit | null>(null)
@@ -63,7 +83,7 @@ export default function App() {
   const [stashes, setStashes] = useState<StashEntry[]>([])
   const [loadingDiff, setLoadingDiff] = useState(false)
   const [sidebarFocus, setSidebarFocus] = useState<SidebarFocus | null>(null)
-  
+
   // Sidebar collapsed state
   const [sidebarSections, setSidebarSections] = useState({
     branches: true,
@@ -72,7 +92,7 @@ export default function App() {
     stashes: false,
     prs: true,
   })
-  
+
   // Sidebar filter panels open state
   const [sidebarFiltersOpen, setSidebarFiltersOpen] = useState({
     prs: false,
@@ -80,7 +100,7 @@ export default function App() {
     remotes: false,
     worktrees: false,
   })
-  
+
   // Filter and sort state
   const [localFilter, setLocalFilter] = useState<BranchFilter>('all')
   const [localSort, setLocalSort] = useState<BranchSort>('name')
@@ -88,19 +108,19 @@ export default function App() {
   const [remoteSort, setRemoteSort] = useState<BranchSort>('name')
   const [prFilter, setPrFilter] = useState<PRFilter>('open-not-draft')
   const [prSort, setPrSort] = useState<PRSort>('updated')
-  
+
   // Search state for Radar mode columns
   const [prSearch, setPrSearch] = useState('')
   const [localBranchSearch, setLocalBranchSearch] = useState('')
   const [remoteBranchSearch, setRemoteBranchSearch] = useState('')
   const [worktreeSearch, setWorktreeSearch] = useState('')
-  
+
   // Collapsible controls state
   const [prControlsOpen, setPrControlsOpen] = useState(false)
   const [localControlsOpen, setLocalControlsOpen] = useState(false)
   const [remoteControlsOpen, setRemoteControlsOpen] = useState(false)
   const [worktreeControlsOpen, setWorktreeControlsOpen] = useState(false)
-  
+
   // Worktree filter state
   const [worktreeParentFilter, setWorktreeParentFilter] = useState<string>('all')
 
@@ -111,9 +131,15 @@ export default function App() {
   const [detailVisible, setDetailVisible] = useState(true)
   const [isResizingSidebar, setIsResizingSidebar] = useState(false)
   const [isResizingDetail, setIsResizingDetail] = useState(false)
-  
+
   // Radar view column order (drag-and-drop)
-  const [radarColumnOrder, setRadarColumnOrder] = useState<string[]>(['prs', 'worktrees', 'commits', 'branches', 'remotes'])
+  const [radarColumnOrder, setRadarColumnOrder] = useState<string[]>([
+    'prs',
+    'worktrees',
+    'commits',
+    'branches',
+    'remotes',
+  ])
   const [draggingColumn, setDraggingColumn] = useState<string | null>(null)
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null)
 
@@ -126,7 +152,7 @@ export default function App() {
         setContextMenu(null)
       }
     }
-    
+
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setContextMenu(null)
@@ -190,32 +216,38 @@ export default function App() {
     e.dataTransfer.setData('text/plain', columnId)
   }, [])
 
-  const handleColumnDragOver = useCallback((e: React.DragEvent, columnId: string) => {
-    e.preventDefault()
-    if (draggingColumn && draggingColumn !== columnId) {
-      setDragOverColumn(columnId)
-    }
-  }, [draggingColumn])
+  const handleColumnDragOver = useCallback(
+    (e: React.DragEvent, columnId: string) => {
+      e.preventDefault()
+      if (draggingColumn && draggingColumn !== columnId) {
+        setDragOverColumn(columnId)
+      }
+    },
+    [draggingColumn]
+  )
 
   const handleColumnDragLeave = useCallback(() => {
     setDragOverColumn(null)
   }, [])
 
-  const handleColumnDrop = useCallback((e: React.DragEvent, targetColumnId: string) => {
-    e.preventDefault()
-    if (!draggingColumn || draggingColumn === targetColumnId) return
+  const handleColumnDrop = useCallback(
+    (e: React.DragEvent, targetColumnId: string) => {
+      e.preventDefault()
+      if (!draggingColumn || draggingColumn === targetColumnId) return
 
-    setRadarColumnOrder(prev => {
-      const newOrder = [...prev]
-      const dragIndex = newOrder.indexOf(draggingColumn)
-      const targetIndex = newOrder.indexOf(targetColumnId)
-      newOrder.splice(dragIndex, 1)
-      newOrder.splice(targetIndex, 0, draggingColumn)
-      return newOrder
-    })
-    setDraggingColumn(null)
-    setDragOverColumn(null)
-  }, [draggingColumn])
+      setRadarColumnOrder((prev) => {
+        const newOrder = [...prev]
+        const dragIndex = newOrder.indexOf(draggingColumn)
+        const targetIndex = newOrder.indexOf(targetColumnId)
+        newOrder.splice(dragIndex, 1)
+        newOrder.splice(targetIndex, 0, draggingColumn)
+        return newOrder
+      })
+      setDraggingColumn(null)
+      setDragOverColumn(null)
+    },
+    [draggingColumn]
+  )
 
   const handleColumnDragEnd = useCallback(() => {
     setDraggingColumn(null)
@@ -245,16 +277,17 @@ export default function App() {
       // Phase 1: Fast initial load - basic data without expensive per-item metadata
       // Uses getBranchesBasic() instead of getBranchesWithMetadata() (saves 600+ git commands)
       // Uses getCommitGraphHistory with skipStats=true (saves 100 git commands)
-      const [branchResult, worktreeResult, prResult, commitResult, statusResult, ghUrl, graphResult, stashResult] = await Promise.all([
-        window.electronAPI.getBranchesBasic(),
-        window.electronAPI.getWorktrees(),
-        window.electronAPI.getPullRequests(),
-        window.electronAPI.getCommitHistory(15),
-        window.electronAPI.getWorkingStatus(),
-        window.electronAPI.getGitHubUrl(),
-        window.electronAPI.getCommitGraphHistory(100, true), // skipStats for fast load
-        window.electronAPI.getStashes(),
-      ])
+      const [branchResult, worktreeResult, prResult, commitResult, statusResult, ghUrl, graphResult, stashResult] =
+        await Promise.all([
+          window.electronAPI.getBranchesBasic(),
+          window.electronAPI.getWorktrees(),
+          window.electronAPI.getPullRequests(),
+          window.electronAPI.getCommitHistory(15),
+          window.electronAPI.getWorkingStatus(),
+          window.electronAPI.getGitHubUrl(),
+          window.electronAPI.getCommitGraphHistory(100, true), // skipStats for fast load
+          window.electronAPI.getStashes(),
+        ])
 
       setGithubUrl(ghUrl)
 
@@ -290,16 +323,19 @@ export default function App() {
       setWorkingStatus(statusResult)
       setGraphCommits(graphResult)
       setStashes(stashResult)
-      
+
       // Phase 2: Deferred metadata loading in background
       // This loads detailed branch metadata (commit counts, dates) after initial render
-      window.electronAPI.getBranchesWithMetadata().then((metaResult) => {
-        if (!('error' in metaResult)) {
-          setBranches(metaResult.branches)
-        }
-      }).catch(() => {
-        // Silently ignore - we already have basic branch data
-      })
+      window.electronAPI
+        .getBranchesWithMetadata()
+        .then((metaResult) => {
+          if (!('error' in metaResult)) {
+            setBranches(metaResult.branches)
+          }
+        })
+        .catch(() => {
+          // Silently ignore - we already have basic branch data
+        })
     } catch (err) {
       setError((err as Error).message)
     } finally {
@@ -323,65 +359,87 @@ export default function App() {
   }, [])
 
   // Handle sidebar item focus (single click)
-  const handleSidebarFocus = useCallback((type: SidebarFocusType, data: PullRequest | Branch | Worktree | StashEntry | WorkingStatus) => {
-    setSelectedCommit(null) // Clear commit selection when focusing sidebar item
-    setCommitDiff(null)
-    setSidebarFocus({ type, data })
-  }, [])
+  const handleSidebarFocus = useCallback(
+    (type: SidebarFocusType, data: PullRequest | Branch | Worktree | StashEntry | WorkingStatus) => {
+      setSelectedCommit(null) // Clear commit selection when focusing sidebar item
+      setCommitDiff(null)
+      setSidebarFocus({ type, data })
+    },
+    []
+  )
 
   // Toggle sidebar section
   const toggleSidebarSection = useCallback((section: keyof typeof sidebarSections) => {
-    setSidebarSections(prev => ({ ...prev, [section]: !prev[section] }))
+    setSidebarSections((prev) => ({ ...prev, [section]: !prev[section] }))
   }, [])
-  
+
   // Toggle sidebar filter panel
   const toggleSidebarFilter = useCallback((section: keyof typeof sidebarFiltersOpen) => {
-    setSidebarFiltersOpen(prev => ({ ...prev, [section]: !prev[section] }))
+    setSidebarFiltersOpen((prev) => ({ ...prev, [section]: !prev[section] }))
   }, [])
 
   // Radar card double-click handlers - switch to Focus mode with item selected
-  const handleRadarPRClick = useCallback((pr: PullRequest) => {
-    setViewMode('focus')
-    setSidebarSections(prev => ({ ...prev, prs: true }))
-    handleSidebarFocus('pr', pr)
-  }, [handleSidebarFocus])
+  const handleRadarPRClick = useCallback(
+    (pr: PullRequest) => {
+      setViewMode('focus')
+      setSidebarSections((prev) => ({ ...prev, prs: true }))
+      handleSidebarFocus('pr', pr)
+    },
+    [handleSidebarFocus]
+  )
 
-  const handleRadarWorktreeClick = useCallback((wt: Worktree) => {
-    setViewMode('focus')
-    setSidebarSections(prev => ({ ...prev, worktrees: true }))
-    handleSidebarFocus('worktree', wt)
-  }, [handleSidebarFocus])
+  const handleRadarWorktreeClick = useCallback(
+    (wt: Worktree) => {
+      setViewMode('focus')
+      setSidebarSections((prev) => ({ ...prev, worktrees: true }))
+      handleSidebarFocus('worktree', wt)
+    },
+    [handleSidebarFocus]
+  )
 
-  const handleRadarBranchClick = useCallback((branch: Branch) => {
-    setViewMode('focus')
-    setSidebarSections(prev => ({ ...prev, branches: true }))
-    handleSidebarFocus('branch', branch)
-  }, [handleSidebarFocus])
+  const handleRadarBranchClick = useCallback(
+    (branch: Branch) => {
+      setViewMode('focus')
+      setSidebarSections((prev) => ({ ...prev, branches: true }))
+      handleSidebarFocus('branch', branch)
+    },
+    [handleSidebarFocus]
+  )
 
-  const handleRadarRemoteBranchClick = useCallback((branch: Branch) => {
-    setViewMode('focus')
-    setSidebarSections(prev => ({ ...prev, remotes: true }))
-    handleSidebarFocus('remote', branch)
-  }, [handleSidebarFocus])
+  const handleRadarRemoteBranchClick = useCallback(
+    (branch: Branch) => {
+      setViewMode('focus')
+      setSidebarSections((prev) => ({ ...prev, remotes: true }))
+      handleSidebarFocus('remote', branch)
+    },
+    [handleSidebarFocus]
+  )
 
-  const handleRadarCommitClick = useCallback((commit: Commit) => {
-    setViewMode('focus')
-    // Find the matching GraphCommit by hash and select it
-    const graphCommit = graphCommits.find(gc => gc.hash === commit.hash)
-    if (graphCommit) {
-      handleSelectCommit(graphCommit)
-    }
-  }, [graphCommits, handleSelectCommit])
+  const handleRadarCommitClick = useCallback(
+    (commit: Commit) => {
+      setViewMode('focus')
+      // Find the matching GraphCommit by hash and select it
+      const graphCommit = graphCommits.find((gc) => gc.hash === commit.hash)
+      if (graphCommit) {
+        handleSelectCommit(graphCommit)
+      }
+    },
+    [graphCommits, handleSelectCommit]
+  )
 
   const handleRadarUncommittedClick = useCallback(() => {
     if (!workingStatus) return
     setViewMode('focus')
-    setSidebarSections(prev => ({ ...prev, branches: true }))
+    setSidebarSections((prev) => ({ ...prev, branches: true }))
     handleSidebarFocus('uncommitted', workingStatus)
   }, [workingStatus, handleSidebarFocus])
 
   // Context menu handlers
-  const handleContextMenu = (e: React.MouseEvent, type: ContextMenuType, data: PullRequest | Worktree | Branch | Commit | WorkingStatus) => {
+  const handleContextMenu = (
+    e: React.MouseEvent,
+    type: ContextMenuType,
+    data: PullRequest | Worktree | Branch | Commit | WorkingStatus
+  ) => {
     e.preventDefault()
     setContextMenu({ type, x: e.clientX, y: e.clientY, data })
   }
@@ -393,7 +451,7 @@ export default function App() {
     closeContextMenu()
     setSwitching(true)
     setStatus({ type: 'info', message: `Checking out ${pr.branch}...` })
-    
+
     try {
       const result = await window.electronAPI.checkoutPRBranch(pr.branch)
       if (result.success) {
@@ -441,11 +499,11 @@ export default function App() {
   const handleWorktreeConvertToBranch = async (wt: Worktree) => {
     closeContextMenu()
     if (switching) return
-    
+
     setSwitching(true)
     const folderName = wt.path.split('/').pop() || 'worktree'
     setStatus({ type: 'info', message: `Converting ${folderName} to branch...` })
-    
+
     try {
       const result = await window.electronAPI.convertWorktreeToBranch(wt.path)
       if (result.success) {
@@ -465,10 +523,10 @@ export default function App() {
   const handleLocalBranchSwitch = async (branch: Branch) => {
     closeContextMenu()
     if (branch.current || switching) return
-    
+
     setSwitching(true)
     setStatus({ type: 'info', message: `Switching to ${branch.name}...` })
-    
+
     try {
       const result: CheckoutResult = await window.electronAPI.checkoutBranch(branch.name)
       if (result.success) {
@@ -488,7 +546,7 @@ export default function App() {
   const handleLocalBranchPush = async (branch: Branch) => {
     closeContextMenu()
     setStatus({ type: 'info', message: `Pushing ${branch.name} to remote...` })
-    
+
     try {
       const result = await window.electronAPI.pushBranch(branch.name, true)
       if (result.success) {
@@ -506,7 +564,7 @@ export default function App() {
   const handleRemoteBranchPull = async (branch: Branch) => {
     closeContextMenu()
     setStatus({ type: 'info', message: `Fetching ${branch.name.replace('remotes/', '')}...` })
-    
+
     try {
       const result = await window.electronAPI.pullBranch(branch.name)
       if (result.success) {
@@ -538,10 +596,10 @@ export default function App() {
   const handleCommitReset = async (commit: Commit) => {
     closeContextMenu()
     if (switching) return
-    
+
     setSwitching(true)
     setStatus({ type: 'info', message: `Resetting to ${commit.shortHash}...` })
-    
+
     try {
       const result = await window.electronAPI.resetToCommit(commit.hash, 'hard')
       if (result.success) {
@@ -560,12 +618,18 @@ export default function App() {
   // Get menu items based on context menu type
   const getMenuItems = (): MenuItem[] => {
     if (!contextMenu) return []
-    
+
     switch (contextMenu.type) {
       case 'pr': {
         const pr = contextMenu.data as PullRequest
         return [
-          { label: 'Open in Focus', action: () => { closeContextMenu(); handleRadarPRClick(pr) } },
+          {
+            label: 'Open in Focus',
+            action: () => {
+              closeContextMenu()
+              handleRadarPRClick(pr)
+            },
+          },
           { label: 'Check Out', action: () => handlePRCheckout(pr), disabled: switching },
           { label: 'View Remote', action: () => handlePRViewRemote(pr) },
         ]
@@ -574,34 +638,70 @@ export default function App() {
         const wt = contextMenu.data as Worktree
         const hasChanges = wt.changedFileCount > 0 || wt.additions > 0 || wt.deletions > 0
         const isWorkingFolder = wt.agent === 'working-folder'
-        
+
         if (isWorkingFolder) {
           // Working folder has different actions - you're already here!
           return [
-            { label: 'Open in Focus', action: () => { closeContextMenu(); handleRadarWorktreeClick(wt) } },
+            {
+              label: 'Open in Focus',
+              action: () => {
+                closeContextMenu()
+                handleRadarWorktreeClick(wt)
+              },
+            },
             { label: 'Open in Finder', action: () => handleWorktreeOpen(wt) },
           ]
         }
-        
+
         return [
-          { label: 'Open in Focus', action: () => { closeContextMenu(); handleRadarWorktreeClick(wt) } },
-          { label: 'Check Out Worktree', action: () => handleWorktreeDoubleClick(wt), disabled: !wt.branch || wt.branch === currentBranch || switching },
-          { label: 'Convert to Branch', action: () => handleWorktreeConvertToBranch(wt), disabled: !hasChanges || switching },
+          {
+            label: 'Open in Focus',
+            action: () => {
+              closeContextMenu()
+              handleRadarWorktreeClick(wt)
+            },
+          },
+          {
+            label: 'Check Out Worktree',
+            action: () => handleWorktreeDoubleClick(wt),
+            disabled: !wt.branch || wt.branch === currentBranch || switching,
+          },
+          {
+            label: 'Convert to Branch',
+            action: () => handleWorktreeConvertToBranch(wt),
+            disabled: !hasChanges || switching,
+          },
           { label: 'Open in Finder', action: () => handleWorktreeOpen(wt) },
         ]
       }
       case 'local-branch': {
         const branch = contextMenu.data as Branch
         return [
-          { label: 'Open in Focus', action: () => { closeContextMenu(); handleRadarBranchClick(branch) } },
-          { label: 'Switch to Latest Commit', action: () => handleLocalBranchSwitch(branch), disabled: branch.current || switching },
+          {
+            label: 'Open in Focus',
+            action: () => {
+              closeContextMenu()
+              handleRadarBranchClick(branch)
+            },
+          },
+          {
+            label: 'Switch to Latest Commit',
+            action: () => handleLocalBranchSwitch(branch),
+            disabled: branch.current || switching,
+          },
           { label: 'Push to Remote', action: () => handleLocalBranchPush(branch) },
         ]
       }
       case 'remote-branch': {
         const branch = contextMenu.data as Branch
         return [
-          { label: 'Open in Focus', action: () => { closeContextMenu(); handleRadarRemoteBranchClick(branch) } },
+          {
+            label: 'Open in Focus',
+            action: () => {
+              closeContextMenu()
+              handleRadarRemoteBranchClick(branch)
+            },
+          },
           { label: 'Check Out', action: () => handleRemoteBranchDoubleClick(branch), disabled: switching },
           { label: 'Pull', action: () => handleRemoteBranchPull(branch) },
           { label: 'View Remote', action: () => handleRemoteBranchViewGitHub(branch) },
@@ -610,14 +710,26 @@ export default function App() {
       case 'commit': {
         const commit = contextMenu.data as Commit
         return [
-          { label: 'Open in Focus', action: () => { closeContextMenu(); handleRadarCommitClick(commit) } },
+          {
+            label: 'Open in Focus',
+            action: () => {
+              closeContextMenu()
+              handleRadarCommitClick(commit)
+            },
+          },
           { label: 'Check Out', action: () => handleCommitDoubleClick(commit), disabled: switching },
           { label: 'Reset to This Commit', action: () => handleCommitReset(commit), disabled: switching },
         ]
       }
       case 'uncommitted': {
         return [
-          { label: 'Open in Focus', action: () => { closeContextMenu(); handleRadarUncommittedClick() } },
+          {
+            label: 'Open in Focus',
+            action: () => {
+              closeContextMenu()
+              handleRadarUncommittedClick()
+            },
+          },
         ]
       }
       default:
@@ -626,18 +738,21 @@ export default function App() {
   }
 
   // Double-click handlers (keep for convenience)
-  const handleBranchDoubleClick = useCallback(async (branch: Branch) => {
-    if (branch.current || switching) return
-    handleLocalBranchSwitch(branch)
-  }, [switching])
+  const handleBranchDoubleClick = useCallback(
+    async (branch: Branch) => {
+      if (branch.current || switching) return
+      handleLocalBranchSwitch(branch)
+    },
+    [switching]
+  )
 
   // Create a new branch
   const handleCreateBranch = useCallback(async () => {
     if (!newBranchName.trim() || creatingBranch) return
-    
+
     setCreatingBranch(true)
     setStatus({ type: 'info', message: `Creating branch '${newBranchName}'...` })
-    
+
     try {
       const result = await window.electronAPI.createBranch(newBranchName.trim(), true)
       if (result.success) {
@@ -655,73 +770,82 @@ export default function App() {
     }
   }, [newBranchName, creatingBranch, refresh])
 
-  const handleRemoteBranchDoubleClick = useCallback(async (branch: Branch) => {
-    if (switching) return
-    
-    setSwitching(true)
-    const displayName = branch.name.replace('remotes/', '')
-    setStatus({ type: 'info', message: `Checking out ${displayName}...` })
-    
-    try {
-      const result: CheckoutResult = await window.electronAPI.checkoutRemoteBranch(branch.name)
-      if (result.success) {
-        setStatus({ type: 'success', message: result.message, stashed: result.stashed })
-        await refresh()
-      } else {
-        setStatus({ type: 'error', message: result.message })
-      }
-    } catch (err) {
-      setStatus({ type: 'error', message: (err as Error).message })
-    } finally {
-      setSwitching(false)
-    }
-  }, [switching])
+  const handleRemoteBranchDoubleClick = useCallback(
+    async (branch: Branch) => {
+      if (switching) return
 
-  const handleWorktreeDoubleClick = useCallback(async (worktree: Worktree) => {
-    if (!worktree.branch || worktree.branch === currentBranch || switching) return
-    
-    setSwitching(true)
-    setStatus({ type: 'info', message: `Checking out worktree ${worktree.displayName}...` })
-    
-    try {
-      const result: CheckoutResult = await window.electronAPI.checkoutBranch(worktree.branch)
-      if (result.success) {
-        setStatus({ type: 'success', message: result.message, stashed: result.stashed })
-        await refresh()
-      } else {
-        setStatus({ type: 'error', message: result.message })
+      setSwitching(true)
+      const displayName = branch.name.replace('remotes/', '')
+      setStatus({ type: 'info', message: `Checking out ${displayName}...` })
+
+      try {
+        const result: CheckoutResult = await window.electronAPI.checkoutRemoteBranch(branch.name)
+        if (result.success) {
+          setStatus({ type: 'success', message: result.message, stashed: result.stashed })
+          await refresh()
+        } else {
+          setStatus({ type: 'error', message: result.message })
+        }
+      } catch (err) {
+        setStatus({ type: 'error', message: (err as Error).message })
+      } finally {
+        setSwitching(false)
       }
-    } catch (err) {
-      setStatus({ type: 'error', message: (err as Error).message })
-    } finally {
-      setSwitching(false)
-    }
-  }, [currentBranch, switching])
+    },
+    [switching]
+  )
+
+  const handleWorktreeDoubleClick = useCallback(
+    async (worktree: Worktree) => {
+      if (!worktree.branch || worktree.branch === currentBranch || switching) return
+
+      setSwitching(true)
+      setStatus({ type: 'info', message: `Checking out worktree ${worktree.displayName}...` })
+
+      try {
+        const result: CheckoutResult = await window.electronAPI.checkoutBranch(worktree.branch)
+        if (result.success) {
+          setStatus({ type: 'success', message: result.message, stashed: result.stashed })
+          await refresh()
+        } else {
+          setStatus({ type: 'error', message: result.message })
+        }
+      } catch (err) {
+        setStatus({ type: 'error', message: (err as Error).message })
+      } finally {
+        setSwitching(false)
+      }
+    },
+    [currentBranch, switching]
+  )
 
   const handlePRDoubleClick = useCallback(async (pr: PullRequest) => {
     handlePRViewRemote(pr)
   }, [])
 
-  const handleCommitDoubleClick = useCallback(async (commit: Commit) => {
-    if (switching) return
-    
-    setSwitching(true)
-    setStatus({ type: 'info', message: `Checking out ${commit.shortHash}...` })
-    
-    try {
-      const result: CheckoutResult = await window.electronAPI.checkoutBranch(commit.hash)
-      if (result.success) {
-        setStatus({ type: 'success', message: `Checked out commit ${commit.shortHash}`, stashed: result.stashed })
-        await refresh()
-      } else {
-        setStatus({ type: 'error', message: result.message })
+  const handleCommitDoubleClick = useCallback(
+    async (commit: Commit) => {
+      if (switching) return
+
+      setSwitching(true)
+      setStatus({ type: 'info', message: `Checking out ${commit.shortHash}...` })
+
+      try {
+        const result: CheckoutResult = await window.electronAPI.checkoutBranch(commit.hash)
+        if (result.success) {
+          setStatus({ type: 'success', message: `Checked out commit ${commit.shortHash}`, stashed: result.stashed })
+          await refresh()
+        } else {
+          setStatus({ type: 'error', message: result.message })
+        }
+      } catch (err) {
+        setStatus({ type: 'error', message: (err as Error).message })
+      } finally {
+        setSwitching(false)
       }
-    } catch (err) {
-      setStatus({ type: 'error', message: (err as Error).message })
-    } finally {
-      setSwitching(false)
-    }
-  }, [switching])
+    },
+    [switching]
+  )
 
   useEffect(() => {
     if (!window.electronAPI) return
@@ -738,9 +862,9 @@ export default function App() {
   const filterBranches = (branchList: Branch[], filter: BranchFilter): Branch[] => {
     switch (filter) {
       case 'local-only':
-        return branchList.filter(b => b.isLocalOnly)
+        return branchList.filter((b) => b.isLocalOnly)
       case 'unmerged':
-        return branchList.filter(b => !b.isMerged)
+        return branchList.filter((b) => !b.isMerged)
       default:
         return branchList
     }
@@ -775,7 +899,7 @@ export default function App() {
     // Apply search filter
     if (localBranchSearch.trim()) {
       const search = localBranchSearch.toLowerCase().trim()
-      filtered = filtered.filter(b => b.name.toLowerCase().includes(search))
+      filtered = filtered.filter((b) => b.name.toLowerCase().includes(search))
     }
     return sortBranches(filtered, localSort)
   }, [branches, localFilter, localSort, localBranchSearch])
@@ -786,7 +910,7 @@ export default function App() {
     // Apply search filter
     if (remoteBranchSearch.trim()) {
       const search = remoteBranchSearch.toLowerCase().trim()
-      filtered = filtered.filter(b => b.name.toLowerCase().includes(search))
+      filtered = filtered.filter((b) => b.name.toLowerCase().includes(search))
     }
     return sortBranches(filtered, remoteSort)
   }, [branches, remoteFilter, remoteSort, remoteBranchSearch])
@@ -795,10 +919,10 @@ export default function App() {
   // This helps users understand they're already using worktrees conceptually
   const workingFolderWorktree: Worktree | null = useMemo(() => {
     if (!repoPath) return null
-    
+
     // Get repo name from path (last segment)
     const repoName = repoPath.split('/').pop() || 'Repository'
-    
+
     return {
       path: repoPath,
       head: '', // Will show current commit
@@ -820,15 +944,24 @@ export default function App() {
     const parents = new Set<string>()
     // Always include 'main' since working folder is always there
     if (repoPath) parents.add('main')
-    
+
     for (const wt of worktrees) {
       // Extract parent folder from path (e.g., ~/.cursor/worktrees/xxx -> .cursor)
       const pathParts = wt.path.split('/')
-      // Find known agent folders like .cursor, .claude, etc.
+      // Find known agent folders like .cursor, .claude, conductor, etc.
       for (let i = 0; i < pathParts.length; i++) {
         const part = pathParts[i]
-        if (part.startsWith('.') && ['cursor', 'claude', 'gemini', 'junie'].some(a => part.toLowerCase().includes(a))) {
+        // Check for dot folders (.cursor, .claude, etc.)
+        if (
+          part.startsWith('.') &&
+          ['cursor', 'claude', 'gemini', 'junie'].some((a) => part.toLowerCase().includes(a))
+        ) {
           parents.add(part)
+          break
+        }
+        // Check for Conductor workspaces (~/conductor/workspaces/)
+        if (part === 'conductor' && pathParts[i + 1] === 'workspaces') {
+          parents.add('conductor')
           break
         }
       }
@@ -843,70 +976,72 @@ export default function App() {
   // Filter worktrees by parent and search
   const filteredWorktrees = useMemo(() => {
     // Filter out the main repo worktree since we show it as "Working Folder" pseudo-entry
-    let filtered = worktrees.filter(wt => wt.path !== repoPath)
-    
+    let filtered = worktrees.filter((wt) => wt.path !== repoPath)
+
     // Apply parent filter
     if (worktreeParentFilter !== 'all') {
-      filtered = filtered.filter(wt => {
+      filtered = filtered.filter((wt) => {
         if (worktreeParentFilter === 'main') {
           return repoPath && wt.path.startsWith(repoPath)
         }
         return wt.path.includes(`/${worktreeParentFilter}/`)
       })
     }
-    
+
     // Apply search filter
     if (worktreeSearch.trim()) {
       const search = worktreeSearch.toLowerCase().trim()
-      filtered = filtered.filter(wt => 
-        wt.displayName.toLowerCase().includes(search) ||
-        (wt.branch && wt.branch.toLowerCase().includes(search))
+      filtered = filtered.filter(
+        (wt) => wt.displayName.toLowerCase().includes(search) || (wt.branch && wt.branch.toLowerCase().includes(search))
       )
     }
-    
+
     // Prepend the working folder pseudo-worktree
     // It should appear first and match the 'main' filter
     if (workingFolderWorktree) {
       const matchesParentFilter = worktreeParentFilter === 'all' || worktreeParentFilter === 'main'
-      const matchesSearch = !worktreeSearch.trim() || 
+      const matchesSearch =
+        !worktreeSearch.trim() ||
         workingFolderWorktree.displayName.toLowerCase().includes(worktreeSearch.toLowerCase().trim()) ||
-        (workingFolderWorktree.branch && workingFolderWorktree.branch.toLowerCase().includes(worktreeSearch.toLowerCase().trim()))
-      
+        (workingFolderWorktree.branch &&
+          workingFolderWorktree.branch.toLowerCase().includes(worktreeSearch.toLowerCase().trim()))
+
       if (matchesParentFilter && matchesSearch) {
         filtered = [workingFolderWorktree, ...filtered]
       }
     }
-    
+
     return filtered
   }, [worktrees, worktreeParentFilter, repoPath, worktreeSearch, workingFolderWorktree])
 
   // Filter and sort PRs
   const filteredPRs = useMemo(() => {
     let filtered = [...pullRequests]
-    
+
     // Apply filter
     switch (prFilter) {
       case 'open-not-draft':
-        filtered = filtered.filter(pr => !pr.isDraft)
+        filtered = filtered.filter((pr) => !pr.isDraft)
         break
       case 'open-draft':
-        filtered = filtered.filter(pr => pr.isDraft)
+        filtered = filtered.filter((pr) => pr.isDraft)
         break
       case 'all':
       default:
         break
     }
-    
+
     // Apply search filter
     if (prSearch.trim()) {
       const search = prSearch.toLowerCase().trim()
-      filtered = filtered.filter(pr => 
-        pr.title.toLowerCase().includes(search) ||
-        pr.branch.toLowerCase().includes(search) ||
-        pr.author.toLowerCase().includes(search)
+      filtered = filtered.filter(
+        (pr) =>
+          pr.title.toLowerCase().includes(search) ||
+          pr.branch.toLowerCase().includes(search) ||
+          pr.author.toLowerCase().includes(search)
       )
     }
-    
+
     // Apply sort
     switch (prSort) {
       case 'comments':
@@ -923,7 +1058,7 @@ export default function App() {
         filtered.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
         break
     }
-    
+
     return filtered
   }, [pullRequests, prFilter, prSort, prSearch])
 
@@ -937,11 +1072,11 @@ export default function App() {
     if (!dateStr) return ''
     const date = new Date(dateStr)
     if (isNaN(date.getTime())) return ''
-    
+
     const now = new Date()
     const diffMs = now.getTime() - date.getTime()
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-    
+
     if (diffDays === 0) return 'today'
     if (diffDays === 1) return 'yesterday'
     if (diffDays < 7) return `${diffDays}d ago`
@@ -968,13 +1103,9 @@ export default function App() {
     <div className="ledger-app">
       {/* Context Menu */}
       {contextMenu && (
-        <div 
-          ref={menuRef}
-          className="context-menu"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-        >
+        <div ref={menuRef} className="context-menu" style={{ left: contextMenu.x, top: contextMenu.y }}>
           {menuItems.map((item, i) => (
-            <button 
+            <button
               key={i}
               className={`context-menu-item ${item.disabled ? 'disabled' : ''}`}
               onClick={item.action}
@@ -992,10 +1123,7 @@ export default function App() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3 className="modal-title">Create New Branch</h3>
-              <button 
-                className="modal-close"
-                onClick={() => setShowNewBranchModal(false)}
-              >
+              <button className="modal-close" onClick={() => setShowNewBranchModal(false)}>
                 ×
               </button>
             </div>
@@ -1018,18 +1146,13 @@ export default function App() {
                   }}
                 />
               </label>
-              <p className="modal-hint">
-                Branch will be created from current HEAD and checked out
-              </p>
+              <p className="modal-hint">Branch will be created from current HEAD and checked out</p>
             </div>
             <div className="modal-footer">
-              <button 
-                className="btn btn-secondary"
-                onClick={() => setShowNewBranchModal(false)}
-              >
+              <button className="btn btn-secondary" onClick={() => setShowNewBranchModal(false)}>
                 Cancel
               </button>
-              <button 
+              <button
                 className="btn btn-primary"
                 onClick={handleCreateBranch}
                 disabled={!newBranchName.trim() || creatingBranch}
@@ -1051,11 +1174,11 @@ export default function App() {
           </span>
           <div className="status-content">
             <span className="status-message">{status.message}</span>
-            {status.stashed && (
-              <span className="status-stash">Stashed: {status.stashed}</span>
-            )}
+            {status.stashed && <span className="status-stash">Stashed: {status.stashed}</span>}
           </div>
-          <button className="status-dismiss" onClick={() => setStatus(null)}>×</button>
+          <button className="status-dismiss" onClick={() => setStatus(null)}>
+            ×
+          </button>
         </div>
       )}
 
@@ -1063,7 +1186,7 @@ export default function App() {
       <header className="ledger-header">
         <div className="header-left">
           {repoPath && (
-            <span 
+            <span
               className="repo-path clickable"
               title={githubUrl || repoPath}
               onClick={async () => {
@@ -1109,17 +1232,17 @@ export default function App() {
           )}
           {!repoPath ? (
             <button onClick={selectRepo} className="btn btn-secondary">
-              <span className="btn-icon">📁</span>
+              <svg className="btn-icon-svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M1.5 3.5a1 1 0 0 1 1-1h3.59a1 1 0 0 1 .7.3l1.42 1.4h5.29a1 1 0 0 1 1 1v7.3a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-9z"/>
+              </svg>
               Select Repository
             </button>
           ) : (
             <div className="view-toggle">
-              <button
-                onClick={selectRepo}
-                className="view-toggle-btn"
-                title="Change Repository"
-              >
-                <span className="view-icon">📁</span>
+              <button onClick={selectRepo} className="view-toggle-btn" title="Change Repository">
+                <svg className="view-icon-svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M1.5 3.5a1 1 0 0 1 1-1h3.59a1 1 0 0 1 .7.3l1.42 1.4h5.29a1 1 0 0 1 1 1v7.3a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-9z"/>
+                </svg>
                 <span className="view-label">Change</span>
               </button>
               <button
@@ -1151,7 +1274,9 @@ export default function App() {
           <h2>Welcome to Ledger</h2>
           <p>Select a git repository to view your branches, worktrees and pull requests</p>
           <button onClick={selectRepo} className="btn btn-large btn-primary">
-            <span className="btn-icon">📁</span>
+            <svg className="btn-icon-svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M1.5 3.5a1 1 0 0 1 1-1h3.59a1 1 0 0 1 .7.3l1.42 1.4h5.29a1 1 0 0 1 1 1v7.3a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-9z"/>
+            </svg>
             Select Repository
           </button>
         </div>
@@ -1161,7 +1286,7 @@ export default function App() {
       {repoPath && !error && viewMode === 'radar' && (
         <main className="ledger-content five-columns">
           {/* Pull Requests Column */}
-          <section 
+          <section
             className={`column pr-column ${draggingColumn === 'prs' ? 'dragging' : ''} ${dragOverColumn === 'prs' ? 'drag-over' : ''}`}
             style={{ order: radarColumnOrder.indexOf('prs') }}
             draggable
@@ -1171,8 +1296,10 @@ export default function App() {
             onDrop={(e) => handleColumnDrop(e, 'prs')}
             onDragEnd={handleColumnDragEnd}
           >
-            <div className="column-drag-handle" title="Drag to reorder">⋮⋮</div>
-            <div 
+            <div className="column-drag-handle" title="Drag to reorder">
+              ⋮⋮
+            </div>
+            <div
               className={`column-header clickable-header ${prControlsOpen ? 'open' : ''}`}
               onClick={() => setPrControlsOpen(!prControlsOpen)}
             >
@@ -1199,8 +1326,8 @@ export default function App() {
                 </div>
                 <div className="control-row">
                   <label>Filter</label>
-                  <select 
-                    value={prFilter} 
+                  <select
+                    value={prFilter}
                     onChange={(e) => setPrFilter(e.target.value as PRFilter)}
                     className="control-select"
                   >
@@ -1211,8 +1338,8 @@ export default function App() {
                 </div>
                 <div className="control-row">
                   <label>Sort</label>
-                  <select 
-                    value={prSort} 
+                  <select
+                    value={prSort}
                     onChange={(e) => setPrSort(e.target.value as PRSort)}
                     className="control-select"
                   >
@@ -1244,7 +1371,9 @@ export default function App() {
                       onContextMenu={(e) => handleContextMenu(e, 'pr', pr)}
                     >
                       <div className="item-main">
-                        <span className="item-name" title={pr.title}>{pr.title}</span>
+                        <span className="item-name" title={pr.title}>
+                          {pr.title}
+                        </span>
                         <div className="item-badges">
                           {pr.isDraft && <span className="badge badge-draft">draft</span>}
                           {getReviewBadge(pr.reviewDecision)}
@@ -1259,9 +1388,7 @@ export default function App() {
                         <code className="commit-hash">#{pr.number}</code>
                         <span className="pr-author">@{pr.author}</span>
                         <span className="pr-time">{formatRelativeTime(pr.updatedAt)}</span>
-                        {pr.comments > 0 && (
-                          <span className="pr-comments">💬 {pr.comments}</span>
-                        )}
+                        {pr.comments > 0 && <span className="pr-comments">💬 {pr.comments}</span>}
                         <span className="pr-diff">
                           <span className="pr-additions">+{pr.additions}</span>
                           <span className="pr-deletions">-{pr.deletions}</span>
@@ -1275,7 +1402,7 @@ export default function App() {
           </section>
 
           {/* Worktrees Column */}
-          <section 
+          <section
             className={`column worktrees-column ${draggingColumn === 'worktrees' ? 'dragging' : ''} ${dragOverColumn === 'worktrees' ? 'drag-over' : ''}`}
             style={{ order: radarColumnOrder.indexOf('worktrees') }}
             draggable
@@ -1285,8 +1412,10 @@ export default function App() {
             onDrop={(e) => handleColumnDrop(e, 'worktrees')}
             onDragEnd={handleColumnDragEnd}
           >
-            <div className="column-drag-handle" title="Drag to reorder">⋮⋮</div>
-            <div 
+            <div className="column-drag-handle" title="Drag to reorder">
+              ⋮⋮
+            </div>
+            <div
               className={`column-header clickable-header ${worktreeControlsOpen ? 'open' : ''}`}
               onClick={() => setWorktreeControlsOpen(!worktreeControlsOpen)}
             >
@@ -1313,14 +1442,16 @@ export default function App() {
                 </div>
                 <div className="control-row">
                   <label>Filter</label>
-                  <select 
-                    value={worktreeParentFilter} 
+                  <select
+                    value={worktreeParentFilter}
                     onChange={(e) => setWorktreeParentFilter(e.target.value)}
                     className="control-select"
                   >
                     <option value="all">All</option>
-                    {worktreeParents.map(parent => (
-                      <option key={parent} value={parent}>{parent}</option>
+                    {worktreeParents.map((parent) => (
+                      <option key={parent} value={parent}>
+                        {parent}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -1329,7 +1460,9 @@ export default function App() {
             <div className="column-content">
               {filteredWorktrees.length === 0 ? (
                 <div className="empty-column">
-                  {worktreeSearch.trim() || worktreeParentFilter !== 'all' ? 'No worktrees match filter' : 'No worktrees found'}
+                  {worktreeSearch.trim() || worktreeParentFilter !== 'all'
+                    ? 'No worktrees match filter'
+                    : 'No worktrees found'}
                 </div>
               ) : (
                 <ul className="item-list">
@@ -1344,7 +1477,9 @@ export default function App() {
                       >
                         <div className="item-main">
                           <span className="item-name">{wt.displayName}</span>
-                          {!isWorkingFolder && wt.branch === currentBranch && <span className="current-indicator">●</span>}
+                          {!isWorkingFolder && wt.branch === currentBranch && (
+                            <span className="current-indicator">●</span>
+                          )}
                         </div>
                         <div className="item-path" title={wt.path}>
                           {wt.path.replace(/^\/Users\/[^/]+/, '~')}
@@ -1363,7 +1498,9 @@ export default function App() {
                             </>
                           )}
                           {wt.changedFileCount > 0 && (
-                            <span className="file-count">{wt.changedFileCount} {wt.changedFileCount === 1 ? 'file' : 'files'}</span>
+                            <span className="file-count">
+                              {wt.changedFileCount} {wt.changedFileCount === 1 ? 'file' : 'files'}
+                            </span>
                           )}
                           {wt.changedFileCount === 0 && <span className="clean-indicator">clean</span>}
                         </div>
@@ -1376,7 +1513,7 @@ export default function App() {
           </section>
 
           {/* Commits Timeline Column */}
-          <section 
+          <section
             className={`column commits-column ${draggingColumn === 'commits' ? 'dragging' : ''} ${dragOverColumn === 'commits' ? 'drag-over' : ''}`}
             style={{ order: radarColumnOrder.indexOf('commits') }}
             draggable
@@ -1386,7 +1523,9 @@ export default function App() {
             onDrop={(e) => handleColumnDrop(e, 'commits')}
             onDragEnd={handleColumnDragEnd}
           >
-            <div className="column-drag-handle" title="Drag to reorder">⋮⋮</div>
+            <div className="column-drag-handle" title="Drag to reorder">
+              ⋮⋮
+            </div>
             <div className="column-header">
               <h2>
                 <span className="column-icon">◉</span>
@@ -1398,23 +1537,26 @@ export default function App() {
             <div className="column-content">
               {/* Uncommitted changes as virtual commit */}
               {workingStatus?.hasChanges && (
-                <div 
+                <div
                   className="commit-item uncommitted clickable"
                   onDoubleClick={() => handleRadarUncommittedClick()}
                   onContextMenu={(e) => handleContextMenu(e, 'uncommitted', workingStatus)}
                 >
-                  <div className="commit-message uncommitted-label">
-                    Uncommitted changes
-                  </div>
+                  <div className="commit-message uncommitted-label">Uncommitted changes</div>
                   <div className="commit-meta">
                     <code className="commit-hash">working</code>
                     <span className="commit-files-count">
-                      {workingStatus.stagedCount + workingStatus.unstagedCount} {workingStatus.stagedCount + workingStatus.unstagedCount === 1 ? 'file' : 'files'}
+                      {workingStatus.stagedCount + workingStatus.unstagedCount}{' '}
+                      {workingStatus.stagedCount + workingStatus.unstagedCount === 1 ? 'file' : 'files'}
                     </span>
                     {(workingStatus.additions > 0 || workingStatus.deletions > 0) && (
                       <span className="commit-diff">
-                        {workingStatus.additions > 0 && <span className="diff-additions">+{workingStatus.additions}</span>}
-                        {workingStatus.deletions > 0 && <span className="diff-deletions">-{workingStatus.deletions}</span>}
+                        {workingStatus.additions > 0 && (
+                          <span className="diff-additions">+{workingStatus.additions}</span>
+                        )}
+                        {workingStatus.deletions > 0 && (
+                          <span className="diff-deletions">-{workingStatus.deletions}</span>
+                        )}
                       </span>
                     )}
                   </div>
@@ -1425,8 +1567,8 @@ export default function App() {
                 <div className="empty-column">No commits found</div>
               ) : (
                 commits.map((commit) => (
-                  <div 
-                    key={commit.hash} 
+                  <div
+                    key={commit.hash}
                     className={`commit-item ${commit.isMerge ? 'merge' : ''} ${switching ? 'disabled' : ''}`}
                     onDoubleClick={() => handleCommitDoubleClick(commit)}
                     onContextMenu={(e) => handleContextMenu(e, 'commit', commit)}
@@ -1440,12 +1582,18 @@ export default function App() {
                       <span className="commit-date">{formatRelativeTime(commit.date)}</span>
                       {(commit.additions !== undefined || commit.deletions !== undefined) && (
                         <span className="commit-diff">
-                          {commit.additions !== undefined && commit.additions > 0 && <span className="diff-additions">+{commit.additions}</span>}
-                          {commit.deletions !== undefined && commit.deletions > 0 && <span className="diff-deletions">-{commit.deletions}</span>}
+                          {commit.additions !== undefined && commit.additions > 0 && (
+                            <span className="diff-additions">+{commit.additions}</span>
+                          )}
+                          {commit.deletions !== undefined && commit.deletions > 0 && (
+                            <span className="diff-deletions">-{commit.deletions}</span>
+                          )}
                         </span>
                       )}
                       {commit.filesChanged !== undefined && commit.filesChanged > 0 && (
-                        <span className="commit-files-count">{commit.filesChanged} {commit.filesChanged === 1 ? 'file' : 'files'}</span>
+                        <span className="commit-files-count">
+                          {commit.filesChanged} {commit.filesChanged === 1 ? 'file' : 'files'}
+                        </span>
                       )}
                     </div>
                   </div>
@@ -1455,7 +1603,7 @@ export default function App() {
           </section>
 
           {/* Local Branches Column */}
-          <section 
+          <section
             className={`column branches-column ${draggingColumn === 'branches' ? 'dragging' : ''} ${dragOverColumn === 'branches' ? 'drag-over' : ''}`}
             style={{ order: radarColumnOrder.indexOf('branches') }}
             draggable
@@ -1465,8 +1613,10 @@ export default function App() {
             onDrop={(e) => handleColumnDrop(e, 'branches')}
             onDragEnd={handleColumnDragEnd}
           >
-            <div className="column-drag-handle" title="Drag to reorder">⋮⋮</div>
-            <div 
+            <div className="column-drag-handle" title="Drag to reorder">
+              ⋮⋮
+            </div>
+            <div
               className={`column-header clickable-header ${localControlsOpen ? 'open' : ''}`}
               onClick={() => setLocalControlsOpen(!localControlsOpen)}
             >
@@ -1493,8 +1643,8 @@ export default function App() {
                 </div>
                 <div className="control-row">
                   <label>Filter</label>
-                  <select 
-                    value={localFilter} 
+                  <select
+                    value={localFilter}
                     onChange={(e) => setLocalFilter(e.target.value as BranchFilter)}
                     className="control-select"
                   >
@@ -1505,8 +1655,8 @@ export default function App() {
                 </div>
                 <div className="control-row">
                   <label>Sort</label>
-                  <select 
-                    value={localSort} 
+                  <select
+                    value={localSort}
                     onChange={(e) => setLocalSort(e.target.value as BranchSort)}
                     className="control-select"
                   >
@@ -1560,7 +1710,7 @@ export default function App() {
           </section>
 
           {/* Remote Branches Column */}
-          <section 
+          <section
             className={`column remotes-column ${draggingColumn === 'remotes' ? 'dragging' : ''} ${dragOverColumn === 'remotes' ? 'drag-over' : ''}`}
             style={{ order: radarColumnOrder.indexOf('remotes') }}
             draggable
@@ -1570,8 +1720,10 @@ export default function App() {
             onDrop={(e) => handleColumnDrop(e, 'remotes')}
             onDragEnd={handleColumnDragEnd}
           >
-            <div className="column-drag-handle" title="Drag to reorder">⋮⋮</div>
-            <div 
+            <div className="column-drag-handle" title="Drag to reorder">
+              ⋮⋮
+            </div>
+            <div
               className={`column-header clickable-header ${remoteControlsOpen ? 'open' : ''}`}
               onClick={() => setRemoteControlsOpen(!remoteControlsOpen)}
             >
@@ -1598,8 +1750,8 @@ export default function App() {
                 </div>
                 <div className="control-row">
                   <label>Filter</label>
-                  <select 
-                    value={remoteFilter} 
+                  <select
+                    value={remoteFilter}
                     onChange={(e) => setRemoteFilter(e.target.value as BranchFilter)}
                     className="control-select"
                   >
@@ -1609,8 +1761,8 @@ export default function App() {
                 </div>
                 <div className="control-row">
                   <label>Sort</label>
-                  <select 
-                    value={remoteSort} 
+                  <select
+                    value={remoteSort}
                     onChange={(e) => setRemoteSort(e.target.value as BranchSort)}
                     className="control-select"
                   >
@@ -1625,19 +1777,23 @@ export default function App() {
             <div className="column-content">
               {remoteBranches.length === 0 ? (
                 <div className="empty-column">
-                  {remoteBranchSearch.trim() || remoteFilter !== 'all' ? 'No branches match filter' : 'No remote branches'}
+                  {remoteBranchSearch.trim() || remoteFilter !== 'all'
+                    ? 'No branches match filter'
+                    : 'No remote branches'}
                 </div>
               ) : (
                 <ul className="item-list">
                   {remoteBranches.map((branch) => (
-                    <li 
-                      key={branch.name} 
+                    <li
+                      key={branch.name}
                       className={`item remote-item clickable ${switching ? 'disabled' : ''}`}
                       onDoubleClick={() => handleRadarRemoteBranchClick(branch)}
                       onContextMenu={(e) => handleContextMenu(e, 'remote-branch', branch)}
                     >
                       <div className="item-main">
-                        <span className="item-name">{branch.name.replace('remotes/', '').replace(/^origin\//, '')}</span>
+                        <span className="item-name">
+                          {branch.name.replace('remotes/', '').replace(/^origin\//, '')}
+                        </span>
                         <div className="item-badges">
                           {!branch.isMerged && <span className="badge badge-unmerged">unmerged</span>}
                         </div>
@@ -1665,7 +1821,7 @@ export default function App() {
         <main className="focus-mode-layout">
           {/* Panel Toggle for Sidebar */}
           {!sidebarVisible && (
-            <button 
+            <button
               className="panel-toggle panel-toggle-left"
               onClick={() => setSidebarVisible(true)}
               title="Show sidebar"
@@ -1673,350 +1829,388 @@ export default function App() {
               <span className="panel-toggle-icon">▸</span>
             </button>
           )}
-          
+
           {/* Sidebar */}
           {sidebarVisible && (
-          <aside className="focus-sidebar" style={{ width: sidebarWidth, minWidth: sidebarWidth }}>
-            {/* PRs Section */}
-            <div className="sidebar-section">
-              <div className="sidebar-section-header">
-                <div 
-                  className="sidebar-section-toggle"
-                  onClick={() => toggleSidebarSection('prs')}
-                >
-                  <span className={`sidebar-chevron ${sidebarSections.prs ? 'open' : ''}`}>▸</span>
-                  <span className="sidebar-section-title">Pull Requests</span>
-                  <span className="sidebar-count">{filteredPRs.length}</span>
+            <aside className="focus-sidebar" style={{ width: sidebarWidth, minWidth: sidebarWidth }}>
+              {/* PRs Section */}
+              <div className="sidebar-section">
+                <div className="sidebar-section-header">
+                  <div className="sidebar-section-toggle" onClick={() => toggleSidebarSection('prs')}>
+                    <span className={`sidebar-chevron ${sidebarSections.prs ? 'open' : ''}`}>▸</span>
+                    <span className="sidebar-section-title">Pull Requests</span>
+                    <span className="sidebar-count">{filteredPRs.length}</span>
+                  </div>
+                  <button
+                    className={`sidebar-section-action sidebar-filter-btn ${sidebarFiltersOpen.prs ? 'active' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      toggleSidebarFilter('prs')
+                    }}
+                    title="Filter & Sort"
+                  >
+                    <svg
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                    </svg>
+                  </button>
                 </div>
-                <button 
-                  className={`sidebar-section-action sidebar-filter-btn ${sidebarFiltersOpen.prs ? 'active' : ''}`}
-                  onClick={(e) => { e.stopPropagation(); toggleSidebarFilter('prs'); }}
-                  title="Filter & Sort"
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-                  </svg>
-                </button>
+                {sidebarFiltersOpen.prs && (
+                  <div className="sidebar-filter-panel" onClick={(e) => e.stopPropagation()}>
+                    <div className="sidebar-filter-group">
+                      <label>Filter</label>
+                      <select
+                        value={prFilter}
+                        onChange={(e) => setPrFilter(e.target.value as PRFilter)}
+                        className="sidebar-filter-select"
+                      >
+                        <option value="all">All Open</option>
+                        <option value="open-not-draft">Open + Not Draft</option>
+                        <option value="open-draft">Open + Draft</option>
+                      </select>
+                    </div>
+                    <div className="sidebar-filter-group">
+                      <label>Sort</label>
+                      <select
+                        value={prSort}
+                        onChange={(e) => setPrSort(e.target.value as PRSort)}
+                        className="sidebar-filter-select"
+                      >
+                        <option value="updated">Last Updated</option>
+                        <option value="comments">Comments</option>
+                        <option value="first-commit">First Commit</option>
+                        <option value="last-commit">Last Commit</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+                {sidebarSections.prs && (
+                  <ul className="sidebar-list">
+                    {prError ? (
+                      <li className="sidebar-empty sidebar-error">{prError}</li>
+                    ) : filteredPRs.length === 0 ? (
+                      <li className="sidebar-empty">No open PRs</li>
+                    ) : (
+                      filteredPRs.map((pr) => (
+                        <li
+                          key={pr.number}
+                          className={`sidebar-item ${pr.isDraft ? 'draft' : ''} ${switching ? 'disabled' : ''} ${sidebarFocus?.type === 'pr' && (sidebarFocus.data as PullRequest).number === pr.number ? 'selected' : ''}`}
+                          onClick={() => handleSidebarFocus('pr', pr)}
+                          onDoubleClick={() => handlePRDoubleClick(pr)}
+                          onContextMenu={(e) => handleContextMenu(e, 'pr', pr)}
+                          title={`#${pr.number} ${pr.title}`}
+                        >
+                          <span className="sidebar-item-name">{pr.title}</span>
+                          {pr.isDraft && <span className="sidebar-pr-draft">draft</span>}
+                        </li>
+                      ))
+                    )}
+                  </ul>
+                )}
               </div>
-              {sidebarFiltersOpen.prs && (
-                <div className="sidebar-filter-panel" onClick={(e) => e.stopPropagation()}>
-                  <div className="sidebar-filter-group">
-                    <label>Filter</label>
-                    <select 
-                      value={prFilter} 
-                      onChange={(e) => setPrFilter(e.target.value as PRFilter)}
-                      className="sidebar-filter-select"
-                    >
-                      <option value="all">All Open</option>
-                      <option value="open-not-draft">Open + Not Draft</option>
-                      <option value="open-draft">Open + Draft</option>
-                    </select>
+
+              {/* Branches Section */}
+              <div className="sidebar-section">
+                <div className="sidebar-section-header">
+                  <div className="sidebar-section-toggle" onClick={() => toggleSidebarSection('branches')}>
+                    <span className={`sidebar-chevron ${sidebarSections.branches ? 'open' : ''}`}>▸</span>
+                    <span className="sidebar-section-title">Branches</span>
+                    <span className="sidebar-count">{localBranches.length}</span>
                   </div>
-                  <div className="sidebar-filter-group">
-                    <label>Sort</label>
-                    <select 
-                      value={prSort} 
-                      onChange={(e) => setPrSort(e.target.value as PRSort)}
-                      className="sidebar-filter-select"
+                  <button
+                    className={`sidebar-section-action sidebar-filter-btn ${sidebarFiltersOpen.branches ? 'active' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      toggleSidebarFilter('branches')
+                    }}
+                    title="Filter & Sort"
+                  >
+                    <svg
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
                     >
-                      <option value="updated">Last Updated</option>
-                      <option value="comments">Comments</option>
-                      <option value="first-commit">First Commit</option>
-                      <option value="last-commit">Last Commit</option>
-                    </select>
-                  </div>
+                      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                    </svg>
+                  </button>
+                  <button
+                    className="sidebar-section-action"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setShowNewBranchModal(true)
+                    }}
+                    title="Create new branch"
+                  >
+                    +
+                  </button>
                 </div>
-              )}
-              {sidebarSections.prs && (
-                <ul className="sidebar-list">
-                  {prError ? (
-                    <li className="sidebar-empty sidebar-error">{prError}</li>
-                  ) : filteredPRs.length === 0 ? (
-                    <li className="sidebar-empty">No open PRs</li>
-                  ) : (
-                    filteredPRs.map((pr) => (
+                {sidebarFiltersOpen.branches && (
+                  <div className="sidebar-filter-panel" onClick={(e) => e.stopPropagation()}>
+                    <div className="sidebar-filter-group">
+                      <label>Filter</label>
+                      <select
+                        value={localFilter}
+                        onChange={(e) => setLocalFilter(e.target.value as BranchFilter)}
+                        className="sidebar-filter-select"
+                      >
+                        <option value="all">All</option>
+                        <option value="local-only">Local Only</option>
+                        <option value="unmerged">Unmerged</option>
+                      </select>
+                    </div>
+                    <div className="sidebar-filter-group">
+                      <label>Sort</label>
+                      <select
+                        value={localSort}
+                        onChange={(e) => setLocalSort(e.target.value as BranchSort)}
+                        className="sidebar-filter-select"
+                      >
+                        <option value="name">Name</option>
+                        <option value="last-commit">Last Commit</option>
+                        <option value="first-commit">First Commit</option>
+                        <option value="most-commits">Most Commits</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+                {sidebarSections.branches && (
+                  <ul className="sidebar-list">
+                    {/* Uncommitted changes entry */}
+                    {workingStatus?.hasChanges && (
                       <li
-                        key={pr.number}
-                        className={`sidebar-item ${pr.isDraft ? 'draft' : ''} ${switching ? 'disabled' : ''} ${sidebarFocus?.type === 'pr' && (sidebarFocus.data as PullRequest).number === pr.number ? 'selected' : ''}`}
-                        onClick={() => handleSidebarFocus('pr', pr)}
-                        onDoubleClick={() => handlePRDoubleClick(pr)}
-                        onContextMenu={(e) => handleContextMenu(e, 'pr', pr)}
-                        title={`#${pr.number} ${pr.title}`}
+                        className={`sidebar-item uncommitted ${sidebarFocus?.type === 'uncommitted' ? 'selected' : ''}`}
+                        onClick={() => handleSidebarFocus('uncommitted', workingStatus)}
+                      >
+                        <span className="sidebar-uncommitted-icon">◐</span>
+                        <span className="sidebar-item-name">Uncommitted</span>
+                        <span className="sidebar-uncommitted-count">
+                          {workingStatus.stagedCount + workingStatus.unstagedCount}
+                        </span>
+                      </li>
+                    )}
+                    {localBranches.map((branch) => (
+                      <li
+                        key={branch.name}
+                        className={`sidebar-item ${branch.current ? 'current' : ''} ${switching ? 'disabled' : ''} ${sidebarFocus?.type === 'branch' && (sidebarFocus.data as Branch).name === branch.name ? 'selected' : ''}`}
+                        onClick={() => handleSidebarFocus('branch', branch)}
+                        onDoubleClick={() => handleBranchDoubleClick(branch)}
+                      >
+                        {branch.current && <span className="sidebar-current-dot">●</span>}
+                        <span className="sidebar-item-name">{branch.name}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              {/* Remotes Section */}
+              <div className="sidebar-section">
+                <div className="sidebar-section-header">
+                  <div className="sidebar-section-toggle" onClick={() => toggleSidebarSection('remotes')}>
+                    <span className={`sidebar-chevron ${sidebarSections.remotes ? 'open' : ''}`}>▸</span>
+                    <span className="sidebar-section-title">Remotes</span>
+                    <span className="sidebar-count">{remoteBranches.length}</span>
+                  </div>
+                  <button
+                    className={`sidebar-section-action sidebar-filter-btn ${sidebarFiltersOpen.remotes ? 'active' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      toggleSidebarFilter('remotes')
+                    }}
+                    title="Filter & Sort"
+                  >
+                    <svg
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                    </svg>
+                  </button>
+                </div>
+                {sidebarFiltersOpen.remotes && (
+                  <div className="sidebar-filter-panel" onClick={(e) => e.stopPropagation()}>
+                    <div className="sidebar-filter-group">
+                      <label>Filter</label>
+                      <select
+                        value={remoteFilter}
+                        onChange={(e) => setRemoteFilter(e.target.value as BranchFilter)}
+                        className="sidebar-filter-select"
+                      >
+                        <option value="all">All</option>
+                        <option value="unmerged">Unmerged</option>
+                      </select>
+                    </div>
+                    <div className="sidebar-filter-group">
+                      <label>Sort</label>
+                      <select
+                        value={remoteSort}
+                        onChange={(e) => setRemoteSort(e.target.value as BranchSort)}
+                        className="sidebar-filter-select"
+                      >
+                        <option value="name">Name</option>
+                        <option value="last-commit">Last Commit</option>
+                        <option value="first-commit">First Commit</option>
+                        <option value="most-commits">Most Commits</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+                {sidebarSections.remotes && (
+                  <ul className="sidebar-list">
+                    {remoteBranches.map((branch) => (
+                      <li
+                        key={branch.name}
+                        className={`sidebar-item ${switching ? 'disabled' : ''} ${sidebarFocus?.type === 'remote' && (sidebarFocus.data as Branch).name === branch.name ? 'selected' : ''}`}
+                        onClick={() => handleSidebarFocus('remote', branch)}
+                        onDoubleClick={() => handleRemoteBranchDoubleClick(branch)}
                       >
                         <span className="sidebar-item-name">
-                          {pr.title}
+                          {branch.name.replace('remotes/', '').replace(/^origin\//, '')}
                         </span>
-                        {pr.isDraft && <span className="sidebar-pr-draft">draft</span>}
                       </li>
-                    ))
-                  )}
-                </ul>
-              )}
-            </div>
-
-            {/* Branches Section */}
-            <div className="sidebar-section">
-              <div className="sidebar-section-header">
-                <div 
-                  className="sidebar-section-toggle"
-                  onClick={() => toggleSidebarSection('branches')}
-                >
-                  <span className={`sidebar-chevron ${sidebarSections.branches ? 'open' : ''}`}>▸</span>
-                  <span className="sidebar-section-title">Branches</span>
-                  <span className="sidebar-count">{localBranches.length}</span>
-                </div>
-                <button 
-                  className={`sidebar-section-action sidebar-filter-btn ${sidebarFiltersOpen.branches ? 'active' : ''}`}
-                  onClick={(e) => { e.stopPropagation(); toggleSidebarFilter('branches'); }}
-                  title="Filter & Sort"
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-                  </svg>
-                </button>
-                <button 
-                  className="sidebar-section-action"
-                  onClick={(e) => { e.stopPropagation(); setShowNewBranchModal(true); }}
-                  title="Create new branch"
-                >
-                  +
-                </button>
+                    ))}
+                  </ul>
+                )}
               </div>
-              {sidebarFiltersOpen.branches && (
-                <div className="sidebar-filter-panel" onClick={(e) => e.stopPropagation()}>
-                  <div className="sidebar-filter-group">
-                    <label>Filter</label>
-                    <select 
-                      value={localFilter} 
-                      onChange={(e) => setLocalFilter(e.target.value as BranchFilter)}
-                      className="sidebar-filter-select"
-                    >
-                      <option value="all">All</option>
-                      <option value="local-only">Local Only</option>
-                      <option value="unmerged">Unmerged</option>
-                    </select>
-                  </div>
-                  <div className="sidebar-filter-group">
-                    <label>Sort</label>
-                    <select 
-                      value={localSort} 
-                      onChange={(e) => setLocalSort(e.target.value as BranchSort)}
-                      className="sidebar-filter-select"
-                    >
-                      <option value="name">Name</option>
-                      <option value="last-commit">Last Commit</option>
-                      <option value="first-commit">First Commit</option>
-                      <option value="most-commits">Most Commits</option>
-                    </select>
-                  </div>
-                </div>
-              )}
-              {sidebarSections.branches && (
-                <ul className="sidebar-list">
-                  {/* Uncommitted changes entry */}
-                  {workingStatus?.hasChanges && (
-                    <li
-                      className={`sidebar-item uncommitted ${sidebarFocus?.type === 'uncommitted' ? 'selected' : ''}`}
-                      onClick={() => handleSidebarFocus('uncommitted', workingStatus)}
-                    >
-                      <span className="sidebar-uncommitted-icon">◐</span>
-                      <span className="sidebar-item-name">Uncommitted</span>
-                      <span className="sidebar-uncommitted-count">
-                        {workingStatus.stagedCount + workingStatus.unstagedCount}
-                      </span>
-                    </li>
-                  )}
-                  {localBranches.map((branch) => (
-                    <li
-                      key={branch.name}
-                      className={`sidebar-item ${branch.current ? 'current' : ''} ${switching ? 'disabled' : ''} ${sidebarFocus?.type === 'branch' && (sidebarFocus.data as Branch).name === branch.name ? 'selected' : ''}`}
-                      onClick={() => handleSidebarFocus('branch', branch)}
-                      onDoubleClick={() => handleBranchDoubleClick(branch)}
-                    >
-                      {branch.current && <span className="sidebar-current-dot">●</span>}
-                      <span className="sidebar-item-name">{branch.name}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
 
-            {/* Remotes Section */}
-            <div className="sidebar-section">
-              <div className="sidebar-section-header">
-                <div 
-                  className="sidebar-section-toggle"
-                  onClick={() => toggleSidebarSection('remotes')}
-                >
-                  <span className={`sidebar-chevron ${sidebarSections.remotes ? 'open' : ''}`}>▸</span>
-                  <span className="sidebar-section-title">Remotes</span>
-                  <span className="sidebar-count">{remoteBranches.length}</span>
-                </div>
-                <button 
-                  className={`sidebar-section-action sidebar-filter-btn ${sidebarFiltersOpen.remotes ? 'active' : ''}`}
-                  onClick={(e) => { e.stopPropagation(); toggleSidebarFilter('remotes'); }}
-                  title="Filter & Sort"
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-                  </svg>
-                </button>
-              </div>
-              {sidebarFiltersOpen.remotes && (
-                <div className="sidebar-filter-panel" onClick={(e) => e.stopPropagation()}>
-                  <div className="sidebar-filter-group">
-                    <label>Filter</label>
-                    <select 
-                      value={remoteFilter} 
-                      onChange={(e) => setRemoteFilter(e.target.value as BranchFilter)}
-                      className="sidebar-filter-select"
-                    >
-                      <option value="all">All</option>
-                      <option value="unmerged">Unmerged</option>
-                    </select>
+              {/* Worktrees Section */}
+              <div className="sidebar-section">
+                <div className="sidebar-section-header">
+                  <div className="sidebar-section-toggle" onClick={() => toggleSidebarSection('worktrees')}>
+                    <span className={`sidebar-chevron ${sidebarSections.worktrees ? 'open' : ''}`}>▸</span>
+                    <span className="sidebar-section-title">Worktrees</span>
+                    <span className="sidebar-count">
+                      {worktrees.filter((wt) => wt.path !== repoPath).length + (workingFolderWorktree ? 1 : 0)}
+                    </span>
                   </div>
-                  <div className="sidebar-filter-group">
-                    <label>Sort</label>
-                    <select 
-                      value={remoteSort} 
-                      onChange={(e) => setRemoteSort(e.target.value as BranchSort)}
-                      className="sidebar-filter-select"
+                  <button
+                    className={`sidebar-section-action sidebar-filter-btn ${sidebarFiltersOpen.worktrees ? 'active' : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      toggleSidebarFilter('worktrees')
+                    }}
+                    title="Filter"
+                  >
+                    <svg
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
                     >
-                      <option value="name">Name</option>
-                      <option value="last-commit">Last Commit</option>
-                      <option value="first-commit">First Commit</option>
-                      <option value="most-commits">Most Commits</option>
-                    </select>
-                  </div>
+                      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                    </svg>
+                  </button>
                 </div>
-              )}
-              {sidebarSections.remotes && (
-                <ul className="sidebar-list">
-                  {remoteBranches.map((branch) => (
-                    <li
-                      key={branch.name}
-                      className={`sidebar-item ${switching ? 'disabled' : ''} ${sidebarFocus?.type === 'remote' && (sidebarFocus.data as Branch).name === branch.name ? 'selected' : ''}`}
-                      onClick={() => handleSidebarFocus('remote', branch)}
-                      onDoubleClick={() => handleRemoteBranchDoubleClick(branch)}
-                    >
-                      <span className="sidebar-item-name">{branch.name.replace('remotes/', '').replace(/^origin\//, '')}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
-            {/* Worktrees Section */}
-            <div className="sidebar-section">
-              <div className="sidebar-section-header">
-                <div 
-                  className="sidebar-section-toggle"
-                  onClick={() => toggleSidebarSection('worktrees')}
-                >
-                  <span className={`sidebar-chevron ${sidebarSections.worktrees ? 'open' : ''}`}>▸</span>
-                  <span className="sidebar-section-title">Worktrees</span>
-                  <span className="sidebar-count">{worktrees.filter(wt => wt.path !== repoPath).length + (workingFolderWorktree ? 1 : 0)}</span>
-                </div>
-                <button 
-                  className={`sidebar-section-action sidebar-filter-btn ${sidebarFiltersOpen.worktrees ? 'active' : ''}`}
-                  onClick={(e) => { e.stopPropagation(); toggleSidebarFilter('worktrees'); }}
-                  title="Filter"
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-                  </svg>
-                </button>
-              </div>
-              {sidebarFiltersOpen.worktrees && (
-                <div className="sidebar-filter-panel" onClick={(e) => e.stopPropagation()}>
-                  <div className="sidebar-filter-group">
-                    <label>Parent</label>
-                    <select 
-                      value={worktreeParentFilter} 
-                      onChange={(e) => setWorktreeParentFilter(e.target.value)}
-                      className="sidebar-filter-select"
-                    >
-                      <option value="all">All</option>
-                      {worktreeParents.map(parent => (
-                        <option key={parent} value={parent}>{parent}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              )}
-              {sidebarSections.worktrees && (
-                <ul className="sidebar-list">
-                  {/* Working Folder pseudo-worktree - always first */}
-                  {workingFolderWorktree && (
-                    <li
-                      key="working-folder"
-                      className={`sidebar-item working-folder-sidebar-item ${switching ? 'disabled' : ''} ${sidebarFocus?.type === 'worktree' && (sidebarFocus.data as Worktree).agent === 'working-folder' ? 'selected' : ''}`}
-                      onClick={() => handleSidebarFocus('worktree', workingFolderWorktree)}
-                    >
-                      <span className="sidebar-item-name">{workingFolderWorktree.displayName}</span>
-                    </li>
-                  )}
-                  {worktrees.filter(wt => wt.path !== repoPath).map((wt) => (
-                    <li
-                      key={wt.path}
-                      className={`sidebar-item ${wt.branch === currentBranch ? 'current' : ''} ${switching ? 'disabled' : ''} ${sidebarFocus?.type === 'worktree' && (sidebarFocus.data as Worktree).path === wt.path ? 'selected' : ''}`}
-                      onClick={() => handleSidebarFocus('worktree', wt)}
-                      onDoubleClick={() => handleWorktreeDoubleClick(wt)}
-                    >
-                      {wt.branch === currentBranch && <span className="sidebar-current-dot">●</span>}
-                      <span className="sidebar-item-name">{wt.displayName}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
-            {/* Stashes Section */}
-            <div className="sidebar-section">
-              <div className="sidebar-section-header">
-                <div 
-                  className="sidebar-section-toggle"
-                  onClick={() => toggleSidebarSection('stashes')}
-                >
-                  <span className={`sidebar-chevron ${sidebarSections.stashes ? 'open' : ''}`}>▸</span>
-                  <span className="sidebar-section-title">Stashes</span>
-                  <span className="sidebar-count">{stashes.length}</span>
-                </div>
-              </div>
-              {sidebarSections.stashes && (
-                <ul className="sidebar-list">
-                  {stashes.length === 0 ? (
-                    <li className="sidebar-empty">No stashes</li>
-                  ) : (
-                    stashes.map((stash) => (
-                      <li 
-                        key={stash.index} 
-                        className={`sidebar-item ${sidebarFocus?.type === 'stash' && (sidebarFocus.data as StashEntry).index === stash.index ? 'selected' : ''}`}
-                        onClick={() => handleSidebarFocus('stash', stash)}
+                {sidebarFiltersOpen.worktrees && (
+                  <div className="sidebar-filter-panel" onClick={(e) => e.stopPropagation()}>
+                    <div className="sidebar-filter-group">
+                      <label>Parent</label>
+                      <select
+                        value={worktreeParentFilter}
+                        onChange={(e) => setWorktreeParentFilter(e.target.value)}
+                        className="sidebar-filter-select"
                       >
-                        <span className="sidebar-item-name" title={stash.message}>
-                          stash@{`{${stash.index}}`}: {stash.message}
-                        </span>
+                        <option value="all">All</option>
+                        {worktreeParents.map((parent) => (
+                          <option key={parent} value={parent}>
+                            {parent}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
+                {sidebarSections.worktrees && (
+                  <ul className="sidebar-list">
+                    {/* Working Folder pseudo-worktree - always first */}
+                    {workingFolderWorktree && (
+                      <li
+                        key="working-folder"
+                        className={`sidebar-item working-folder-sidebar-item ${switching ? 'disabled' : ''} ${sidebarFocus?.type === 'worktree' && (sidebarFocus.data as Worktree).agent === 'working-folder' ? 'selected' : ''}`}
+                        onClick={() => handleSidebarFocus('worktree', workingFolderWorktree)}
+                      >
+                        <span className="sidebar-item-name">{workingFolderWorktree.displayName}</span>
                       </li>
-                    ))
-                  )}
-                </ul>
-              )}
-            </div>
-            {/* Sidebar toggle button */}
-            <button 
-              className="panel-collapse-btn"
-              onClick={() => setSidebarVisible(false)}
-              title="Hide sidebar"
-            >
-              <span className="panel-collapse-icon">◀</span>
-            </button>
-          </aside>
+                    )}
+                    {worktrees
+                      .filter((wt) => wt.path !== repoPath)
+                      .map((wt) => (
+                        <li
+                          key={wt.path}
+                          className={`sidebar-item ${wt.branch === currentBranch ? 'current' : ''} ${switching ? 'disabled' : ''} ${sidebarFocus?.type === 'worktree' && (sidebarFocus.data as Worktree).path === wt.path ? 'selected' : ''}`}
+                          onClick={() => handleSidebarFocus('worktree', wt)}
+                          onDoubleClick={() => handleWorktreeDoubleClick(wt)}
+                        >
+                          {wt.branch === currentBranch && <span className="sidebar-current-dot">●</span>}
+                          <span className="sidebar-item-name">{wt.displayName}</span>
+                        </li>
+                      ))}
+                  </ul>
+                )}
+              </div>
+
+              {/* Stashes Section */}
+              <div className="sidebar-section">
+                <div className="sidebar-section-header">
+                  <div className="sidebar-section-toggle" onClick={() => toggleSidebarSection('stashes')}>
+                    <span className={`sidebar-chevron ${sidebarSections.stashes ? 'open' : ''}`}>▸</span>
+                    <span className="sidebar-section-title">Stashes</span>
+                    <span className="sidebar-count">{stashes.length}</span>
+                  </div>
+                </div>
+                {sidebarSections.stashes && (
+                  <ul className="sidebar-list">
+                    {stashes.length === 0 ? (
+                      <li className="sidebar-empty">No stashes</li>
+                    ) : (
+                      stashes.map((stash) => (
+                        <li
+                          key={stash.index}
+                          className={`sidebar-item ${sidebarFocus?.type === 'stash' && (sidebarFocus.data as StashEntry).index === stash.index ? 'selected' : ''}`}
+                          onClick={() => handleSidebarFocus('stash', stash)}
+                        >
+                          <span className="sidebar-item-name" title={stash.message}>
+                            stash@{`{${stash.index}}`}: {stash.message}
+                          </span>
+                        </li>
+                      ))
+                    )}
+                  </ul>
+                )}
+              </div>
+              {/* Sidebar toggle button */}
+              <button className="panel-collapse-btn" onClick={() => setSidebarVisible(false)} title="Hide sidebar">
+                <span className="panel-collapse-icon">◀</span>
+              </button>
+            </aside>
           )}
-          
+
           {/* Sidebar Resize Handle */}
           {sidebarVisible && (
-            <div 
+            <div
               className={`resize-handle resize-handle-sidebar ${isResizingSidebar ? 'active' : ''}`}
               onMouseDown={() => setIsResizingSidebar(true)}
             />
@@ -2032,8 +2226,8 @@ export default function App() {
               </h2>
             </div>
             <div className="git-graph-container">
-              <GitGraph 
-                commits={graphCommits} 
+              <GitGraph
+                commits={graphCommits}
                 selectedCommit={selectedCommit}
                 onSelectCommit={handleSelectCommit}
                 formatRelativeTime={formatRelativeTime}
@@ -2043,7 +2237,7 @@ export default function App() {
 
           {/* Detail Panel Resize Handle */}
           {detailVisible && (
-            <div 
+            <div
               className={`resize-handle resize-handle-detail ${isResizingDetail ? 'active' : ''}`}
               onMouseDown={() => setIsResizingDetail(true)}
             />
@@ -2051,60 +2245,56 @@ export default function App() {
 
           {/* Detail Panel */}
           {detailVisible && (
-          <aside className="focus-detail" style={{ width: detailWidth, minWidth: detailWidth }}>
-            {sidebarFocus?.type === 'uncommitted' && workingStatus ? (
-              <StagingPanel 
-                workingStatus={workingStatus}
-                onRefresh={refresh}
-                onStatusChange={setStatus}
-              />
-            ) : sidebarFocus?.type === 'pr' ? (
-              <PRReviewPanel 
-                pr={sidebarFocus.data as PullRequest}
-                formatRelativeTime={formatRelativeTime}
-                onCheckout={handlePRCheckout}
-                switching={switching}
-              />
-            ) : sidebarFocus ? (
-              <SidebarDetailPanel 
-                focus={sidebarFocus} 
-                formatRelativeTime={formatRelativeTime}
-                formatDate={formatDate}
-                currentBranch={currentBranch}
-                switching={switching}
-                onStatusChange={setStatus}
-                onRefresh={refresh}
-                onClearFocus={() => setSidebarFocus(null)}
-                onCheckoutBranch={handleBranchDoubleClick}
-                onCheckoutRemoteBranch={handleRemoteBranchDoubleClick}
-                onCheckoutWorktree={handleWorktreeDoubleClick}
-              />
-            ) : !selectedCommit ? (
-              <div className="detail-empty">
-                <span className="detail-empty-icon">◇</span>
-                <p>Select an item to view details</p>
-              </div>
-            ) : loadingDiff ? (
-              <div className="detail-loading">Loading diff...</div>
-            ) : commitDiff ? (
-              <DiffPanel diff={commitDiff} formatRelativeTime={formatRelativeTime} />
-            ) : (
-              <div className="detail-error">Could not load diff</div>
-            )}
-            {/* Detail panel collapse button */}
-            <button 
-              className="panel-collapse-btn panel-collapse-btn-right"
-              onClick={() => setDetailVisible(false)}
-              title="Hide detail panel"
-            >
-              <span className="panel-collapse-icon">▶</span>
-            </button>
-          </aside>
+            <aside className="focus-detail" style={{ width: detailWidth, minWidth: detailWidth }}>
+              {sidebarFocus?.type === 'uncommitted' && workingStatus ? (
+                <StagingPanel workingStatus={workingStatus} onRefresh={refresh} onStatusChange={setStatus} />
+              ) : sidebarFocus?.type === 'pr' ? (
+                <PRReviewPanel
+                  pr={sidebarFocus.data as PullRequest}
+                  formatRelativeTime={formatRelativeTime}
+                  onCheckout={handlePRCheckout}
+                  switching={switching}
+                />
+              ) : sidebarFocus ? (
+                <SidebarDetailPanel
+                  focus={sidebarFocus}
+                  formatRelativeTime={formatRelativeTime}
+                  formatDate={formatDate}
+                  currentBranch={currentBranch}
+                  switching={switching}
+                  onStatusChange={setStatus}
+                  onRefresh={refresh}
+                  onClearFocus={() => setSidebarFocus(null)}
+                  onCheckoutBranch={handleBranchDoubleClick}
+                  onCheckoutRemoteBranch={handleRemoteBranchDoubleClick}
+                  onCheckoutWorktree={handleWorktreeDoubleClick}
+                />
+              ) : !selectedCommit ? (
+                <div className="detail-empty">
+                  <span className="detail-empty-icon">◇</span>
+                  <p>Select an item to view details</p>
+                </div>
+              ) : loadingDiff ? (
+                <div className="detail-loading">Loading diff...</div>
+              ) : commitDiff ? (
+                <DiffPanel diff={commitDiff} formatRelativeTime={formatRelativeTime} />
+              ) : (
+                <div className="detail-error">Could not load diff</div>
+              )}
+              {/* Detail panel collapse button */}
+              <button
+                className="panel-collapse-btn panel-collapse-btn-right"
+                onClick={() => setDetailVisible(false)}
+                title="Hide detail panel"
+              >
+                <span className="panel-collapse-icon">▶</span>
+              </button>
+            </aside>
           )}
-          
+
           {/* Panel Toggle for Detail */}
           {!detailVisible && (
-            <button 
+            <button
               className="panel-toggle panel-toggle-right"
               onClick={() => setDetailVisible(true)}
               title="Show detail panel"
@@ -2123,10 +2313,10 @@ export default function App() {
 // ========================================
 
 interface GitGraphProps {
-  commits: GraphCommit[];
-  selectedCommit: GraphCommit | null;
-  onSelectCommit: (commit: GraphCommit) => void;
-  formatRelativeTime: (date: string) => string;
+  commits: GraphCommit[]
+  selectedCommit: GraphCommit | null
+  onSelectCommit: (commit: GraphCommit) => void
+  formatRelativeTime: (date: string) => string
 }
 
 // Lane colors for branches
@@ -2139,91 +2329,91 @@ const LANE_COLORS = [
   '#C00000', // red
   '#00B0F0', // cyan
   '#FF6699', // pink
-];
+]
 
 function GitGraph({ commits, selectedCommit, onSelectCommit, formatRelativeTime }: GitGraphProps) {
   // Calculate lane assignments for the graph
   const { lanes, maxLane } = useMemo(() => {
-    const laneMap = new Map<string, number>();
-    const activeLanes = new Set<number>();
-    let maxLaneUsed = 0;
+    const laneMap = new Map<string, number>()
+    const activeLanes = new Set<number>()
+    let maxLaneUsed = 0
 
     // Process commits in order (newest first)
     for (const commit of commits) {
       // Find or assign a lane for this commit
-      let lane = laneMap.get(commit.hash);
-      
+      let lane = laneMap.get(commit.hash)
+
       if (lane === undefined) {
         // Find first available lane
-        lane = 0;
-        while (activeLanes.has(lane)) lane++;
-        laneMap.set(commit.hash, lane);
+        lane = 0
+        while (activeLanes.has(lane)) lane++
+        laneMap.set(commit.hash, lane)
       }
-      
-      activeLanes.add(lane);
-      maxLaneUsed = Math.max(maxLaneUsed, lane);
+
+      activeLanes.add(lane)
+      maxLaneUsed = Math.max(maxLaneUsed, lane)
 
       // Assign lanes to parents
       commit.parents.forEach((parentHash, idx) => {
         if (!laneMap.has(parentHash)) {
           if (idx === 0) {
             // First parent stays in same lane
-            laneMap.set(parentHash, lane!);
+            laneMap.set(parentHash, lane!)
           } else {
             // Other parents get new lanes
-            let parentLane = 0;
-            while (activeLanes.has(parentLane) || parentLane === lane) parentLane++;
-            laneMap.set(parentHash, parentLane);
-            activeLanes.add(parentLane);
-            maxLaneUsed = Math.max(maxLaneUsed, parentLane);
+            let parentLane = 0
+            while (activeLanes.has(parentLane) || parentLane === lane) parentLane++
+            laneMap.set(parentHash, parentLane)
+            activeLanes.add(parentLane)
+            maxLaneUsed = Math.max(maxLaneUsed, parentLane)
           }
         }
-      });
+      })
 
       // If commit has no parents, release the lane
       if (commit.parents.length === 0) {
-        activeLanes.delete(lane);
+        activeLanes.delete(lane)
       }
     }
 
-    return { lanes: laneMap, maxLane: maxLaneUsed };
-  }, [commits]);
+    return { lanes: laneMap, maxLane: maxLaneUsed }
+  }, [commits])
 
-  const LANE_WIDTH = 16;
-  const ROW_HEIGHT = 36;
-  const NODE_RADIUS = 4;
-  const graphWidth = (maxLane + 1) * LANE_WIDTH + 20;
+  const LANE_WIDTH = 16
+  const ROW_HEIGHT = 36
+  const NODE_RADIUS = 4
+  const graphWidth = (maxLane + 1) * LANE_WIDTH + 20
 
   // Build a map of commit hash to index for drawing lines
   const commitIndexMap = useMemo(() => {
-    const map = new Map<string, number>();
-    commits.forEach((c, i) => map.set(c.hash, i));
-    return map;
-  }, [commits]);
+    const map = new Map<string, number>()
+    commits.forEach((c, i) => map.set(c.hash, i))
+    return map
+  }, [commits])
 
   return (
     <div className="git-graph">
-      <svg 
-        className="git-graph-svg" 
-        width={graphWidth} 
+      <svg
+        className="git-graph-svg"
+        width={graphWidth}
         height={commits.length * ROW_HEIGHT}
         style={{ minWidth: graphWidth }}
       >
         {/* Draw connecting lines */}
         {commits.map((commit, idx) => {
-          const lane = lanes.get(commit.hash) || 0;
-          const x = 10 + lane * LANE_WIDTH;
-          const y = idx * ROW_HEIGHT + ROW_HEIGHT / 2;
-          const color = LANE_COLORS[lane % LANE_COLORS.length];
+          const lane = lanes.get(commit.hash) || 0
+          const x = 10 + lane * LANE_WIDTH
+          const y = idx * ROW_HEIGHT + ROW_HEIGHT / 2
+          const color = LANE_COLORS[lane % LANE_COLORS.length]
 
           return commit.parents.map((parentHash, pIdx) => {
-            const parentIdx = commitIndexMap.get(parentHash);
-            if (parentIdx === undefined) return null;
-            
-            const parentLane = lanes.get(parentHash) || 0;
-            const px = 10 + parentLane * LANE_WIDTH;
-            const py = parentIdx * ROW_HEIGHT + ROW_HEIGHT / 2;
-            const parentColor = LANE_COLORS[parentLane % LANE_COLORS.length];
+            const parentIdx = commitIndexMap.get(parentHash)
+            if (parentIdx === undefined) return null
+
+            const parentLane = lanes.get(parentHash) || 0
+            const px = 10 + parentLane * LANE_WIDTH
+            const py = parentIdx * ROW_HEIGHT + ROW_HEIGHT / 2
+            const parentColor = LANE_COLORS[parentLane % LANE_COLORS.length]
 
             // Draw curved line
             if (lane === parentLane) {
@@ -2238,10 +2428,10 @@ function GitGraph({ commits, selectedCommit, onSelectCommit, formatRelativeTime 
                   stroke={color}
                   strokeWidth={2}
                 />
-              );
+              )
             } else {
               // Curved line for merges/branches
-              const midY = (y + py) / 2;
+              const midY = (y + py) / 2
               return (
                 <path
                   key={`${commit.hash}-${parentHash}-${pIdx}`}
@@ -2250,32 +2440,24 @@ function GitGraph({ commits, selectedCommit, onSelectCommit, formatRelativeTime 
                   strokeWidth={2}
                   fill="none"
                 />
-              );
+              )
             }
-          });
+          })
         })}
 
         {/* Draw commit nodes */}
         {commits.map((commit, idx) => {
-          const lane = lanes.get(commit.hash) || 0;
-          const x = 10 + lane * LANE_WIDTH;
-          const y = idx * ROW_HEIGHT + ROW_HEIGHT / 2;
-          const color = LANE_COLORS[lane % LANE_COLORS.length];
-          const isSelected = selectedCommit?.hash === commit.hash;
+          const lane = lanes.get(commit.hash) || 0
+          const x = 10 + lane * LANE_WIDTH
+          const y = idx * ROW_HEIGHT + ROW_HEIGHT / 2
+          const color = LANE_COLORS[lane % LANE_COLORS.length]
+          const isSelected = selectedCommit?.hash === commit.hash
 
           return (
             <g key={commit.hash}>
               {/* Selection ring */}
               {isSelected && (
-                <circle
-                  cx={x}
-                  cy={y}
-                  r={NODE_RADIUS + 3}
-                  fill="none"
-                  stroke={color}
-                  strokeWidth={2}
-                  opacity={0.5}
-                />
+                <circle cx={x} cy={y} r={NODE_RADIUS + 3} fill="none" stroke={color} strokeWidth={2} opacity={0.5} />
               )}
               {/* Node */}
               <circle
@@ -2287,7 +2469,7 @@ function GitGraph({ commits, selectedCommit, onSelectCommit, formatRelativeTime 
                 strokeWidth={commit.isMerge ? 2 : 0}
               />
             </g>
-          );
+          )
         })}
       </svg>
 
@@ -2302,17 +2484,14 @@ function GitGraph({ commits, selectedCommit, onSelectCommit, formatRelativeTime 
           >
             <div className="graph-commit-refs">
               {commit.refs.map((ref, i) => {
-                const isHead = ref.includes('HEAD');
-                const isBranch = ref.includes('origin/') || !ref.includes('/');
-                const cleanRef = ref.replace('HEAD -> ', '').replace('origin/', '');
+                const isHead = ref.includes('HEAD')
+                const isBranch = ref.includes('origin/') || !ref.includes('/')
+                const cleanRef = ref.replace('HEAD -> ', '').replace('origin/', '')
                 return (
-                  <span 
-                    key={i} 
-                    className={`graph-ref ${isHead ? 'head' : ''} ${isBranch ? 'branch' : 'tag'}`}
-                  >
+                  <span key={i} className={`graph-ref ${isHead ? 'head' : ''} ${isBranch ? 'branch' : 'tag'}`}>
                     {cleanRef}
                   </span>
-                );
+                )
               })}
             </div>
             <span className="graph-commit-message" title={commit.message}>
@@ -2327,7 +2506,7 @@ function GitGraph({ commits, selectedCommit, onSelectCommit, formatRelativeTime 
         ))}
       </div>
     </div>
-  );
+  )
 }
 
 // ========================================
@@ -2335,29 +2514,29 @@ function GitGraph({ commits, selectedCommit, onSelectCommit, formatRelativeTime 
 // ========================================
 
 interface DiffPanelProps {
-  diff: CommitDiff;
-  formatRelativeTime: (date: string) => string;
+  diff: CommitDiff
+  formatRelativeTime: (date: string) => string
 }
 
 function DiffPanel({ diff, formatRelativeTime }: DiffPanelProps) {
-  const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
+  const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set())
 
   const toggleFile = (path: string) => {
-    setExpandedFiles(prev => {
-      const next = new Set(prev);
+    setExpandedFiles((prev) => {
+      const next = new Set(prev)
       if (next.has(path)) {
-        next.delete(path);
+        next.delete(path)
       } else {
-        next.add(path);
+        next.add(path)
       }
-      return next;
-    });
-  };
+      return next
+    })
+  }
 
   // Expand all files by default on mount or diff change
   useEffect(() => {
-    setExpandedFiles(new Set(diff.files.map(f => f.file.path)));
-  }, [diff]);
+    setExpandedFiles(new Set(diff.files.map((f) => f.file.path)))
+  }, [diff])
 
   return (
     <div className="diff-panel">
@@ -2370,7 +2549,9 @@ function DiffPanel({ diff, formatRelativeTime }: DiffPanelProps) {
           <span>{formatRelativeTime(diff.date)}</span>
         </div>
         <div className="diff-commit-stats">
-          <span className="diff-stat-files">{diff.files.length} {diff.files.length === 1 ? 'file' : 'files'}</span>
+          <span className="diff-stat-files">
+            {diff.files.length} {diff.files.length === 1 ? 'file' : 'files'}
+          </span>
           <span className="diff-stat-additions">+{diff.totalAdditions}</span>
           <span className="diff-stat-deletions">-{diff.totalDeletions}</span>
         </div>
@@ -2380,15 +2561,16 @@ function DiffPanel({ diff, formatRelativeTime }: DiffPanelProps) {
       <div className="diff-files">
         {diff.files.map((fileDiff) => (
           <div key={fileDiff.file.path} className="diff-file">
-            <div 
-              className="diff-file-header"
-              onClick={() => toggleFile(fileDiff.file.path)}
-            >
+            <div className="diff-file-header" onClick={() => toggleFile(fileDiff.file.path)}>
               <span className={`diff-file-chevron ${expandedFiles.has(fileDiff.file.path) ? 'open' : ''}`}>▸</span>
               <span className={`diff-file-status diff-status-${fileDiff.file.status}`}>
-                {fileDiff.file.status === 'added' ? 'A' : 
-                 fileDiff.file.status === 'deleted' ? 'D' : 
-                 fileDiff.file.status === 'renamed' ? 'R' : 'M'}
+                {fileDiff.file.status === 'added'
+                  ? 'A'
+                  : fileDiff.file.status === 'deleted'
+                    ? 'D'
+                    : fileDiff.file.status === 'renamed'
+                      ? 'R'
+                      : 'M'}
               </span>
               <span className="diff-file-path">
                 {fileDiff.file.oldPath ? `${fileDiff.file.oldPath} → ` : ''}
@@ -2414,16 +2596,9 @@ function DiffPanel({ diff, formatRelativeTime }: DiffPanelProps) {
                       </div>
                       <div className="diff-hunk-lines">
                         {hunk.lines.map((line, lineIdx) => (
-                          <div 
-                            key={lineIdx} 
-                            className={`diff-line diff-line-${line.type}`}
-                          >
-                            <span className="diff-line-number old">
-                              {line.oldLineNumber || ''}
-                            </span>
-                            <span className="diff-line-number new">
-                              {line.newLineNumber || ''}
-                            </span>
+                          <div key={lineIdx} className={`diff-line diff-line-${line.type}`}>
+                            <span className="diff-line-number old">{line.oldLineNumber || ''}</span>
+                            <span className="diff-line-number new">{line.newLineNumber || ''}</span>
                             <span className="diff-line-prefix">
                               {line.type === 'add' ? '+' : line.type === 'delete' ? '-' : ' '}
                             </span>
@@ -2440,7 +2615,7 @@ function DiffPanel({ diff, formatRelativeTime }: DiffPanelProps) {
         ))}
       </div>
     </div>
-  );
+  )
 }
 
 // ========================================
@@ -2448,78 +2623,82 @@ function DiffPanel({ diff, formatRelativeTime }: DiffPanelProps) {
 // ========================================
 
 interface BranchDetailPanelProps {
-  branch: Branch;
-  formatDate: (date?: string) => string;
-  onStatusChange?: (status: StatusMessage | null) => void;
-  onCheckoutBranch?: (branch: Branch) => void;
-  switching?: boolean;
+  branch: Branch
+  formatDate: (date?: string) => string
+  onStatusChange?: (status: StatusMessage | null) => void
+  onCheckoutBranch?: (branch: Branch) => void
+  switching?: boolean
 }
 
-function BranchDetailPanel({ branch, formatDate, onStatusChange, onCheckoutBranch, switching }: BranchDetailPanelProps) {
-  const [creatingPR, setCreatingPR] = useState(false);
-  const [pushing, setPushing] = useState(false);
-  const [branchDiff, setBranchDiff] = useState<BranchDiff | null>(null);
-  const [loadingDiff, setLoadingDiff] = useState(false);
-  const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
-  
-  // PR creation form state
-  const [showPRForm, setShowPRForm] = useState(false);
-  const [prTitle, setPrTitle] = useState('');
-  const [prBody, setPrBody] = useState('');
-  const [prDraft, setPrDraft] = useState(false);
+function BranchDetailPanel({
+  branch,
+  formatDate,
+  onStatusChange,
+  onCheckoutBranch,
+  switching,
+}: BranchDetailPanelProps) {
+  const [creatingPR, setCreatingPR] = useState(false)
+  const [pushing, setPushing] = useState(false)
+  const [branchDiff, setBranchDiff] = useState<BranchDiff | null>(null)
+  const [loadingDiff, setLoadingDiff] = useState(false)
+  const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set())
 
-  const isMainOrMaster = branch.name === 'main' || branch.name === 'master';
+  // PR creation form state
+  const [showPRForm, setShowPRForm] = useState(false)
+  const [prTitle, setPrTitle] = useState('')
+  const [prBody, setPrBody] = useState('')
+  const [prDraft, setPrDraft] = useState(false)
+
+  const isMainOrMaster = branch.name === 'main' || branch.name === 'master'
 
   // Load branch diff when branch changes
   useEffect(() => {
     if (isMainOrMaster) {
-      setBranchDiff(null);
-      return;
+      setBranchDiff(null)
+      return
     }
 
-    let cancelled = false;
-    setLoadingDiff(true);
+    let cancelled = false
+    setLoadingDiff(true)
 
     window.electronAPI.getBranchDiff(branch.name).then((diff) => {
       if (!cancelled) {
-        setBranchDiff(diff);
+        setBranchDiff(diff)
         // Expand first 3 files by default
         if (diff?.files) {
-          setExpandedFiles(new Set(diff.files.slice(0, 3).map(f => f.file.path)));
+          setExpandedFiles(new Set(diff.files.slice(0, 3).map((f) => f.file.path)))
         }
-        setLoadingDiff(false);
+        setLoadingDiff(false)
       }
-    });
+    })
 
     return () => {
-      cancelled = true;
-    };
-  }, [branch.name, isMainOrMaster]);
+      cancelled = true
+    }
+  }, [branch.name, isMainOrMaster])
 
   const handleStartPRCreation = () => {
     // Auto-generate title from branch name
-    const generatedTitle = branch.name
-      .replace(/[-_]/g, ' ')
-      .replace(/\b\w/g, c => c.toUpperCase());
-    setPrTitle(generatedTitle);
-    setPrBody('');
-    setPrDraft(false);
-    setShowPRForm(true);
-  };
+    const generatedTitle = branch.name.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+    setPrTitle(generatedTitle)
+    setPrBody('')
+    setPrDraft(false)
+    setShowPRForm(true)
+  }
 
   const handleCancelPRCreation = () => {
-    setShowPRForm(false);
-    setPrTitle('');
-    setPrBody('');
-    setPrDraft(false);
-  };
+    setShowPRForm(false)
+    setPrTitle('')
+    setPrBody('')
+    setPrDraft(false)
+  }
 
   const handleSubmitPR = async () => {
-    if (!prTitle.trim()) return;
-    
-    setCreatingPR(true);
-    onStatusChange?.({ type: 'info', message: `Creating pull request for ${branch.name}...` });
-    
+    if (!prTitle.trim()) return
+
+    setCreatingPR(true)
+    onStatusChange?.({ type: 'info', message: `Creating pull request for ${branch.name}...` })
+
     try {
       const result = await window.electronAPI.createPullRequest({
         title: prTitle.trim(),
@@ -2527,54 +2706,54 @@ function BranchDetailPanel({ branch, formatDate, onStatusChange, onCheckoutBranc
         headBranch: branch.name,
         draft: prDraft,
         web: false,
-      });
-      
+      })
+
       if (result.success) {
-        onStatusChange?.({ type: 'success', message: result.message });
-        setShowPRForm(false);
-        setPrTitle('');
-        setPrBody('');
-        setPrDraft(false);
+        onStatusChange?.({ type: 'success', message: result.message })
+        setShowPRForm(false)
+        setPrTitle('')
+        setPrBody('')
+        setPrDraft(false)
       } else {
-        onStatusChange?.({ type: 'error', message: result.message });
+        onStatusChange?.({ type: 'error', message: result.message })
       }
     } catch (error) {
-      onStatusChange?.({ type: 'error', message: (error as Error).message });
+      onStatusChange?.({ type: 'error', message: (error as Error).message })
     } finally {
-      setCreatingPR(false);
+      setCreatingPR(false)
     }
-  };
+  }
 
   const handlePush = async () => {
-    setPushing(true);
-    onStatusChange?.({ type: 'info', message: `Pushing ${branch.name} to origin...` });
-    
+    setPushing(true)
+    onStatusChange?.({ type: 'info', message: `Pushing ${branch.name} to origin...` })
+
     try {
-      const result = await window.electronAPI.pushBranch(branch.name, true);
-      
+      const result = await window.electronAPI.pushBranch(branch.name, true)
+
       if (result.success) {
-        onStatusChange?.({ type: 'success', message: result.message });
+        onStatusChange?.({ type: 'success', message: result.message })
       } else {
-        onStatusChange?.({ type: 'error', message: result.message });
+        onStatusChange?.({ type: 'error', message: result.message })
       }
     } catch (error) {
-      onStatusChange?.({ type: 'error', message: (error as Error).message });
+      onStatusChange?.({ type: 'error', message: (error as Error).message })
     } finally {
-      setPushing(false);
+      setPushing(false)
     }
-  };
+  }
 
   const toggleFile = (path: string) => {
-    setExpandedFiles(prev => {
-      const next = new Set(prev);
+    setExpandedFiles((prev) => {
+      const next = new Set(prev)
       if (next.has(path)) {
-        next.delete(path);
+        next.delete(path)
       } else {
-        next.add(path);
+        next.add(path)
       }
-      return next;
-    });
-  };
+      return next
+    })
+  }
 
   return (
     <div className="sidebar-detail-panel">
@@ -2615,17 +2794,13 @@ function BranchDetailPanel({ branch, formatDate, onStatusChange, onCheckoutBranc
           <span className="meta-value">{branch.isMerged ? 'Yes' : 'No'}</span>
         </div>
       </div>
-      
+
       {/* PR Creation Form */}
       {showPRForm && !isMainOrMaster && (
         <div className="pr-create-form">
           <div className="pr-form-header">
             <span className="pr-form-title">Create Pull Request</span>
-            <button 
-              className="pr-form-close"
-              onClick={handleCancelPRCreation}
-              title="Cancel"
-            >
+            <button className="pr-form-close" onClick={handleCancelPRCreation} title="Cancel">
               ×
             </button>
           </div>
@@ -2652,27 +2827,15 @@ function BranchDetailPanel({ branch, formatDate, onStatusChange, onCheckoutBranc
           </div>
           <div className="pr-form-checkbox">
             <label>
-              <input
-                type="checkbox"
-                checked={prDraft}
-                onChange={(e) => setPrDraft(e.target.checked)}
-              />
+              <input type="checkbox" checked={prDraft} onChange={(e) => setPrDraft(e.target.checked)} />
               <span>Create as draft</span>
             </label>
           </div>
           <div className="pr-form-actions">
-            <button 
-              className="btn btn-secondary"
-              onClick={handleCancelPRCreation}
-              disabled={creatingPR}
-            >
+            <button className="btn btn-secondary" onClick={handleCancelPRCreation} disabled={creatingPR}>
               Cancel
             </button>
-            <button 
-              className="btn btn-primary"
-              onClick={handleSubmitPR}
-              disabled={creatingPR || !prTitle.trim()}
-            >
+            <button className="btn btn-primary" onClick={handleSubmitPR} disabled={creatingPR || !prTitle.trim()}>
               {creatingPR ? 'Creating...' : 'Create PR'}
             </button>
           </div>
@@ -2683,35 +2846,21 @@ function BranchDetailPanel({ branch, formatDate, onStatusChange, onCheckoutBranc
       {!showPRForm && (
         <div className="detail-actions">
           {!branch.current && onCheckoutBranch && (
-            <button 
-              className="btn btn-primary"
-              onClick={() => onCheckoutBranch(branch)}
-              disabled={switching}
-            >
+            <button className="btn btn-primary" onClick={() => onCheckoutBranch(branch)} disabled={switching}>
               {switching ? 'Checking out...' : 'Checkout'}
             </button>
           )}
           {branch.current && (
-            <button 
-              className="btn btn-primary"
-              onClick={handlePush}
-              disabled={pushing}
-            >
+            <button className="btn btn-primary" onClick={handlePush} disabled={pushing}>
               {pushing ? 'Pushing...' : 'Push to Origin'}
             </button>
           )}
           {!isMainOrMaster && (
-            <button 
-              className="btn btn-secondary"
-              onClick={handleStartPRCreation}
-            >
+            <button className="btn btn-secondary" onClick={handleStartPRCreation}>
               Create Pull Request
             </button>
           )}
-          <button 
-            className="btn btn-secondary"
-            onClick={() => window.electronAPI.openBranchInGitHub(branch.name)}
-          >
+          <button className="btn btn-secondary" onClick={() => window.electronAPI.openBranchInGitHub(branch.name)}>
             View on GitHub
           </button>
         </div>
@@ -2721,12 +2870,12 @@ function BranchDetailPanel({ branch, formatDate, onStatusChange, onCheckoutBranc
       {!isMainOrMaster && (
         <div className="branch-diff-section">
           <div className="branch-diff-header">
-            <span className="branch-diff-title">
-              Changes vs {branchDiff?.baseBranch || 'master'}
-            </span>
+            <span className="branch-diff-title">Changes vs {branchDiff?.baseBranch || 'master'}</span>
             {branchDiff && (
               <span className="branch-diff-stats">
-                <span className="diff-stat-files">{branchDiff.files.length} {branchDiff.files.length === 1 ? 'file' : 'files'}</span>
+                <span className="diff-stat-files">
+                  {branchDiff.files.length} {branchDiff.files.length === 1 ? 'file' : 'files'}
+                </span>
                 <span className="diff-additions">+{branchDiff.totalAdditions}</span>
                 <span className="diff-deletions">-{branchDiff.totalDeletions}</span>
               </span>
@@ -2743,23 +2892,30 @@ function BranchDetailPanel({ branch, formatDate, onStatusChange, onCheckoutBranc
             <div className="branch-diff-files">
               {branchDiff.files.map((fileDiff) => (
                 <div key={fileDiff.file.path} className="branch-diff-file">
-                  <div 
-                    className="branch-diff-file-header"
-                    onClick={() => toggleFile(fileDiff.file.path)}
-                  >
-                    <span className={`diff-file-chevron ${expandedFiles.has(fileDiff.file.path) ? 'open' : ''}`}>▸</span>
+                  <div className="branch-diff-file-header" onClick={() => toggleFile(fileDiff.file.path)}>
+                    <span className={`diff-file-chevron ${expandedFiles.has(fileDiff.file.path) ? 'open' : ''}`}>
+                      ▸
+                    </span>
                     <span className={`diff-file-status diff-status-${fileDiff.file.status}`}>
-                      {fileDiff.file.status === 'added' ? 'A' : 
-                       fileDiff.file.status === 'deleted' ? 'D' : 
-                       fileDiff.file.status === 'renamed' ? 'R' : 'M'}
+                      {fileDiff.file.status === 'added'
+                        ? 'A'
+                        : fileDiff.file.status === 'deleted'
+                          ? 'D'
+                          : fileDiff.file.status === 'renamed'
+                            ? 'R'
+                            : 'M'}
                     </span>
                     <span className="diff-file-path">
                       {fileDiff.file.oldPath ? `${fileDiff.file.oldPath} → ` : ''}
                       {fileDiff.file.path}
                     </span>
                     <span className="diff-file-stats">
-                      {fileDiff.file.additions > 0 && <span className="diff-additions">+{fileDiff.file.additions}</span>}
-                      {fileDiff.file.deletions > 0 && <span className="diff-deletions">-{fileDiff.file.deletions}</span>}
+                      {fileDiff.file.additions > 0 && (
+                        <span className="diff-additions">+{fileDiff.file.additions}</span>
+                      )}
+                      {fileDiff.file.deletions > 0 && (
+                        <span className="diff-deletions">-{fileDiff.file.deletions}</span>
+                      )}
                     </span>
                   </div>
 
@@ -2777,16 +2933,9 @@ function BranchDetailPanel({ branch, formatDate, onStatusChange, onCheckoutBranc
                             </div>
                             <div className="diff-hunk-lines">
                               {hunk.lines.map((line, lineIdx) => (
-                                <div 
-                                  key={lineIdx} 
-                                  className={`diff-line diff-line-${line.type}`}
-                                >
-                                  <span className="diff-line-number old">
-                                    {line.oldLineNumber || ''}
-                                  </span>
-                                  <span className="diff-line-number new">
-                                    {line.newLineNumber || ''}
-                                  </span>
+                                <div key={lineIdx} className={`diff-line diff-line-${line.type}`}>
+                                  <span className="diff-line-number old">{line.oldLineNumber || ''}</span>
+                                  <span className="diff-line-number new">{line.newLineNumber || ''}</span>
                                   <span className="diff-line-prefix">
                                     {line.type === 'add' ? '+' : line.type === 'delete' ? '-' : ' '}
                                   </span>
@@ -2806,7 +2955,7 @@ function BranchDetailPanel({ branch, formatDate, onStatusChange, onCheckoutBranc
         </div>
       )}
     </div>
-  );
+  )
 }
 
 // ========================================
@@ -2814,28 +2963,40 @@ function BranchDetailPanel({ branch, formatDate, onStatusChange, onCheckoutBranc
 // ========================================
 
 interface SidebarDetailPanelProps {
-  focus: SidebarFocus;
-  formatRelativeTime: (date: string) => string;
-  formatDate: (date?: string) => string;
-  currentBranch: string;
-  switching?: boolean;
-  onStatusChange?: (status: StatusMessage | null) => void;
-  onRefresh?: () => Promise<void>;
-  onClearFocus?: () => void;
-  onCheckoutBranch?: (branch: Branch) => void;
-  onCheckoutRemoteBranch?: (branch: Branch) => void;
-  onCheckoutWorktree?: (worktree: Worktree) => void;
+  focus: SidebarFocus
+  formatRelativeTime: (date: string) => string
+  formatDate: (date?: string) => string
+  currentBranch: string
+  switching?: boolean
+  onStatusChange?: (status: StatusMessage | null) => void
+  onRefresh?: () => Promise<void>
+  onClearFocus?: () => void
+  onCheckoutBranch?: (branch: Branch) => void
+  onCheckoutRemoteBranch?: (branch: Branch) => void
+  onCheckoutWorktree?: (worktree: Worktree) => void
 }
 
-function SidebarDetailPanel({ focus, formatRelativeTime, formatDate, currentBranch, switching, onStatusChange, onRefresh, onClearFocus, onCheckoutBranch, onCheckoutRemoteBranch, onCheckoutWorktree }: SidebarDetailPanelProps) {
+function SidebarDetailPanel({
+  focus,
+  formatRelativeTime,
+  formatDate,
+  currentBranch,
+  switching,
+  onStatusChange,
+  onRefresh,
+  onClearFocus,
+  onCheckoutBranch,
+  onCheckoutRemoteBranch,
+  onCheckoutWorktree,
+}: SidebarDetailPanelProps) {
   switch (focus.type) {
     case 'pr': {
       // Handled by PRReviewPanel
-      return null;
+      return null
     }
-    
+
     case 'branch': {
-      const branch = focus.data as Branch;
+      const branch = focus.data as Branch
       return (
         <BranchDetailPanel
           branch={branch}
@@ -2844,12 +3005,12 @@ function SidebarDetailPanel({ focus, formatRelativeTime, formatDate, currentBran
           onCheckoutBranch={onCheckoutBranch}
           switching={switching}
         />
-      );
+      )
     }
-    
+
     case 'remote': {
-      const branch = focus.data as Branch;
-      const displayName = branch.name.replace('remotes/', '').replace(/^origin\//, '');
+      const branch = focus.data as Branch
+      const displayName = branch.name.replace('remotes/', '').replace(/^origin\//, '')
       return (
         <div className="sidebar-detail-panel">
           <div className="detail-type-badge">Remote Branch</div>
@@ -2883,27 +3044,20 @@ function SidebarDetailPanel({ focus, formatRelativeTime, formatDate, currentBran
           {/* Actions */}
           <div className="detail-actions">
             {onCheckoutRemoteBranch && (
-              <button 
-                className="btn btn-primary"
-                onClick={() => onCheckoutRemoteBranch(branch)}
-                disabled={switching}
-              >
+              <button className="btn btn-primary" onClick={() => onCheckoutRemoteBranch(branch)} disabled={switching}>
                 {switching ? 'Checking out...' : 'Checkout'}
               </button>
             )}
-            <button 
-              className="btn btn-secondary"
-              onClick={() => window.electronAPI.openBranchInGitHub(branch.name)}
-            >
+            <button className="btn btn-secondary" onClick={() => window.electronAPI.openBranchInGitHub(branch.name)}>
               View on GitHub
             </button>
           </div>
         </div>
-      );
+      )
     }
-    
+
     case 'worktree': {
-      const wt = focus.data as Worktree;
+      const wt = focus.data as Worktree
       return (
         <WorktreeDetailPanel
           worktree={wt}
@@ -2914,29 +3068,29 @@ function SidebarDetailPanel({ focus, formatRelativeTime, formatDate, currentBran
           onClearFocus={onClearFocus}
           onCheckoutWorktree={onCheckoutWorktree}
         />
-      );
+      )
     }
-    
+
     case 'stash': {
-      const stash = focus.data as StashEntry;
+      const stash = focus.data as StashEntry
       return (
-        <StashDetailPanel 
-          stash={stash} 
+        <StashDetailPanel
+          stash={stash}
           formatRelativeTime={formatRelativeTime}
           onStatusChange={onStatusChange}
           onRefresh={onRefresh}
           onClearFocus={onClearFocus}
         />
-      );
+      )
     }
-    
+
     case 'uncommitted': {
       // Render the full staging panel
-      return null; // Handled by parent component
+      return null // Handled by parent component
     }
-    
+
     default:
-      return null;
+      return null
   }
 }
 
@@ -2945,135 +3099,144 @@ function SidebarDetailPanel({ focus, formatRelativeTime, formatDate, currentBran
 // ========================================
 
 interface StagingPanelProps {
-  workingStatus: WorkingStatus;
-  onRefresh: () => Promise<void>;
-  onStatusChange: (status: StatusMessage | null) => void;
+  workingStatus: WorkingStatus
+  onRefresh: () => Promise<void>
+  onStatusChange: (status: StatusMessage | null) => void
 }
 
 function StagingPanel({ workingStatus, onRefresh, onStatusChange }: StagingPanelProps) {
-  const [selectedFile, setSelectedFile] = useState<UncommittedFile | null>(null);
-  const [fileDiff, setFileDiff] = useState<StagingFileDiff | null>(null);
-  const [loadingDiff, setLoadingDiff] = useState(false);
-  const [commitMessage, setCommitMessage] = useState('');
-  const [commitDescription, setCommitDescription] = useState('');
-  const [isCommitting, setIsCommitting] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<UncommittedFile | null>(null)
+  const [fileDiff, setFileDiff] = useState<StagingFileDiff | null>(null)
+  const [loadingDiff, setLoadingDiff] = useState(false)
+  const [commitMessage, setCommitMessage] = useState('')
+  const [commitDescription, setCommitDescription] = useState('')
+  const [isCommitting, setIsCommitting] = useState(false)
 
-  const stagedFiles = workingStatus.files.filter(f => f.staged);
-  const unstagedFiles = workingStatus.files.filter(f => !f.staged);
+  const stagedFiles = workingStatus.files.filter((f) => f.staged)
+  const unstagedFiles = workingStatus.files.filter((f) => !f.staged)
 
   // Load diff when file is selected
   useEffect(() => {
     if (!selectedFile) {
-      setFileDiff(null);
-      return;
+      setFileDiff(null)
+      return
     }
 
     const loadDiff = async () => {
-      setLoadingDiff(true);
+      setLoadingDiff(true)
       try {
-        const diff = await window.electronAPI.getFileDiff(selectedFile.path, selectedFile.staged);
-        setFileDiff(diff);
+        const diff = await window.electronAPI.getFileDiff(selectedFile.path, selectedFile.staged)
+        setFileDiff(diff)
       } catch (_error) {
-        setFileDiff(null);
+        setFileDiff(null)
       } finally {
-        setLoadingDiff(false);
+        setLoadingDiff(false)
       }
-    };
+    }
 
-    loadDiff();
-  }, [selectedFile]);
+    loadDiff()
+  }, [selectedFile])
 
   // Stage a file
   const handleStageFile = async (file: UncommittedFile) => {
-    const result = await window.electronAPI.stageFile(file.path);
+    const result = await window.electronAPI.stageFile(file.path)
     if (result.success) {
-      onStatusChange({ type: 'success', message: result.message });
-      await onRefresh();
+      onStatusChange({ type: 'success', message: result.message })
+      await onRefresh()
     } else {
-      onStatusChange({ type: 'error', message: result.message });
+      onStatusChange({ type: 'error', message: result.message })
     }
-  };
+  }
 
   // Unstage a file
   const handleUnstageFile = async (file: UncommittedFile) => {
-    const result = await window.electronAPI.unstageFile(file.path);
+    const result = await window.electronAPI.unstageFile(file.path)
     if (result.success) {
-      onStatusChange({ type: 'success', message: result.message });
-      await onRefresh();
+      onStatusChange({ type: 'success', message: result.message })
+      await onRefresh()
     } else {
-      onStatusChange({ type: 'error', message: result.message });
+      onStatusChange({ type: 'error', message: result.message })
     }
-  };
+  }
 
   // Stage all files
   const handleStageAll = async () => {
-    const result = await window.electronAPI.stageAll();
+    const result = await window.electronAPI.stageAll()
     if (result.success) {
-      onStatusChange({ type: 'success', message: result.message });
-      await onRefresh();
+      onStatusChange({ type: 'success', message: result.message })
+      await onRefresh()
     } else {
-      onStatusChange({ type: 'error', message: result.message });
+      onStatusChange({ type: 'error', message: result.message })
     }
-  };
+  }
 
   // Unstage all files
   const handleUnstageAll = async () => {
-    const result = await window.electronAPI.unstageAll();
+    const result = await window.electronAPI.unstageAll()
     if (result.success) {
-      onStatusChange({ type: 'success', message: result.message });
-      await onRefresh();
+      onStatusChange({ type: 'success', message: result.message })
+      await onRefresh()
     } else {
-      onStatusChange({ type: 'error', message: result.message });
+      onStatusChange({ type: 'error', message: result.message })
     }
-  };
+  }
 
   // Commit changes
   const handleCommit = async () => {
-    if (!commitMessage.trim() || stagedFiles.length === 0) return;
+    if (!commitMessage.trim() || stagedFiles.length === 0) return
 
-    setIsCommitting(true);
+    setIsCommitting(true)
     try {
-      const result = await window.electronAPI.commitChanges(
-        commitMessage.trim(),
-        commitDescription.trim() || undefined
-      );
+      const result = await window.electronAPI.commitChanges(commitMessage.trim(), commitDescription.trim() || undefined)
       if (result.success) {
-        onStatusChange({ type: 'success', message: result.message });
-        setCommitMessage('');
-        setCommitDescription('');
-        await onRefresh();
+        onStatusChange({ type: 'success', message: result.message })
+        setCommitMessage('')
+        setCommitDescription('')
+        await onRefresh()
       } else {
-        onStatusChange({ type: 'error', message: result.message });
+        onStatusChange({ type: 'error', message: result.message })
       }
     } catch (error) {
-      onStatusChange({ type: 'error', message: (error as Error).message });
+      onStatusChange({ type: 'error', message: (error as Error).message })
     } finally {
-      setIsCommitting(false);
+      setIsCommitting(false)
     }
-  };
+  }
 
   // File status helpers
   const getFileStatusIcon = (status: UncommittedFile['status']) => {
     switch (status) {
-      case 'added': return '+';
-      case 'deleted': return '−';
-      case 'modified': return '●';
-      case 'renamed': return '→';
-      case 'untracked': return '?';
-      default: return '?';
+      case 'added':
+        return '+'
+      case 'deleted':
+        return '−'
+      case 'modified':
+        return '●'
+      case 'renamed':
+        return '→'
+      case 'untracked':
+        return '?'
+      default:
+        return '?'
     }
-  };
+  }
 
   const getFileStatusClass = (status: UncommittedFile['status']) => {
     switch (status) {
-      case 'added': return 'file-added';
-      case 'deleted': return 'file-deleted';
-      case 'modified': return 'file-modified';
-      case 'renamed': return 'file-renamed';
-      case 'untracked': return 'file-untracked';
-      default: return '';
+      case 'added':
+        return 'file-added'
+      case 'deleted':
+        return 'file-deleted'
+      case 'modified':
+        return 'file-modified'
+      case 'renamed':
+        return 'file-renamed'
+      case 'untracked':
+        return 'file-untracked'
+      default:
+        return ''
     }
-  };
+  }
 
   return (
     <div className="staging-panel">
@@ -3096,11 +3259,7 @@ function StagingPanel({ workingStatus, onRefresh, onStatusChange }: StagingPanel
             <span className="staging-section-title">Unstaged</span>
             <span className="staging-section-count">{unstagedFiles.length}</span>
             {unstagedFiles.length > 0 && (
-              <button 
-                className="staging-action-btn"
-                onClick={handleStageAll}
-                title="Stage all"
-              >
+              <button className="staging-action-btn" onClick={handleStageAll} title="Stage all">
                 Stage All ↑
               </button>
             )}
@@ -3108,16 +3267,21 @@ function StagingPanel({ workingStatus, onRefresh, onStatusChange }: StagingPanel
           {unstagedFiles.length > 0 ? (
             <ul className="staging-file-list">
               {unstagedFiles.map((file) => (
-                <li 
-                  key={file.path} 
+                <li
+                  key={file.path}
                   className={`staging-file-item ${getFileStatusClass(file.status)} ${selectedFile?.path === file.path && !selectedFile.staged ? 'selected' : ''}`}
                   onClick={() => setSelectedFile(file)}
                 >
                   <span className="file-status-icon">{getFileStatusIcon(file.status)}</span>
-                  <span className="file-path" title={file.path}>{file.path}</span>
-                  <button 
+                  <span className="file-path" title={file.path}>
+                    {file.path}
+                  </span>
+                  <button
                     className="file-action-btn stage"
-                    onClick={(e) => { e.stopPropagation(); handleStageFile(file); }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleStageFile(file)
+                    }}
                     title="Stage file"
                   >
                     +
@@ -3136,11 +3300,7 @@ function StagingPanel({ workingStatus, onRefresh, onStatusChange }: StagingPanel
             <span className="staging-section-title">Staged</span>
             <span className="staging-section-count">{stagedFiles.length}</span>
             {stagedFiles.length > 0 && (
-              <button 
-                className="staging-action-btn"
-                onClick={handleUnstageAll}
-                title="Unstage all"
-              >
+              <button className="staging-action-btn" onClick={handleUnstageAll} title="Unstage all">
                 Unstage All ↓
               </button>
             )}
@@ -3148,16 +3308,21 @@ function StagingPanel({ workingStatus, onRefresh, onStatusChange }: StagingPanel
           {stagedFiles.length > 0 ? (
             <ul className="staging-file-list">
               {stagedFiles.map((file) => (
-                <li 
-                  key={file.path} 
+                <li
+                  key={file.path}
                   className={`staging-file-item ${getFileStatusClass(file.status)} ${selectedFile?.path === file.path && selectedFile.staged ? 'selected' : ''}`}
                   onClick={() => setSelectedFile(file)}
                 >
                   <span className="file-status-icon">{getFileStatusIcon(file.status)}</span>
-                  <span className="file-path" title={file.path}>{file.path}</span>
-                  <button 
+                  <span className="file-path" title={file.path}>
+                    {file.path}
+                  </span>
+                  <button
                     className="file-action-btn unstage"
-                    onClick={(e) => { e.stopPropagation(); handleUnstageFile(file); }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleUnstageFile(file)
+                    }}
                     title="Unstage file"
                   >
                     −
@@ -3241,7 +3406,7 @@ function StagingPanel({ workingStatus, onRefresh, onStatusChange }: StagingPanel
         </button>
       </div>
     </div>
-  );
+  )
 }
 
 // ========================================
@@ -3249,158 +3414,162 @@ function StagingPanel({ workingStatus, onRefresh, onStatusChange }: StagingPanel
 // ========================================
 
 interface PRReviewPanelProps {
-  pr: PullRequest;
-  formatRelativeTime: (date: string) => string;
-  onCheckout?: (pr: PullRequest) => void;
-  switching?: boolean;
+  pr: PullRequest
+  formatRelativeTime: (date: string) => string
+  onCheckout?: (pr: PullRequest) => void
+  switching?: boolean
 }
 
-type PRTab = 'conversation' | 'files' | 'commits';
+type PRTab = 'conversation' | 'files' | 'commits'
 
 // Known AI/bot authors
-const AI_AUTHORS = ['copilot', 'github-actions', 'dependabot', 'renovate', 'coderabbit', 'vercel', 'netlify', 'codecov'];
+const AI_AUTHORS = ['copilot', 'github-actions', 'dependabot', 'renovate', 'coderabbit', 'vercel', 'netlify', 'codecov']
 
 function isAIAuthor(login: string): boolean {
-  const lower = login.toLowerCase();
-  return AI_AUTHORS.some(ai => lower.includes(ai)) || lower.endsWith('[bot]') || lower.endsWith('-bot');
+  const lower = login.toLowerCase()
+  return AI_AUTHORS.some((ai) => lower.includes(ai)) || lower.endsWith('[bot]') || lower.endsWith('-bot')
 }
 
 function PRReviewPanel({ pr, formatRelativeTime, onCheckout, switching }: PRReviewPanelProps) {
-  const [activeTab, setActiveTab] = useState<PRTab>('conversation');
-  const [prDetail, setPrDetail] = useState<PRDetail | null>(null);
-  const [reviewComments, setReviewComments] = useState<PRReviewComment[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedFile, setSelectedFile] = useState<string | null>(null);
-  const [fileDiff, setFileDiff] = useState<string | null>(null);
-  const [loadingDiff, setLoadingDiff] = useState(false);
-  const [showAIComments, setShowAIComments] = useState(true);
-  const [commentText, setCommentText] = useState('');
-  const [submittingComment, setSubmittingComment] = useState(false);
-  const [commentStatus, setCommentStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [activeTab, setActiveTab] = useState<PRTab>('conversation')
+  const [prDetail, setPrDetail] = useState<PRDetail | null>(null)
+  const [reviewComments, setReviewComments] = useState<PRReviewComment[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selectedFile, setSelectedFile] = useState<string | null>(null)
+  const [fileDiff, setFileDiff] = useState<string | null>(null)
+  const [loadingDiff, setLoadingDiff] = useState(false)
+  const [showAIComments, setShowAIComments] = useState(true)
+  const [commentText, setCommentText] = useState('')
+  const [submittingComment, setSubmittingComment] = useState(false)
+  const [commentStatus, setCommentStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
   // Load full PR details
   const loadPRDetail = async () => {
-    setLoading(true);
+    setLoading(true)
     try {
       const [detail, comments] = await Promise.all([
         window.electronAPI.getPRDetail(pr.number),
         window.electronAPI.getPRReviewComments(pr.number),
-      ]);
-      setPrDetail(detail);
-      setReviewComments(comments);
+      ])
+      setPrDetail(detail)
+      setReviewComments(comments)
     } catch (error) {
-      console.error('Error loading PR detail:', error);
+      console.error('Error loading PR detail:', error)
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   useEffect(() => {
-    loadPRDetail();
-  }, [pr.number]);
+    loadPRDetail()
+  }, [pr.number])
 
   // Submit a comment
   const handleSubmitComment = async () => {
-    if (!commentText.trim() || submittingComment) return;
-    
-    setSubmittingComment(true);
-    setCommentStatus(null);
-    
+    if (!commentText.trim() || submittingComment) return
+
+    setSubmittingComment(true)
+    setCommentStatus(null)
+
     try {
-      const result = await window.electronAPI.commentOnPR(pr.number, commentText.trim());
-      
+      const result = await window.electronAPI.commentOnPR(pr.number, commentText.trim())
+
       if (result.success) {
-        setCommentText('');
-        setCommentStatus({ type: 'success', message: 'Comment added!' });
+        setCommentText('')
+        setCommentStatus({ type: 'success', message: 'Comment added!' })
         // Reload PR details to show the new comment
-        await loadPRDetail();
+        await loadPRDetail()
         // Clear success message after a delay
-        setTimeout(() => setCommentStatus(null), 3000);
+        setTimeout(() => setCommentStatus(null), 3000)
       } else {
-        setCommentStatus({ type: 'error', message: result.message });
+        setCommentStatus({ type: 'error', message: result.message })
       }
     } catch (error) {
-      setCommentStatus({ type: 'error', message: (error as Error).message });
+      setCommentStatus({ type: 'error', message: (error as Error).message })
     } finally {
-      setSubmittingComment(false);
+      setSubmittingComment(false)
     }
-  };
+  }
 
   // Load file diff when selected
   useEffect(() => {
     if (!selectedFile) {
-      setFileDiff(null);
-      return;
+      setFileDiff(null)
+      return
     }
 
     const loadDiff = async () => {
-      setLoadingDiff(true);
+      setLoadingDiff(true)
       try {
-        const diff = await window.electronAPI.getPRFileDiff(pr.number, selectedFile);
-        setFileDiff(diff);
+        const diff = await window.electronAPI.getPRFileDiff(pr.number, selectedFile)
+        setFileDiff(diff)
       } catch (_error) {
-        setFileDiff(null);
+        setFileDiff(null)
       } finally {
-        setLoadingDiff(false);
+        setLoadingDiff(false)
       }
-    };
+    }
 
-    loadDiff();
-  }, [pr.number, selectedFile]);
+    loadDiff()
+  }, [pr.number, selectedFile])
 
   // Filter comments by AI/human
   const filteredComments = useMemo(() => {
-    if (!prDetail) return [];
-    if (showAIComments) return prDetail.comments;
-    return prDetail.comments.filter(c => !isAIAuthor(c.author.login));
-  }, [prDetail, showAIComments]);
+    if (!prDetail) return []
+    if (showAIComments) return prDetail.comments
+    return prDetail.comments.filter((c) => !isAIAuthor(c.author.login))
+  }, [prDetail, showAIComments])
 
   const filteredReviews = useMemo(() => {
-    if (!prDetail) return [];
-    if (showAIComments) return prDetail.reviews;
-    return prDetail.reviews.filter(r => !isAIAuthor(r.author.login));
-  }, [prDetail, showAIComments]);
+    if (!prDetail) return []
+    if (showAIComments) return prDetail.reviews
+    return prDetail.reviews.filter((r) => !isAIAuthor(r.author.login))
+  }, [prDetail, showAIComments])
 
   // Count AI vs human comments
   const aiCommentCount = useMemo(() => {
-    if (!prDetail) return 0;
-    return prDetail.comments.filter(c => isAIAuthor(c.author.login)).length +
-           prDetail.reviews.filter(r => isAIAuthor(r.author.login)).length;
-  }, [prDetail]);
+    if (!prDetail) return 0
+    return (
+      prDetail.comments.filter((c) => isAIAuthor(c.author.login)).length +
+      prDetail.reviews.filter((r) => isAIAuthor(r.author.login)).length
+    )
+  }, [prDetail])
 
   const humanCommentCount = useMemo(() => {
-    if (!prDetail) return 0;
-    return prDetail.comments.filter(c => !isAIAuthor(c.author.login)).length +
-           prDetail.reviews.filter(r => !isAIAuthor(r.author.login)).length;
-  }, [prDetail]);
+    if (!prDetail) return 0
+    return (
+      prDetail.comments.filter((c) => !isAIAuthor(c.author.login)).length +
+      prDetail.reviews.filter((r) => !isAIAuthor(r.author.login)).length
+    )
+  }, [prDetail])
 
   // Get review comments for a specific file
   const getFileComments = (filePath: string) => {
-    return reviewComments.filter(c => c.path === filePath);
-  };
+    return reviewComments.filter((c) => c.path === filePath)
+  }
 
   // Get review state badge
   const getReviewStateBadge = (state: string) => {
     switch (state) {
       case 'APPROVED':
-        return <span className="pr-review-badge approved">Approved</span>;
+        return <span className="pr-review-badge approved">Approved</span>
       case 'CHANGES_REQUESTED':
-        return <span className="pr-review-badge changes">Changes Requested</span>;
+        return <span className="pr-review-badge changes">Changes Requested</span>
       case 'COMMENTED':
-        return <span className="pr-review-badge commented">Commented</span>;
+        return <span className="pr-review-badge commented">Commented</span>
       case 'DISMISSED':
-        return <span className="pr-review-badge dismissed">Dismissed</span>;
+        return <span className="pr-review-badge dismissed">Dismissed</span>
       default:
-        return null;
+        return null
     }
-  };
+  }
 
   if (loading) {
     return (
       <div className="pr-review-panel">
         <div className="pr-review-loading">Loading PR details...</div>
       </div>
-    );
+    )
   }
 
   if (!prDetail) {
@@ -3408,7 +3577,7 @@ function PRReviewPanel({ pr, formatRelativeTime, onCheckout, switching }: PRRevi
       <div className="pr-review-panel">
         <div className="pr-review-error">Could not load PR details</div>
       </div>
-    );
+    )
   }
 
   return (
@@ -3436,24 +3605,18 @@ function PRReviewPanel({ pr, formatRelativeTime, onCheckout, switching }: PRRevi
 
       {/* Tabs */}
       <div className="pr-review-tabs">
-        <button 
+        <button
           className={`pr-tab ${activeTab === 'conversation' ? 'active' : ''}`}
           onClick={() => setActiveTab('conversation')}
         >
           Conversation
           <span className="pr-tab-count">{filteredComments.length + filteredReviews.length}</span>
         </button>
-        <button 
-          className={`pr-tab ${activeTab === 'files' ? 'active' : ''}`}
-          onClick={() => setActiveTab('files')}
-        >
+        <button className={`pr-tab ${activeTab === 'files' ? 'active' : ''}`} onClick={() => setActiveTab('files')}>
           Files
           <span className="pr-tab-count">{prDetail.files.length}</span>
         </button>
-        <button 
-          className={`pr-tab ${activeTab === 'commits' ? 'active' : ''}`}
-          onClick={() => setActiveTab('commits')}
-        >
+        <button className={`pr-tab ${activeTab === 'commits' ? 'active' : ''}`} onClick={() => setActiveTab('commits')}>
           Commits
           <span className="pr-tab-count">{prDetail.commits.length}</span>
         </button>
@@ -3467,11 +3630,7 @@ function PRReviewPanel({ pr, formatRelativeTime, onCheckout, switching }: PRRevi
             {/* AI Filter Toggle */}
             <div className="pr-filter-bar">
               <label className="pr-filter-toggle">
-                <input 
-                  type="checkbox" 
-                  checked={showAIComments} 
-                  onChange={(e) => setShowAIComments(e.target.checked)}
-                />
+                <input type="checkbox" checked={showAIComments} onChange={(e) => setShowAIComments(e.target.checked)} />
                 <span>Show AI comments</span>
               </label>
               <span className="pr-filter-counts">
@@ -3494,29 +3653,28 @@ function PRReviewPanel({ pr, formatRelativeTime, onCheckout, switching }: PRRevi
             {/* Reviews and Comments (chronological) */}
             {[...filteredReviews, ...filteredComments]
               .sort((a, b) => {
-                const dateA = new Date('submittedAt' in a ? a.submittedAt : a.createdAt);
-                const dateB = new Date('submittedAt' in b ? b.submittedAt : b.createdAt);
-                return dateA.getTime() - dateB.getTime();
+                const dateA = new Date('submittedAt' in a ? a.submittedAt : a.createdAt)
+                const dateB = new Date('submittedAt' in b ? b.submittedAt : b.createdAt)
+                return dateA.getTime() - dateB.getTime()
               })
               .map((item, idx) => {
-                const isReview = 'state' in item;
-                const author = item.author.login;
-                const isAI = isAIAuthor(author);
-                const date = isReview ? (item as any).submittedAt : (item as any).createdAt;
+                const isReview = 'state' in item
+                const author = item.author.login
+                const isAI = isAIAuthor(author)
+                const date = isReview ? (item as any).submittedAt : (item as any).createdAt
 
                 return (
                   <div key={idx} className={`pr-comment ${isAI ? 'ai-comment' : ''} ${isReview ? 'pr-review' : ''}`}>
                     <div className="pr-comment-header">
                       <span className="pr-comment-author">
-                        {isAI && <span className="ai-badge">🤖</span>}
-                        @{author}
+                        {isAI && <span className="ai-badge">🤖</span>}@{author}
                       </span>
                       {isReview && getReviewStateBadge((item as any).state)}
                       <span className="pr-comment-time">{formatRelativeTime(date)}</span>
                     </div>
                     {item.body && <div className="pr-comment-body">{item.body}</div>}
                   </div>
-                );
+                )
               })}
 
             {filteredComments.length === 0 && filteredReviews.length === 0 && !prDetail.body && (
@@ -3533,15 +3691,13 @@ function PRReviewPanel({ pr, formatRelativeTime, onCheckout, switching }: PRRevi
                 rows={3}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                    handleSubmitComment();
+                    handleSubmitComment()
                   }
                 }}
               />
               <div className="pr-comment-form-footer">
                 {commentStatus && (
-                  <span className={`pr-comment-status ${commentStatus.type}`}>
-                    {commentStatus.message}
-                  </span>
+                  <span className={`pr-comment-status ${commentStatus.type}`}>{commentStatus.message}</span>
                 )}
                 <span className="pr-comment-hint">⌘+Enter to submit</span>
                 <button
@@ -3561,9 +3717,9 @@ function PRReviewPanel({ pr, formatRelativeTime, onCheckout, switching }: PRRevi
           <div className="pr-files">
             <div className="pr-files-list">
               {prDetail.files.map((file) => {
-                const fileComments = getFileComments(file.path);
+                const fileComments = getFileComments(file.path)
                 return (
-                  <div 
+                  <div
                     key={file.path}
                     className={`pr-file-item ${selectedFile === file.path ? 'selected' : ''}`}
                     onClick={() => setSelectedFile(file.path)}
@@ -3572,12 +3728,10 @@ function PRReviewPanel({ pr, formatRelativeTime, onCheckout, switching }: PRRevi
                     <span className="pr-file-stats">
                       <span className="diff-additions">+{file.additions}</span>
                       <span className="diff-deletions">-{file.deletions}</span>
-                      {fileComments.length > 0 && (
-                        <span className="pr-file-comments">💬 {fileComments.length}</span>
-                      )}
+                      {fileComments.length > 0 && <span className="pr-file-comments">💬 {fileComments.length}</span>}
                     </span>
                   </div>
-                );
+                )
               })}
             </div>
 
@@ -3586,11 +3740,11 @@ function PRReviewPanel({ pr, formatRelativeTime, onCheckout, switching }: PRRevi
               <div className="pr-file-diff">
                 <div className="pr-file-diff-header">
                   <span>{selectedFile}</span>
-                  <a 
+                  <a
                     href={`${pr.url}/files#diff-${selectedFile.replace(/[^a-zA-Z0-9]/g, '')}`}
                     onClick={(e) => {
-                      e.preventDefault();
-                      window.electronAPI.openPullRequest(`${pr.url}/files`);
+                      e.preventDefault()
+                      window.electronAPI.openPullRequest(`${pr.url}/files`)
                     }}
                     className="pr-view-on-github"
                   >
@@ -3614,11 +3768,14 @@ function PRReviewPanel({ pr, formatRelativeTime, onCheckout, switching }: PRRevi
                       💬 Review Comments ({getFileComments(selectedFile).length})
                     </div>
                     {getFileComments(selectedFile).map((comment) => (
-                      <div key={comment.id} className={`pr-inline-comment ${isAIAuthor(comment.author.login) ? 'ai-comment' : ''}`}>
+                      <div
+                        key={comment.id}
+                        className={`pr-inline-comment ${isAIAuthor(comment.author.login) ? 'ai-comment' : ''}`}
+                      >
                         <div className="pr-inline-comment-header">
                           <span className="pr-comment-author">
-                            {isAIAuthor(comment.author.login) && <span className="ai-badge">🤖</span>}
-                            @{comment.author.login}
+                            {isAIAuthor(comment.author.login) && <span className="ai-badge">🤖</span>}@
+                            {comment.author.login}
                           </span>
                           {comment.line && <span className="pr-comment-line">Line {comment.line}</span>}
                           <span className="pr-comment-time">{formatRelativeTime(comment.createdAt)}</span>
@@ -3651,15 +3808,11 @@ function PRReviewPanel({ pr, formatRelativeTime, onCheckout, switching }: PRRevi
       {/* Footer with actions */}
       <div className="pr-review-footer">
         {onCheckout && (
-          <button 
-            className="btn btn-primary"
-            onClick={() => onCheckout(pr)}
-            disabled={switching}
-          >
+          <button className="btn btn-primary" onClick={() => onCheckout(pr)} disabled={switching}>
             {switching ? 'Checking out...' : 'Checkout'}
           </button>
         )}
-        <button 
+        <button
           className={`btn ${onCheckout ? 'btn-secondary' : 'btn-primary'}`}
           onClick={() => window.electronAPI.openPullRequest(pr.url)}
         >
@@ -3667,7 +3820,7 @@ function PRReviewPanel({ pr, formatRelativeTime, onCheckout, switching }: PRRevi
         </button>
       </div>
     </div>
-  );
+  )
 }
 
 // ========================================
@@ -3675,106 +3828,114 @@ function PRReviewPanel({ pr, formatRelativeTime, onCheckout, switching }: PRRevi
 // ========================================
 
 interface WorktreeDetailPanelProps {
-  worktree: Worktree;
-  currentBranch: string;
-  switching?: boolean;
-  onStatusChange?: (status: StatusMessage | null) => void;
-  onRefresh?: () => Promise<void>;
-  onClearFocus?: () => void;
-  onCheckoutWorktree?: (worktree: Worktree) => void;
+  worktree: Worktree
+  currentBranch: string
+  switching?: boolean
+  onStatusChange?: (status: StatusMessage | null) => void
+  onRefresh?: () => Promise<void>
+  onClearFocus?: () => void
+  onCheckoutWorktree?: (worktree: Worktree) => void
 }
 
-function WorktreeDetailPanel({ worktree, currentBranch, switching, onStatusChange, onRefresh, onClearFocus, onCheckoutWorktree }: WorktreeDetailPanelProps) {
-  const [actionInProgress, setActionInProgress] = useState(false);
-  
-  const isWorkingFolder = worktree.agent === 'working-folder';
-  const isCurrent = worktree.branch === currentBranch;
-  const hasChanges = worktree.changedFileCount > 0 || worktree.additions > 0 || worktree.deletions > 0;
+function WorktreeDetailPanel({
+  worktree,
+  currentBranch,
+  switching,
+  onStatusChange,
+  onRefresh,
+  onClearFocus,
+  onCheckoutWorktree,
+}: WorktreeDetailPanelProps) {
+  const [actionInProgress, setActionInProgress] = useState(false)
+
+  const isWorkingFolder = worktree.agent === 'working-folder'
+  const isCurrent = worktree.branch === currentBranch
+  const hasChanges = worktree.changedFileCount > 0 || worktree.additions > 0 || worktree.deletions > 0
 
   const handleApply = async () => {
     if (!hasChanges) {
-      onStatusChange?.({ type: 'info', message: 'No changes to apply - worktree is clean' });
-      return;
+      onStatusChange?.({ type: 'info', message: 'No changes to apply - worktree is clean' })
+      return
     }
-    
-    setActionInProgress(true);
-    onStatusChange?.({ type: 'info', message: `Applying changes from ${worktree.displayName}...` });
-    
+
+    setActionInProgress(true)
+    onStatusChange?.({ type: 'info', message: `Applying changes from ${worktree.displayName}...` })
+
     try {
-      const result = await window.electronAPI.applyWorktreeChanges(worktree.path);
+      const result = await window.electronAPI.applyWorktreeChanges(worktree.path)
       if (result.success) {
-        onStatusChange?.({ type: 'success', message: result.message });
-        await onRefresh?.();
+        onStatusChange?.({ type: 'success', message: result.message })
+        await onRefresh?.()
       } else {
-        onStatusChange?.({ type: 'error', message: result.message });
+        onStatusChange?.({ type: 'error', message: result.message })
       }
     } catch (error) {
-      onStatusChange?.({ type: 'error', message: (error as Error).message });
+      onStatusChange?.({ type: 'error', message: (error as Error).message })
     } finally {
-      setActionInProgress(false);
+      setActionInProgress(false)
     }
-  };
+  }
 
   const handleCreateBranch = async () => {
     if (!hasChanges) {
-      onStatusChange?.({ type: 'info', message: 'No changes to convert - worktree is clean' });
-      return;
+      onStatusChange?.({ type: 'info', message: 'No changes to convert - worktree is clean' })
+      return
     }
-    
-    setActionInProgress(true);
-    onStatusChange?.({ type: 'info', message: `Creating branch from ${worktree.displayName}...` });
-    
+
+    setActionInProgress(true)
+    onStatusChange?.({ type: 'info', message: `Creating branch from ${worktree.displayName}...` })
+
     try {
-      const result = await window.electronAPI.convertWorktreeToBranch(worktree.path);
+      const result = await window.electronAPI.convertWorktreeToBranch(worktree.path)
       if (result.success) {
-        onStatusChange?.({ type: 'success', message: result.message });
-        await onRefresh?.();
+        onStatusChange?.({ type: 'success', message: result.message })
+        await onRefresh?.()
       } else {
-        onStatusChange?.({ type: 'error', message: result.message });
+        onStatusChange?.({ type: 'error', message: result.message })
       }
     } catch (error) {
-      onStatusChange?.({ type: 'error', message: (error as Error).message });
+      onStatusChange?.({ type: 'error', message: (error as Error).message })
     } finally {
-      setActionInProgress(false);
+      setActionInProgress(false)
     }
-  };
+  }
 
   const handleOpenInFinder = async () => {
-    await window.electronAPI.openWorktree(worktree.path);
-  };
+    await window.electronAPI.openWorktree(worktree.path)
+  }
 
   const handleRemove = async (force: boolean = false) => {
-    const confirmMsg = force 
+    const confirmMsg = force
       ? `Force remove worktree "${worktree.displayName}"? This will discard any uncommitted changes.`
-      : `Remove worktree "${worktree.displayName}"?`;
-    if (!confirm(confirmMsg)) return;
-    
-    setActionInProgress(true);
-    onStatusChange?.({ type: 'info', message: `Removing worktree...` });
-    
+      : `Remove worktree "${worktree.displayName}"?`
+    if (!confirm(confirmMsg)) return
+
+    setActionInProgress(true)
+    onStatusChange?.({ type: 'info', message: `Removing worktree...` })
+
     try {
-      const result = await window.electronAPI.removeWorktree(worktree.path, force);
+      const result = await window.electronAPI.removeWorktree(worktree.path, force)
       if (result.success) {
-        onStatusChange?.({ type: 'success', message: result.message });
-        onClearFocus?.();
-        await onRefresh?.();
+        onStatusChange?.({ type: 'success', message: result.message })
+        onClearFocus?.()
+        await onRefresh?.()
       } else {
         // If it failed due to uncommitted changes, offer to force
         if (result.message.includes('uncommitted changes') && !force) {
-          setActionInProgress(false);
+          setActionInProgress(false)
           if (confirm(`${result.message}\n\nDo you want to force remove and discard changes?`)) {
-            await handleRemove(true);
+            await handleRemove(true)
           }
         } else {
-          onStatusChange?.({ type: 'error', message: result.message });
+          onStatusChange?.({ type: 'error', message: result.message })
         }
       }
     } catch (error) {
-      onStatusChange?.({ type: 'error', message: (error as Error).message });
+      onStatusChange?.({ type: 'error', message: (error as Error).message })
     } finally {
-      setActionInProgress(false);
+      setActionInProgress(false)
     }
-  };
+  }
 
   // Special rendering for Working Folder
   if (isWorkingFolder) {
@@ -3806,8 +3967,7 @@ function WorktreeDetailPanel({ worktree, currentBranch, switching, onStatusChang
                   {(worktree.additions > 0 || worktree.deletions > 0) && (
                     <>
                       {' · '}
-                      <span className="diff-additions">+{worktree.additions}</span>
-                      {' '}
+                      <span className="diff-additions">+{worktree.additions}</span>{' '}
                       <span className="diff-deletions">-{worktree.deletions}</span>
                     </>
                   )}
@@ -3818,24 +3978,21 @@ function WorktreeDetailPanel({ worktree, currentBranch, switching, onStatusChang
             </span>
           </div>
         </div>
-        
+
         <div className="working-folder-explainer">
           <p>
-            This is your main working directory. You're already using worktrees—each worktree 
-            is just another folder where you can work on a different branch simultaneously.
+            This is your main working directory. You're already using worktrees—each worktree is just another folder
+            where you can work on a different branch simultaneously.
           </p>
         </div>
-        
+
         <div className="detail-actions worktree-actions">
-          <button 
-            className="btn btn-primary"
-            onClick={handleOpenInFinder}
-          >
+          <button className="btn btn-primary" onClick={handleOpenInFinder}>
             Open in Finder
           </button>
         </div>
       </div>
-    );
+    )
   }
 
   return (
@@ -3855,9 +4012,7 @@ function WorktreeDetailPanel({ worktree, currentBranch, switching, onStatusChang
         )}
         <div className="detail-meta-item">
           <span className="meta-label">Status</span>
-          <span className="meta-value">
-            {isCurrent ? 'Current' : 'Not checked out'}
-          </span>
+          <span className="meta-value">{isCurrent ? 'Current' : 'Not checked out'}</span>
         </div>
         <div className="detail-meta-item">
           <span className="meta-label">Changes</span>
@@ -3868,8 +4023,7 @@ function WorktreeDetailPanel({ worktree, currentBranch, switching, onStatusChang
                 {(worktree.additions > 0 || worktree.deletions > 0) && (
                   <>
                     {' · '}
-                    <span className="diff-additions">+{worktree.additions}</span>
-                    {' '}
+                    <span className="diff-additions">+{worktree.additions}</span>{' '}
                     <span className="diff-deletions">-{worktree.deletions}</span>
                   </>
                 )}
@@ -3880,11 +4034,11 @@ function WorktreeDetailPanel({ worktree, currentBranch, switching, onStatusChang
           </span>
         </div>
       </div>
-      
+
       {/* Actions - matching stash panel layout */}
       <div className="detail-actions worktree-actions">
         {!isCurrent && worktree.branch && onCheckoutWorktree && (
-          <button 
+          <button
             className="btn btn-primary"
             onClick={() => onCheckoutWorktree(worktree)}
             disabled={actionInProgress || switching}
@@ -3892,7 +4046,7 @@ function WorktreeDetailPanel({ worktree, currentBranch, switching, onStatusChang
             {switching ? 'Checking out...' : 'Checkout'}
           </button>
         )}
-        <button 
+        <button
           className={`btn ${isCurrent || !worktree.branch ? 'btn-primary' : 'btn-secondary'}`}
           onClick={handleApply}
           disabled={actionInProgress || !hasChanges}
@@ -3900,7 +4054,7 @@ function WorktreeDetailPanel({ worktree, currentBranch, switching, onStatusChang
         >
           Apply
         </button>
-        <button 
+        <button
           className="btn btn-secondary"
           onClick={handleCreateBranch}
           disabled={actionInProgress || !hasChanges}
@@ -3908,25 +4062,17 @@ function WorktreeDetailPanel({ worktree, currentBranch, switching, onStatusChang
         >
           Create Branch
         </button>
-        <button 
-          className="btn btn-secondary"
-          onClick={handleOpenInFinder}
-          disabled={actionInProgress}
-        >
+        <button className="btn btn-secondary" onClick={handleOpenInFinder} disabled={actionInProgress}>
           Open in Finder
         </button>
         {!isCurrent && (
-          <button 
-            className="btn btn-secondary"
-            onClick={() => handleRemove(false)}
-            disabled={actionInProgress}
-          >
+          <button className="btn btn-secondary" onClick={() => handleRemove(false)} disabled={actionInProgress}>
             Remove
           </button>
         )}
       </div>
     </div>
-  );
+  )
 }
 
 // ========================================
@@ -3934,152 +4080,168 @@ function WorktreeDetailPanel({ worktree, currentBranch, switching, onStatusChang
 // ========================================
 
 interface StashDetailPanelProps {
-  stash: StashEntry;
-  formatRelativeTime: (date: string) => string;
-  onStatusChange?: (status: StatusMessage | null) => void;
-  onRefresh?: () => Promise<void>;
-  onClearFocus?: () => void;
+  stash: StashEntry
+  formatRelativeTime: (date: string) => string
+  onStatusChange?: (status: StatusMessage | null) => void
+  onRefresh?: () => Promise<void>
+  onClearFocus?: () => void
 }
 
-function StashDetailPanel({ stash, formatRelativeTime, onStatusChange, onRefresh, onClearFocus }: StashDetailPanelProps) {
-  const [files, setFiles] = useState<StashFile[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedFile, setSelectedFile] = useState<string | null>(null);
-  const [fileDiff, setFileDiff] = useState<string | null>(null);
-  const [loadingDiff, setLoadingDiff] = useState(false);
-  const [actionInProgress, setActionInProgress] = useState(false);
-  const [showBranchModal, setShowBranchModal] = useState(false);
-  const [branchName, setBranchName] = useState('');
+function StashDetailPanel({
+  stash,
+  formatRelativeTime,
+  onStatusChange,
+  onRefresh,
+  onClearFocus,
+}: StashDetailPanelProps) {
+  const [files, setFiles] = useState<StashFile[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selectedFile, setSelectedFile] = useState<string | null>(null)
+  const [fileDiff, setFileDiff] = useState<string | null>(null)
+  const [loadingDiff, setLoadingDiff] = useState(false)
+  const [actionInProgress, setActionInProgress] = useState(false)
+  const [showBranchModal, setShowBranchModal] = useState(false)
+  const [branchName, setBranchName] = useState('')
 
   // Handle Apply stash
   const handleApply = async () => {
-    setActionInProgress(true);
-    onStatusChange?.({ type: 'info', message: `Applying stash@{${stash.index}}...` });
-    
+    setActionInProgress(true)
+    onStatusChange?.({ type: 'info', message: `Applying stash@{${stash.index}}...` })
+
     try {
-      const result = await window.electronAPI.applyStash(stash.index);
+      const result = await window.electronAPI.applyStash(stash.index)
       if (result.success) {
-        onStatusChange?.({ type: 'success', message: result.message });
-        await onRefresh?.();
+        onStatusChange?.({ type: 'success', message: result.message })
+        await onRefresh?.()
       } else {
-        onStatusChange?.({ type: 'error', message: result.message });
+        onStatusChange?.({ type: 'error', message: result.message })
       }
     } catch (error) {
-      onStatusChange?.({ type: 'error', message: (error as Error).message });
+      onStatusChange?.({ type: 'error', message: (error as Error).message })
     } finally {
-      setActionInProgress(false);
+      setActionInProgress(false)
     }
-  };
+  }
 
   // Handle Drop stash
   const handleDrop = async () => {
-    if (!confirm(`Drop stash@{${stash.index}}? This cannot be undone.`)) return;
-    
-    setActionInProgress(true);
-    onStatusChange?.({ type: 'info', message: `Dropping stash@{${stash.index}}...` });
-    
+    if (!confirm(`Drop stash@{${stash.index}}? This cannot be undone.`)) return
+
+    setActionInProgress(true)
+    onStatusChange?.({ type: 'info', message: `Dropping stash@{${stash.index}}...` })
+
     try {
-      const result = await window.electronAPI.dropStash(stash.index);
+      const result = await window.electronAPI.dropStash(stash.index)
       if (result.success) {
-        onStatusChange?.({ type: 'success', message: result.message });
-        onClearFocus?.();
-        await onRefresh?.();
+        onStatusChange?.({ type: 'success', message: result.message })
+        onClearFocus?.()
+        await onRefresh?.()
       } else {
-        onStatusChange?.({ type: 'error', message: result.message });
+        onStatusChange?.({ type: 'error', message: result.message })
       }
     } catch (error) {
-      onStatusChange?.({ type: 'error', message: (error as Error).message });
+      onStatusChange?.({ type: 'error', message: (error as Error).message })
     } finally {
-      setActionInProgress(false);
+      setActionInProgress(false)
     }
-  };
+  }
 
   // Handle Create branch from stash
   const handleCreateBranch = async () => {
-    if (!branchName.trim()) return;
-    
-    setActionInProgress(true);
-    onStatusChange?.({ type: 'info', message: `Creating branch '${branchName}' from stash...` });
-    
+    if (!branchName.trim()) return
+
+    setActionInProgress(true)
+    onStatusChange?.({ type: 'info', message: `Creating branch '${branchName}' from stash...` })
+
     try {
-      const result = await window.electronAPI.stashToBranch(stash.index, branchName.trim());
+      const result = await window.electronAPI.stashToBranch(stash.index, branchName.trim())
       if (result.success) {
-        onStatusChange?.({ type: 'success', message: result.message });
-        setShowBranchModal(false);
-        setBranchName('');
-        onClearFocus?.();
-        await onRefresh?.();
+        onStatusChange?.({ type: 'success', message: result.message })
+        setShowBranchModal(false)
+        setBranchName('')
+        onClearFocus?.()
+        await onRefresh?.()
       } else {
-        onStatusChange?.({ type: 'error', message: result.message });
+        onStatusChange?.({ type: 'error', message: result.message })
       }
     } catch (error) {
-      onStatusChange?.({ type: 'error', message: (error as Error).message });
+      onStatusChange?.({ type: 'error', message: (error as Error).message })
     } finally {
-      setActionInProgress(false);
+      setActionInProgress(false)
     }
-  };
+  }
 
   // Load stash files
   useEffect(() => {
     const loadFiles = async () => {
-      setLoading(true);
+      setLoading(true)
       try {
-        const stashFiles = await window.electronAPI.getStashFiles(stash.index);
-        setFiles(stashFiles);
+        const stashFiles = await window.electronAPI.getStashFiles(stash.index)
+        setFiles(stashFiles)
       } catch (error) {
-        console.error('Error loading stash files:', error);
-        setFiles([]);
+        console.error('Error loading stash files:', error)
+        setFiles([])
       } finally {
-        setLoading(false);
+        setLoading(false)
       }
-    };
+    }
 
-    loadFiles();
-    setSelectedFile(null);
-    setFileDiff(null);
-  }, [stash.index]);
+    loadFiles()
+    setSelectedFile(null)
+    setFileDiff(null)
+  }, [stash.index])
 
   // Load file diff when selected
   useEffect(() => {
     if (!selectedFile) {
-      setFileDiff(null);
-      return;
+      setFileDiff(null)
+      return
     }
 
     const loadDiff = async () => {
-      setLoadingDiff(true);
+      setLoadingDiff(true)
       try {
-        const diff = await window.electronAPI.getStashFileDiff(stash.index, selectedFile);
-        setFileDiff(diff);
+        const diff = await window.electronAPI.getStashFileDiff(stash.index, selectedFile)
+        setFileDiff(diff)
       } catch (_error) {
-        setFileDiff(null);
+        setFileDiff(null)
       } finally {
-        setLoadingDiff(false);
+        setLoadingDiff(false)
       }
-    };
+    }
 
-    loadDiff();
-  }, [stash.index, selectedFile]);
+    loadDiff()
+  }, [stash.index, selectedFile])
 
   const getStatusIcon = (status: StashFile['status']) => {
     switch (status) {
-      case 'added': return 'A';
-      case 'modified': return 'M';
-      case 'deleted': return 'D';
-      case 'renamed': return 'R';
-      default: return '?';
+      case 'added':
+        return 'A'
+      case 'modified':
+        return 'M'
+      case 'deleted':
+        return 'D'
+      case 'renamed':
+        return 'R'
+      default:
+        return '?'
     }
-  };
+  }
 
   const getStatusClass = (status: StashFile['status']) => {
     switch (status) {
-      case 'added': return 'status-added';
-      case 'modified': return 'status-modified';
-      case 'deleted': return 'status-deleted';
-      case 'renamed': return 'status-renamed';
-      default: return '';
+      case 'added':
+        return 'status-added'
+      case 'modified':
+        return 'status-modified'
+      case 'deleted':
+        return 'status-deleted'
+      case 'renamed':
+        return 'status-renamed'
+      default:
+        return ''
     }
-  };
+  }
 
   return (
     <div className="stash-detail-panel">
@@ -4107,15 +4269,15 @@ function StashDetailPanel({ stash, formatRelativeTime, onStatusChange, onRefresh
         ) : (
           <ul className="stash-files-list">
             {files.map((file) => (
-              <li 
+              <li
                 key={file.path}
                 className={`stash-file-item ${getStatusClass(file.status)} ${selectedFile === file.path ? 'selected' : ''}`}
                 onClick={() => setSelectedFile(file.path)}
               >
-                <span className={`stash-file-status ${getStatusClass(file.status)}`}>
-                  {getStatusIcon(file.status)}
+                <span className={`stash-file-status ${getStatusClass(file.status)}`}>{getStatusIcon(file.status)}</span>
+                <span className="stash-file-path" title={file.path}>
+                  {file.path}
                 </span>
-                <span className="stash-file-path" title={file.path}>{file.path}</span>
                 <span className="stash-file-stats">
                   <span className="diff-additions">+{file.additions}</span>
                   <span className="diff-deletions">-{file.deletions}</span>
@@ -4146,25 +4308,13 @@ function StashDetailPanel({ stash, formatRelativeTime, onStatusChange, onRefresh
 
       {/* Action Buttons */}
       <div className="stash-actions">
-        <button 
-          className="btn btn-primary"
-          onClick={handleApply}
-          disabled={actionInProgress}
-        >
+        <button className="btn btn-primary" onClick={handleApply} disabled={actionInProgress}>
           Apply
         </button>
-        <button 
-          className="btn btn-secondary"
-          onClick={() => setShowBranchModal(true)}
-          disabled={actionInProgress}
-        >
+        <button className="btn btn-secondary" onClick={() => setShowBranchModal(true)} disabled={actionInProgress}>
           Create Branch
         </button>
-        <button 
-          className="btn btn-danger"
-          onClick={handleDrop}
-          disabled={actionInProgress}
-        >
+        <button className="btn btn-danger" onClick={handleDrop} disabled={actionInProgress}>
           Drop
         </button>
       </div>
@@ -4175,7 +4325,9 @@ function StashDetailPanel({ stash, formatRelativeTime, onStatusChange, onRefresh
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h3 className="modal-title">Create Branch from Stash</h3>
-              <button className="modal-close" onClick={() => setShowBranchModal(false)}>×</button>
+              <button className="modal-close" onClick={() => setShowBranchModal(false)}>
+                ×
+              </button>
             </div>
             <div className="modal-body">
               <label className="modal-label">
@@ -4189,25 +4341,26 @@ function StashDetailPanel({ stash, formatRelativeTime, onStatusChange, onRefresh
                   autoFocus
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && branchName.trim()) {
-                      handleCreateBranch();
+                      handleCreateBranch()
                     }
                   }}
                 />
               </label>
               <p className="modal-hint">
-                This will create a new branch from the commit where this stash was created, apply the stashed changes, and remove the stash.
+                This will create a new branch from the commit where this stash was created, apply the stashed changes,
+                and remove the stash.
               </p>
             </div>
             <div className="modal-footer">
-              <button 
-                className="btn btn-secondary" 
+              <button
+                className="btn btn-secondary"
                 onClick={() => setShowBranchModal(false)}
                 disabled={actionInProgress}
               >
                 Cancel
               </button>
-              <button 
-                className="btn btn-primary" 
+              <button
+                className="btn btn-primary"
                 onClick={handleCreateBranch}
                 disabled={actionInProgress || !branchName.trim()}
               >
@@ -4218,5 +4371,5 @@ function StashDetailPanel({ stash, formatRelativeTime, onStatusChange, onRefresh
         </div>
       )}
     </div>
-  );
+  )
 }

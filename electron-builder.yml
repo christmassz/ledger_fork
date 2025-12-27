@@ -37,7 +37,7 @@ mac:
   extendInfo:
     - NSDocumentsFolderUsageDescription: Ledger needs access to read git repositories.
     - NSDownloadsFolderUsageDescription: Ledger needs access to read git repositories.
-  notarize: false  # Set to true for distribution builds
+  notarize: true
 dmg:
   artifactName: ${productName}-${version}-${arch}.${ext}
   title: ${productName}
