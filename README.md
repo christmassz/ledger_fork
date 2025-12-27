@@ -13,13 +13,15 @@ Version control is the heart of software development. The core ledger concept be
 
 **[⬇️ Download Ledger for Mac (Apple Silicon)](https://github.com/peterjthomson/ledger/releases/download/v0.1.0/Ledger-0.1.0-arm64.dmg)**
 
-> **First launch:** The app is unsigned while in early development. If you see a warning saying it is "damaged and can't be opened" then right-click the app and open, then repeat the same right-right and open again. Or on the command line:
+> **First launch:** The app is unsigned while in early development so you mat see a warning saying it is "damaged and can't be opened" then right-click the app and open, then repeat the same right-right and open again. Or on the command line:
 > ```bash
 > xattr -cr ~/Downloads/Ledger-0.1.0-arm64.dmg
 > ```
 > Then open the DMG and drag Ledger to Applications.
 
 ## Features
+
+<img width="1269" height="863" alt="Screenshot 2025-12-26 at 3 43 10 pm" src="https://github.com/user-attachments/assets/45ba7306-fc15-4bf5-ab73-f0fc5ef2fe2f" />
 
 ### 🔀 Pull Request Integration
 - View open PRs from GitHub (via `gh` CLI)
@@ -49,6 +51,8 @@ Version control is the heart of software development. The core ledger concept be
 - View, apply, and pop stashes
 - Preview stash contents
 - Convert stash to branch
+
+<img width="1728" height="968" alt="Screenshot 2025-12-26 at 5 58 51 pm" src="https://github.com/user-attachments/assets/8814646e-66fe-4773-b130-e25257072710" />
 
 ## Requirements
 
