@@ -413,9 +413,9 @@ app.whenReady().then(() => {
     }
   })
 
-  ipcMain.handle('commit-changes', async (_, message: string, description?: string) => {
+  ipcMain.handle('commit-changes', async (_, message: string, description?: string, force?: boolean) => {
     try {
-      return await commitChanges(message, description)
+      return await commitChanges(message, description, force)
     } catch (error) {
       return { success: false, message: (error as Error).message }
     }

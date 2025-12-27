@@ -63,7 +63,8 @@ const electronAPI = {
   unstageAll: () => ipcRenderer.invoke('unstage-all'),
   discardFileChanges: (filePath: string) => ipcRenderer.invoke('discard-file-changes', filePath),
   getFileDiff: (filePath: string, staged: boolean) => ipcRenderer.invoke('get-file-diff', filePath, staged),
-  commitChanges: (message: string, description?: string) => ipcRenderer.invoke('commit-changes', message, description),
+  commitChanges: (message: string, description?: string, force?: boolean) =>
+    ipcRenderer.invoke('commit-changes', message, description, force),
   pullCurrentBranch: () => ipcRenderer.invoke('pull-current-branch'),
   // PR Review operations
   getPRDetail: (prNumber: number) => ipcRenderer.invoke('get-pr-detail', prNumber),

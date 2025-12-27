@@ -2653,8 +2653,19 @@ function parseDiff(diffOutput: string, filePath: string): StagingFileDiff {
 }
 
 // Pull current branch from origin (with rebase to avoid merge commits)
-export async function pullCurrentBranch(): Promise<{ success: boolean; message: string; hadConflicts?: boolean }> {
+// Pull current branch from origin (with rebase to avoid merge commits)
+// Ledger Opinion: Auto-stashes uncommitted changes, pulls, then restores them
+// Git is overly cautious - it refuses to pull with ANY uncommitted changes.
+// We're smarter: stash, pull, unstash. Only fail on real conflicts.
+export async function pullCurrentBranch(): Promise<{
+  success: boolean
+  message: string
+  hadConflicts?: boolean
+  autoStashed?: boolean
+}> {
   if (!git) throw new Error('No repository selected')
+
+  let didStash = false
 
   try {
     const currentBranch = (await git.branchLocal()).current
@@ -2666,21 +2677,71 @@ export async function pullCurrentBranch(): Promise<{ success: boolean; message: 
     await git.fetch('origin', currentBranch)
 
     // Check if there are remote changes to pull
-    try {
-      const status = await git.status()
-      if (status.behind === 0) {
-        return { success: true, message: 'Already up to date' }
-      }
-    } catch {
-      // If status fails (e.g., no tracking branch), continue with pull attempt
+    const statusBefore = await git.status()
+    if (statusBefore.behind === 0) {
+      return { success: true, message: 'Already up to date' }
     }
 
-    // Pull with rebase to avoid merge commits
+    // Check if we have uncommitted changes
+    const hasUncommittedChanges =
+      statusBefore.modified.length > 0 ||
+      statusBefore.not_added.length > 0 ||
+      statusBefore.created.length > 0 ||
+      statusBefore.deleted.length > 0 ||
+      statusBefore.staged.length > 0
+
+    // Auto-stash if we have uncommitted changes
+    if (hasUncommittedChanges) {
+      await git.raw(['stash', 'push', '--include-untracked', '-m', 'ledger-auto-stash-for-pull'])
+      didStash = true
+    }
+
+    // Pull with rebase
     await git.pull('origin', currentBranch, ['--rebase'])
 
-    return { success: true, message: `Pulled latest changes from ${currentBranch}` }
+    // Restore stashed changes
+    if (didStash) {
+      try {
+        await git.raw(['stash', 'pop'])
+        return {
+          success: true,
+          message: `Pulled ${statusBefore.behind} commit${statusBefore.behind > 1 ? 's' : ''} and restored your uncommitted changes`,
+          autoStashed: true,
+        }
+      } catch (stashError) {
+        const stashMsg = (stashError as Error).message
+        if (stashMsg.includes('conflict') || stashMsg.includes('CONFLICT')) {
+          return {
+            success: true,
+            message: 'Pulled successfully, but restoring your changes caused conflicts. Please resolve them.',
+            hadConflicts: true,
+            autoStashed: true,
+          }
+        }
+        // Stash pop failed for other reason - leave it in stash list
+        return {
+          success: true,
+          message: 'Pulled successfully. Your changes are in the stash (run git stash pop to restore).',
+          autoStashed: true,
+        }
+      }
+    }
+
+    return {
+      success: true,
+      message: `Pulled ${statusBefore.behind} commit${statusBefore.behind > 1 ? 's' : ''} from origin`,
+    }
   } catch (error) {
     const errorMessage = (error as Error).message
+
+    // If we stashed but pull failed, try to restore
+    if (didStash) {
+      try {
+        await git.raw(['stash', 'pop'])
+      } catch {
+        // Stash restore failed - it's still in stash list, user can recover
+      }
+    }
 
     // Check for merge/rebase conflicts
     if (
@@ -2689,32 +2750,20 @@ export async function pullCurrentBranch(): Promise<{ success: boolean; message: 
       errorMessage.includes('Merge conflict') ||
       errorMessage.includes('could not apply')
     ) {
-      // Abort the rebase to get back to a clean state
       try {
         await git.rebase(['--abort'])
       } catch {
-        // Ignore abort errors
+        /* ignore */
       }
       return {
         success: false,
-        message: 'Pull failed due to conflicts. Please pull manually and resolve conflicts before committing.',
+        message: 'Pull failed due to conflicts with incoming changes. Please resolve manually.',
         hadConflicts: true,
       }
     }
 
-    // Check for uncommitted changes that would be overwritten
-    if (errorMessage.includes('overwritten') || errorMessage.includes('uncommitted')) {
-      return {
-        success: false,
-        message:
-          'Cannot pull with uncommitted changes that would be overwritten. Please stash or commit your changes first.',
-        hadConflicts: false,
-      }
-    }
-
-    // No tracking branch
+    // No tracking branch - this is fine for new branches
     if (errorMessage.includes('no tracking') || errorMessage.includes("doesn't track")) {
-      // This is fine - new branch with no remote yet
       return { success: true, message: 'No remote tracking branch (will be created on push)' }
     }
 
@@ -2723,10 +2772,13 @@ export async function pullCurrentBranch(): Promise<{ success: boolean; message: 
 }
 
 // Commit staged changes
+// Ledger Opinion: Check if origin has moved ahead before committing.
+// If behind, return behindCount so UI can prompt user to pull first or commit ahead.
 export async function commitChanges(
   message: string,
-  description?: string
-): Promise<{ success: boolean; message: string }> {
+  description?: string,
+  force: boolean = false
+): Promise<{ success: boolean; message: string; behindCount?: number }> {
   if (!git) throw new Error('No repository selected')
 
   try {
@@ -2734,6 +2786,23 @@ export async function commitChanges(
     const status = await git.status()
     if (status.staged.length === 0) {
       return { success: false, message: 'No staged changes to commit' }
+    }
+
+    // Check if we're behind origin (unless forcing)
+    if (!force && status.current) {
+      try {
+        await git.fetch('origin', status.current)
+        const freshStatus = await git.status()
+        if (freshStatus.behind > 0) {
+          return {
+            success: false,
+            message: `Origin has ${freshStatus.behind} new commit${freshStatus.behind > 1 ? 's' : ''}`,
+            behindCount: freshStatus.behind,
+          }
+        }
+      } catch {
+        // If fetch fails (no remote, no tracking branch), continue with commit
+      }
     }
 
     // Build commit message (summary + optional description)

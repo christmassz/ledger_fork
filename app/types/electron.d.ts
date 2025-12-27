@@ -336,8 +336,17 @@ export interface ElectronAPI {
   unstageAll: () => Promise<{ success: boolean; message: string }>
   discardFileChanges: (filePath: string) => Promise<{ success: boolean; message: string }>
   getFileDiff: (filePath: string, staged: boolean) => Promise<StagingFileDiff | null>
-  commitChanges: (message: string, description?: string) => Promise<{ success: boolean; message: string }>
-  pullCurrentBranch: () => Promise<{ success: boolean; message: string; hadConflicts?: boolean }>
+  commitChanges: (
+    message: string,
+    description?: string,
+    force?: boolean
+  ) => Promise<{ success: boolean; message: string; behindCount?: number }>
+  pullCurrentBranch: () => Promise<{
+    success: boolean
+    message: string
+    hadConflicts?: boolean
+    autoStashed?: boolean
+  }>
   // PR Review operations
   getPRDetail: (prNumber: number) => Promise<PRDetail | null>
   getPRReviewComments: (prNumber: number) => Promise<PRReviewComment[]>

@@ -3111,6 +3111,8 @@ function StagingPanel({ workingStatus, onRefresh, onStatusChange }: StagingPanel
   const [commitMessage, setCommitMessage] = useState('')
   const [commitDescription, setCommitDescription] = useState('')
   const [isCommitting, setIsCommitting] = useState(false)
+  const [behindPrompt, setBehindPrompt] = useState<{ behindCount: number } | null>(null)
+  const [isPulling, setIsPulling] = useState(false)
 
   const stagedFiles = workingStatus.files.filter((f) => f.staged)
   const unstagedFiles = workingStatus.files.filter((f) => !f.staged)
@@ -3181,18 +3183,26 @@ function StagingPanel({ workingStatus, onRefresh, onStatusChange }: StagingPanel
     }
   }
 
-  // Commit changes
-  const handleCommit = async () => {
+  // Commit with optional force to skip behind-check
+  const handleCommit = async (force: boolean = false) => {
     if (!commitMessage.trim() || stagedFiles.length === 0) return
 
     setIsCommitting(true)
     try {
-      const result = await window.electronAPI.commitChanges(commitMessage.trim(), commitDescription.trim() || undefined)
+      const result = await window.electronAPI.commitChanges(
+        commitMessage.trim(),
+        commitDescription.trim() || undefined,
+        force
+      )
       if (result.success) {
         onStatusChange({ type: 'success', message: result.message })
         setCommitMessage('')
         setCommitDescription('')
+        setBehindPrompt(null)
         await onRefresh()
+      } else if (result.behindCount && result.behindCount > 0) {
+        // Origin has moved ahead - prompt user
+        setBehindPrompt({ behindCount: result.behindCount })
       } else {
         onStatusChange({ type: 'error', message: result.message })
       }
@@ -3201,6 +3211,37 @@ function StagingPanel({ workingStatus, onRefresh, onStatusChange }: StagingPanel
     } finally {
       setIsCommitting(false)
     }
+  }
+
+  // Pull then commit
+  const handlePullThenCommit = async () => {
+    setIsPulling(true)
+    onStatusChange({ type: 'info', message: 'Pulling latest changes...' })
+
+    try {
+      const pullResult = await window.electronAPI.pullCurrentBranch()
+      if (pullResult.success) {
+        onStatusChange({ type: 'success', message: pullResult.message })
+        setBehindPrompt(null)
+        await onRefresh()
+        // Now commit with force (we just pulled)
+        await handleCommit(true)
+      } else {
+        onStatusChange({ type: 'error', message: pullResult.message })
+        setBehindPrompt(null)
+      }
+    } catch (error) {
+      onStatusChange({ type: 'error', message: (error as Error).message })
+      setBehindPrompt(null)
+    } finally {
+      setIsPulling(false)
+    }
+  }
+
+  // Commit anyway even though behind
+  const handleCommitAnyway = async () => {
+    setBehindPrompt(null)
+    await handleCommit(true)
   }
 
   // File status helpers
@@ -3397,13 +3438,48 @@ function StagingPanel({ workingStatus, onRefresh, onStatusChange }: StagingPanel
           onChange={(e) => setCommitDescription(e.target.value)}
           rows={3}
         />
-        <button
-          className="btn btn-primary commit-btn"
-          onClick={handleCommit}
-          disabled={!commitMessage.trim() || stagedFiles.length === 0 || isCommitting}
-        >
-          {isCommitting ? 'Committing...' : `Commit ${stagedFiles.length} file${stagedFiles.length !== 1 ? 's' : ''}`}
-        </button>
+        {/* Behind Origin Prompt */}
+        {behindPrompt && (
+          <div className="behind-prompt">
+            <div className="behind-prompt-message">
+              ⚠️ Origin has {behindPrompt.behindCount} new commit
+              {behindPrompt.behindCount > 1 ? 's' : ''}
+            </div>
+            <div className="behind-prompt-actions">
+              <button
+                className="btn btn-primary"
+                onClick={handlePullThenCommit}
+                disabled={isPulling || isCommitting}
+              >
+                {isPulling ? 'Pulling...' : 'Pull & Commit'}
+              </button>
+              <button
+                className="btn btn-secondary"
+                onClick={handleCommitAnyway}
+                disabled={isPulling || isCommitting}
+              >
+                Commit Ahead
+              </button>
+              <button
+                className="btn btn-ghost"
+                onClick={() => setBehindPrompt(null)}
+                disabled={isPulling || isCommitting}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {!behindPrompt && (
+          <button
+            className="btn btn-primary commit-btn"
+            onClick={() => handleCommit()}
+            disabled={!commitMessage.trim() || stagedFiles.length === 0 || isCommitting}
+          >
+            {isCommitting ? 'Committing...' : `Commit ${stagedFiles.length} file${stagedFiles.length !== 1 ? 's' : ''}`}
+          </button>
+        )}
       </div>
     </div>
   )
