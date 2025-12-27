@@ -71,7 +71,7 @@ export default function App() {
   const [newBranchName, setNewBranchName] = useState('')
   const [creatingBranch, setCreatingBranch] = useState(false)
   const [githubUrl, setGithubUrl] = useState<string | null>(null)
-  const { setTitle } = useWindowContext()
+  const { setTitle, setTitlebarActions } = useWindowContext()
 
   // View mode state
   const [viewMode, setViewMode] = useState<ViewMode>('radar')
@@ -128,6 +128,7 @@ export default function App() {
   const [sidebarWidth, setSidebarWidth] = useState(220)
   const [detailWidth, setDetailWidth] = useState(400)
   const [sidebarVisible, setSidebarVisible] = useState(true)
+  const [mainVisible, setMainVisible] = useState(true)
   const [detailVisible, setDetailVisible] = useState(true)
   const [isResizingSidebar, setIsResizingSidebar] = useState(false)
   const [isResizingDetail, setIsResizingDetail] = useState(false)
@@ -208,6 +209,51 @@ export default function App() {
       document.body.style.userSelect = ''
     }
   }, [isResizingSidebar, isResizingDetail])
+
+  // Titlebar actions for Focus mode panel toggles
+  useEffect(() => {
+    if (repoPath && viewMode === 'focus') {
+      setTitlebarActions(
+        <>
+          {/* Left sidebar toggle */}
+          <button
+            className="panel-toggle-btn"
+            onClick={() => setSidebarVisible(!sidebarVisible)}
+            title={sidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <rect x="0.5" y="0.5" width="15" height="15" rx="1.5" stroke="currentColor" strokeWidth="1"/>
+              <rect x="1" y="1" width="4" height="14" fill={sidebarVisible ? 'currentColor' : 'none'}/>
+            </svg>
+          </button>
+          {/* Main panel toggle */}
+          <button
+            className="panel-toggle-btn"
+            onClick={() => setMainVisible(!mainVisible)}
+            title={mainVisible ? 'Hide main panel' : 'Show main panel'}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <rect x="0.5" y="0.5" width="15" height="15" rx="1.5" stroke="currentColor" strokeWidth="1"/>
+              <rect x="5" y="1" width="6" height="14" fill={mainVisible ? 'currentColor' : 'none'}/>
+            </svg>
+          </button>
+          {/* Right detail panel toggle */}
+          <button
+            className="panel-toggle-btn"
+            onClick={() => setDetailVisible(!detailVisible)}
+            title={detailVisible ? 'Hide detail panel' : 'Show detail panel'}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <rect x="0.5" y="0.5" width="15" height="15" rx="1.5" stroke="currentColor" strokeWidth="1"/>
+              <rect x="11" y="1" width="4" height="14" fill={detailVisible ? 'currentColor' : 'none'}/>
+            </svg>
+          </button>
+        </>
+      )
+    } else {
+      setTitlebarActions(null)
+    }
+  }, [repoPath, viewMode, sidebarVisible, mainVisible, detailVisible, setTitlebarActions])
 
   // Column drag and drop handlers for Radar view
   const handleColumnDragStart = useCallback((e: React.DragEvent, columnId: string) => {
@@ -1819,17 +1865,6 @@ export default function App() {
       {/* Focus Mode Layout */}
       {repoPath && !error && viewMode === 'focus' && (
         <main className="focus-mode-layout">
-          {/* Panel Toggle for Sidebar */}
-          {!sidebarVisible && (
-            <button
-              className="panel-toggle panel-toggle-left"
-              onClick={() => setSidebarVisible(true)}
-              title="Show sidebar"
-            >
-              <span className="panel-toggle-icon">▸</span>
-            </button>
-          )}
-
           {/* Sidebar */}
           {sidebarVisible && (
             <aside className="focus-sidebar" style={{ width: sidebarWidth, minWidth: sidebarWidth }}>
@@ -2201,10 +2236,6 @@ export default function App() {
                   </ul>
                 )}
               </div>
-              {/* Sidebar toggle button */}
-              <button className="panel-collapse-btn" onClick={() => setSidebarVisible(false)} title="Hide sidebar">
-                <span className="panel-collapse-icon">◀</span>
-              </button>
             </aside>
           )}
 
@@ -2217,23 +2248,25 @@ export default function App() {
           )}
 
           {/* Main Content: Git Graph + Commit List */}
-          <div className="focus-main">
-            <div className="focus-main-header">
-              <h2>
-                <span className="column-icon">◉</span>
-                History
-                {currentBranch && <code className="commit-hash branch-badge">{currentBranch}</code>}
-              </h2>
+          {mainVisible && (
+            <div className="focus-main">
+              <div className="focus-main-header">
+                <h2>
+                  <span className="column-icon">◉</span>
+                  History
+                  {currentBranch && <code className="commit-hash branch-badge">{currentBranch}</code>}
+                </h2>
+              </div>
+              <div className="git-graph-container">
+                <GitGraph
+                  commits={graphCommits}
+                  selectedCommit={selectedCommit}
+                  onSelectCommit={handleSelectCommit}
+                  formatRelativeTime={formatRelativeTime}
+                />
+              </div>
             </div>
-            <div className="git-graph-container">
-              <GitGraph
-                commits={graphCommits}
-                selectedCommit={selectedCommit}
-                onSelectCommit={handleSelectCommit}
-                formatRelativeTime={formatRelativeTime}
-              />
-            </div>
-          </div>
+          )}
 
           {/* Detail Panel Resize Handle */}
           {detailVisible && (
@@ -2281,26 +2314,7 @@ export default function App() {
               ) : (
                 <div className="detail-error">Could not load diff</div>
               )}
-              {/* Detail panel collapse button */}
-              <button
-                className="panel-collapse-btn panel-collapse-btn-right"
-                onClick={() => setDetailVisible(false)}
-                title="Hide detail panel"
-              >
-                <span className="panel-collapse-icon">▶</span>
-              </button>
             </aside>
-          )}
-
-          {/* Panel Toggle for Detail */}
-          {!detailVisible && (
-            <button
-              className="panel-toggle panel-toggle-right"
-              onClick={() => setDetailVisible(true)}
-              title="Show detail panel"
-            >
-              <span className="panel-toggle-icon">◂</span>
-            </button>
           )}
         </main>
       )}

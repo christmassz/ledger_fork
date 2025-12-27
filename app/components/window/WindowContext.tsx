@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { Titlebar, TitlebarProps } from './Titlebar'
 import { TitlebarContextProvider } from './TitlebarContext'
 import type { ChannelReturn } from '@/lib/conveyor/schemas'
@@ -10,6 +10,8 @@ interface WindowContextProps {
   titlebar: TitlebarProps
   readonly window: WindowInitProps | undefined
   setTitle: (title: string) => void
+  titlebarActions: ReactNode
+  setTitlebarActions: (actions: ReactNode) => void
 }
 
 const WindowContext = createContext<WindowContextProps | undefined>(undefined)
@@ -28,6 +30,7 @@ export const WindowContextProvider = ({
 }) => {
   const [initProps, setInitProps] = useState<WindowInitProps>()
   const [title, setTitle] = useState(initialTitlebar.title)
+  const [titlebarActions, setTitlebarActions] = useState<ReactNode>(null)
   const { windowInit } = useConveyor('window')
 
   useEffect(() => {
@@ -42,7 +45,7 @@ export const WindowContextProvider = ({
   const titlebar = { ...initialTitlebar, title }
 
   return (
-    <WindowContext.Provider value={{ titlebar, window: windowProps, setTitle }}>
+    <WindowContext.Provider value={{ titlebar, window: windowProps, setTitle, titlebarActions, setTitlebarActions }}>
       <TitlebarContextProvider>
         <Titlebar />
       </TitlebarContextProvider>

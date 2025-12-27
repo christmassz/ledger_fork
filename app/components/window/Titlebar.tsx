@@ -12,6 +12,7 @@ const SVG_PATHS = {
 
 export const Titlebar = () => {
   const { title, icon, titleCentered, menuItems } = useWindowContext().titlebar
+  const { titlebarActions } = useWindowContext()
   const { menusVisible, setMenusVisible, closeActiveMenu } = useTitlebarContext()
   const { window: wcontext } = useWindowContext()
 
@@ -43,6 +44,11 @@ export const Titlebar = () => {
         {title}
       </div>
       {menusVisible && <TitlebarMenu />}
+      {titlebarActions && (
+        <div className="window-titlebar-actions">
+          {titlebarActions}
+        </div>
+      )}
       {wcontext?.platform === 'win32' && <TitlebarControls />}
     </div>
   )
