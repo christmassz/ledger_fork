@@ -222,8 +222,8 @@ export default function App() {
             title={sidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <rect x="0.5" y="0.5" width="15" height="15" rx="1.5" stroke="currentColor" strokeWidth="1"/>
-              <rect x="1" y="1" width="4" height="14" fill={sidebarVisible ? 'currentColor' : 'none'}/>
+              <rect x="0.5" y="0.5" width="15" height="15" rx="1.5" stroke="currentColor" strokeWidth="1" />
+              <rect x="1" y="1" width="4" height="14" fill={sidebarVisible ? 'currentColor' : 'none'} />
             </svg>
           </button>
           {/* Main panel toggle */}
@@ -233,8 +233,8 @@ export default function App() {
             title={mainVisible ? 'Hide main panel' : 'Show main panel'}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <rect x="0.5" y="0.5" width="15" height="15" rx="1.5" stroke="currentColor" strokeWidth="1"/>
-              <rect x="5" y="1" width="6" height="14" fill={mainVisible ? 'currentColor' : 'none'}/>
+              <rect x="0.5" y="0.5" width="15" height="15" rx="1.5" stroke="currentColor" strokeWidth="1" />
+              <rect x="5" y="1" width="6" height="14" fill={mainVisible ? 'currentColor' : 'none'} />
             </svg>
           </button>
           {/* Right detail panel toggle */}
@@ -244,8 +244,8 @@ export default function App() {
             title={detailVisible ? 'Hide detail panel' : 'Show detail panel'}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <rect x="0.5" y="0.5" width="15" height="15" rx="1.5" stroke="currentColor" strokeWidth="1"/>
-              <rect x="11" y="1" width="4" height="14" fill={detailVisible ? 'currentColor' : 'none'}/>
+              <rect x="0.5" y="0.5" width="15" height="15" rx="1.5" stroke="currentColor" strokeWidth="1" />
+              <rect x="11" y="1" width="4" height="14" fill={detailVisible ? 'currentColor' : 'none'} />
             </svg>
           </button>
         </>
@@ -1278,16 +1278,32 @@ export default function App() {
           )}
           {!repoPath ? (
             <button onClick={selectRepo} className="btn btn-secondary">
-              <svg className="btn-icon-svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M1.5 3.5a1 1 0 0 1 1-1h3.59a1 1 0 0 1 .7.3l1.42 1.4h5.29a1 1 0 0 1 1 1v7.3a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-9z"/>
+              <svg
+                className="btn-icon-svg"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M1.5 3.5a1 1 0 0 1 1-1h3.59a1 1 0 0 1 .7.3l1.42 1.4h5.29a1 1 0 0 1 1 1v7.3a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-9z" />
               </svg>
               Select Repository
             </button>
           ) : (
             <div className="view-toggle">
               <button onClick={selectRepo} className="view-toggle-btn" title="Change Repository">
-                <svg className="view-icon-svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M1.5 3.5a1 1 0 0 1 1-1h3.59a1 1 0 0 1 .7.3l1.42 1.4h5.29a1 1 0 0 1 1 1v7.3a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-9z"/>
+                <svg
+                  className="view-icon-svg"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M1.5 3.5a1 1 0 0 1 1-1h3.59a1 1 0 0 1 .7.3l1.42 1.4h5.29a1 1 0 0 1 1 1v7.3a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-9z" />
                 </svg>
                 <span className="view-label">Change</span>
               </button>
@@ -1320,8 +1336,16 @@ export default function App() {
           <h2>Welcome to Ledger</h2>
           <p>Select a git repository to view your branches, worktrees and pull requests</p>
           <button onClick={selectRepo} className="btn btn-large btn-primary">
-            <svg className="btn-icon-svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M1.5 3.5a1 1 0 0 1 1-1h3.59a1 1 0 0 1 .7.3l1.42 1.4h5.29a1 1 0 0 1 1 1v7.3a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-9z"/>
+            <svg
+              className="btn-icon-svg"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M1.5 3.5a1 1 0 0 1 1-1h3.59a1 1 0 0 1 .7.3l1.42 1.4h5.29a1 1 0 0 1 1 1v7.3a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-9z" />
             </svg>
             Select Repository
           </button>
@@ -2280,7 +2304,12 @@ export default function App() {
           {detailVisible && (
             <aside className="focus-detail" style={{ width: detailWidth, minWidth: detailWidth }}>
               {sidebarFocus?.type === 'uncommitted' && workingStatus ? (
-                <StagingPanel workingStatus={workingStatus} currentBranch={currentBranch} onRefresh={refresh} onStatusChange={setStatus} />
+                <StagingPanel
+                  workingStatus={workingStatus}
+                  currentBranch={currentBranch}
+                  onRefresh={refresh}
+                  onStatusChange={setStatus}
+                />
               ) : sidebarFocus?.type === 'pr' ? (
                 <PRReviewPanel
                   pr={sidebarFocus.data as PullRequest}
@@ -3129,9 +3158,36 @@ function StagingPanel({ workingStatus, currentBranch, onRefresh, onStatusChange 
   const [behindPrompt, setBehindPrompt] = useState<{ behindCount: number } | null>(null)
   const [isPulling, setIsPulling] = useState(false)
   const [pushAfterCommit, setPushAfterCommit] = useState(true)
+  const [fileContextMenu, setFileContextMenu] = useState<{ x: number; y: number; file: UncommittedFile } | null>(null)
+  const fileMenuRef = useRef<HTMLDivElement>(null)
 
   const stagedFiles = workingStatus.files.filter((f) => f.staged)
   const unstagedFiles = workingStatus.files.filter((f) => !f.staged)
+
+  // Close file context menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (fileMenuRef.current && !fileMenuRef.current.contains(e.target as Node)) {
+        setFileContextMenu(null)
+      }
+    }
+
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setFileContextMenu(null)
+      }
+    }
+
+    if (fileContextMenu) {
+      document.addEventListener('mousedown', handleClickOutside)
+      document.addEventListener('keydown', handleEscape)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }, [fileContextMenu])
 
   // Load diff when file is selected
   useEffect(() => {
@@ -3197,6 +3253,27 @@ function StagingPanel({ workingStatus, currentBranch, onRefresh, onStatusChange 
     } else {
       onStatusChange({ type: 'error', message: result.message })
     }
+  }
+
+  // Discard changes in a file
+  const handleDiscardFile = async (file: UncommittedFile) => {
+    setFileContextMenu(null)
+    const result = await window.electronAPI.discardFileChanges(file.path)
+    if (result.success) {
+      onStatusChange({ type: 'success', message: result.message })
+      if (selectedFile?.path === file.path) {
+        setSelectedFile(null)
+      }
+      await onRefresh()
+    } else {
+      onStatusChange({ type: 'error', message: result.message })
+    }
+  }
+
+  // Handle right-click on unstaged file
+  const handleFileContextMenu = (e: React.MouseEvent, file: UncommittedFile) => {
+    e.preventDefault()
+    setFileContextMenu({ x: e.clientX, y: e.clientY, file })
   }
 
   // Commit with optional force to skip behind-check
@@ -3322,47 +3399,6 @@ function StagingPanel({ workingStatus, currentBranch, onRefresh, onStatusChange 
 
       {/* File Lists */}
       <div className="staging-files">
-        {/* Unstaged Section */}
-        <div className="staging-section">
-          <div className="staging-section-header">
-            <span className="staging-section-title">Unstaged</span>
-            <span className="staging-section-count">{unstagedFiles.length}</span>
-            {unstagedFiles.length > 0 && (
-              <button className="staging-action-btn" onClick={handleStageAll} title="Stage all">
-                Stage All ↑
-              </button>
-            )}
-          </div>
-          {unstagedFiles.length > 0 ? (
-            <ul className="staging-file-list">
-              {unstagedFiles.map((file) => (
-                <li
-                  key={file.path}
-                  className={`staging-file-item ${getFileStatusClass(file.status)} ${selectedFile?.path === file.path && !selectedFile.staged ? 'selected' : ''}`}
-                  onClick={() => setSelectedFile(file)}
-                >
-                  <span className="file-status-icon">{getFileStatusIcon(file.status)}</span>
-                  <span className="file-path" title={file.path}>
-                    {file.path}
-                  </span>
-                  <button
-                    className="file-action-btn stage"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleStageFile(file)
-                    }}
-                    title="Stage file"
-                  >
-                    +
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="staging-empty">No unstaged changes</div>
-          )}
-        </div>
-
         {/* Staged Section */}
         <div className="staging-section">
           <div className="staging-section-header">
@@ -3403,7 +3439,67 @@ function StagingPanel({ workingStatus, currentBranch, onRefresh, onStatusChange 
             <div className="staging-empty">No staged changes</div>
           )}
         </div>
+
+        {/* Unstaged Section */}
+        <div className="staging-section">
+          <div className="staging-section-header">
+            <span className="staging-section-title">Unstaged</span>
+            <span className="staging-section-count">{unstagedFiles.length}</span>
+            {unstagedFiles.length > 0 && (
+              <button className="staging-action-btn" onClick={handleStageAll} title="Stage all">
+                Stage All ↑
+              </button>
+            )}
+          </div>
+          {unstagedFiles.length > 0 ? (
+            <ul className="staging-file-list">
+              {unstagedFiles.map((file) => (
+                <li
+                  key={file.path}
+                  className={`staging-file-item ${getFileStatusClass(file.status)} ${selectedFile?.path === file.path && !selectedFile.staged ? 'selected' : ''}`}
+                  onClick={() => setSelectedFile(file)}
+                  onContextMenu={(e) => handleFileContextMenu(e, file)}
+                >
+                  <span className="file-status-icon">{getFileStatusIcon(file.status)}</span>
+                  <span className="file-path" title={file.path}>
+                    {file.path}
+                  </span>
+                  <button
+                    className="file-action-btn stage"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleStageFile(file)
+                    }}
+                    title="Stage file"
+                  >
+                    ✓
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="staging-empty">No unstaged changes</div>
+          )}
+        </div>
       </div>
+
+      {/* File Context Menu */}
+      {fileContextMenu && (
+        <div ref={fileMenuRef} className="context-menu" style={{ left: fileContextMenu.x, top: fileContextMenu.y }}>
+          <button
+            className="context-menu-item"
+            onClick={() => {
+              handleStageFile(fileContextMenu.file)
+              setFileContextMenu(null)
+            }}
+          >
+            Stage
+          </button>
+          <button className="context-menu-item" onClick={() => handleDiscardFile(fileContextMenu.file)}>
+            Discard Changes
+          </button>
+        </div>
+      )}
 
       {/* Diff Preview */}
       {selectedFile && (
@@ -3468,12 +3564,10 @@ function StagingPanel({ workingStatus, currentBranch, onRefresh, onStatusChange 
         />
         <div className="commit-options">
           <label className="commit-option-checkbox">
-            <input
-              type="checkbox"
-              checked={pushAfterCommit}
-              onChange={(e) => setPushAfterCommit(e.target.checked)}
-            />
-            <span>Push to <code>{currentBranch || 'remote'}</code> after commit</span>
+            <input type="checkbox" checked={pushAfterCommit} onChange={(e) => setPushAfterCommit(e.target.checked)} />
+            <span>
+              Push to <code>{currentBranch || 'remote'}</code> after commit
+            </span>
           </label>
         </div>
         {/* Behind Origin Prompt */}
@@ -3484,18 +3578,10 @@ function StagingPanel({ workingStatus, currentBranch, onRefresh, onStatusChange 
               {behindPrompt.behindCount > 1 ? 's' : ''}
             </div>
             <div className="behind-prompt-actions">
-              <button
-                className="btn btn-primary"
-                onClick={handlePullThenCommit}
-                disabled={isPulling || isCommitting}
-              >
+              <button className="btn btn-primary" onClick={handlePullThenCommit} disabled={isPulling || isCommitting}>
                 {isPulling ? 'Pulling...' : 'Pull & Commit'}
               </button>
-              <button
-                className="btn btn-secondary"
-                onClick={handleCommitAnyway}
-                disabled={isPulling || isCommitting}
-              >
+              <button className="btn btn-secondary" onClick={handleCommitAnyway} disabled={isPulling || isCommitting}>
                 Commit Ahead
               </button>
               <button
@@ -3516,12 +3602,12 @@ function StagingPanel({ workingStatus, currentBranch, onRefresh, onStatusChange 
             disabled={!commitMessage.trim() || stagedFiles.length === 0 || isCommitting}
           >
             {isCommitting
-              ? (pushAfterCommit ? 'Committing & Pushing...' : 'Committing...')
-              : (pushAfterCommit
-                  ? `Commit & Push ${stagedFiles.length} file${stagedFiles.length !== 1 ? 's' : ''}`
-                  : `Commit ${stagedFiles.length} file${stagedFiles.length !== 1 ? 's' : ''}`
-                )
-            }
+              ? pushAfterCommit
+                ? 'Committing & Pushing...'
+                : 'Committing...'
+              : pushAfterCommit
+                ? `Commit & Push ${stagedFiles.length} file${stagedFiles.length !== 1 ? 's' : ''}`
+                : `Commit ${stagedFiles.length} file${stagedFiles.length !== 1 ? 's' : ''}`}
           </button>
         )}
       </div>

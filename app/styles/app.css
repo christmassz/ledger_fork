@@ -1872,11 +1872,12 @@ body,
 }
 
 .file-action-btn.stage {
-  color: var(--success);
-  border-color: var(--success);
+  color: var(--text-muted);
+  border-color: var(--border);
 }
 
 .file-action-btn.stage:hover {
+  border-color: var(--success);
   background: var(--success);
   color: white;
 }
