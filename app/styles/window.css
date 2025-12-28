@@ -1,5 +1,6 @@
 :root {
-  color-scheme: dark;
+  /* Shared variables */
+  color-scheme: light;
   --window-icon-height: 16px;
   --window-title-margin: 42px;
   --window-titlebar-height: 40px;
@@ -7,46 +8,49 @@
   --window-scrollbar-width: 12px;
   --window-mac-titlebar-controls-margin: 80px;
   --window-background-transition-duration: 0.3s;
-  --window-c-popup-font-weight: normal;
 
-  --window-c-background: #1c1c1c;
+  /* Light mode colors (default) - Mac Classic gray titlebar */
+  --window-titlebar-font-weight: 500;
+  --window-c-popup-font-weight: 500;
+  --window-c-background: #fff;
   --window-c-titlebar-background: #e1e1e1;
+  --window-c-titlebar-border: #8080801a;
+  --window-c-text: #333333;
+  --window-c-hover: #d4d4d4;
+  --window-c-popup-background: #f6f6f6;
+  --window-c-popup-border: #c8c8c8;
+  --window-c-popup-shadow: hsla(0, 0%, 0%, 0.15);
+  --window-c-separator: #80808033;
+  --window-c-control-hover: #0000001a;
+  --window-c-control-close-hover: #ff5f57;
+  --window-c-control-close-hover-text: #4a0000;
+  --window-c-scrollbar-track: #e8e8e8;
+  --window-c-scrollbar-thumb: #c0c0c0;
+  --window-c-scrollbar-thumb-hover: #a0a0a0;
+  --window-c-text-shadow: transparent;
+}
+
+.dark {
+  /* Dark mode colors */
+  color-scheme: dark;
+  --window-titlebar-font-weight: normal;
+  --window-c-popup-font-weight: normal;
+  --window-c-background: #1c1c1c;
+  --window-c-titlebar-background: #2d2d2d;
   --window-c-titlebar-border: transparent;
-  --window-c-text: #3e2525;
-  --window-c-hover: #2d2d2d;
+  --window-c-text: #e0e0e0;
+  --window-c-hover: #3d3d3d;
   --window-c-popup-background: #282828;
   --window-c-popup-border: #3c3c3c;
   --window-c-popup-shadow: #00000080;
   --window-c-separator: #80808033;
   --window-c-control-hover: #0000003d;
   --window-c-control-close-hover: #c42b1c;
+  --window-c-control-close-hover-text: #fff;
   --window-c-scrollbar-track: #1e1e1ec6;
   --window-c-scrollbar-thumb: #88888863;
   --window-c-scrollbar-thumb-hover: #555;
   --window-c-text-shadow: #000000a8;
-}
-
-:root:not(.dark) {
-  color-scheme: light;
-  --window-titlebar-font-weight: 500;
-  --window-c-popup-font-weight: 500;
-
-  --window-c-background: #fff;
-  --window-c-titlebar-background: #fff;
-  --window-c-titlebar-border: #8080801a;
-  --window-c-text: #521b1bc8;
-  --window-c-hover: #ececec;
-  --window-c-popup-background: #f6f6f6;
-  --window-c-popup-border: #dcdcdc;
-  --window-c-popup-shadow: hsla(0, 0%, 0%, 0.1);
-  --window-c-separator: #80808033;
-  --window-c-control-hover: #0000001a;
-  --window-c-control-close-hover: #ff453b;
-  --window-c-control-close-hover-text: #fff;
-  --window-c-scrollbar-track: #e0e0e0;
-  --window-c-scrollbar-thumb: #b0b0b0;
-  --window-c-scrollbar-thumb-hover: #888888cf;
-  --window-c-text-shadow: transparent;
 }
 
 .window-frame {
@@ -250,10 +254,12 @@
   cursor: pointer;
   transition: background 0.15s ease;
   color: rgba(0, 0, 0, 0.4);
+  -webkit-app-region: no-drag;
+  pointer-events: auto;
 }
 
 .dark .window-titlebar-actions .panel-toggle-btn {
-  color: rgba(0, 0, 0, 0.5);
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .window-titlebar-actions .panel-toggle-btn:hover {
@@ -263,4 +269,9 @@
 .window-titlebar-actions .panel-toggle-btn svg {
   width: 16px;
   height: 16px;
+  pointer-events: none;
+}
+
+.window-titlebar-actions .panel-toggle-btn * {
+  pointer-events: none;
 }

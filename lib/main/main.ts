@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell, nativeTheme } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import fixPath from 'fix-path'
 import { createAppWindow } from './app'
@@ -58,7 +58,17 @@ import {
   getPRFileDiff,
   commentOnPR,
 } from './git-service'
-import { getLastRepoPath, saveLastRepoPath } from './settings-service'
+import {
+  getLastRepoPath,
+  saveLastRepoPath,
+  getThemeMode,
+  saveThemeMode,
+  getCustomTheme,
+  loadVSCodeThemeFile,
+  loadBuiltInTheme,
+  clearCustomTheme,
+  mapVSCodeThemeToCSS,
+} from './settings-service'
 
 // Check for --repo command line argument (for testing)
 const repoArgIndex = process.argv.findIndex((arg) => arg.startsWith('--repo='))
@@ -463,6 +473,58 @@ app.whenReady().then(() => {
     } catch (error) {
       return { success: false, message: (error as Error).message }
     }
+  })
+
+  // Theme handlers
+  ipcMain.handle('get-theme-mode', () => {
+    return getThemeMode()
+  })
+
+  ipcMain.handle('set-theme-mode', (_, mode: 'light' | 'dark' | 'system' | 'custom') => {
+    saveThemeMode(mode)
+    return { success: true }
+  })
+
+  ipcMain.handle('get-system-theme', () => {
+    return nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
+  })
+
+  ipcMain.handle('get-custom-theme', () => {
+    const theme = getCustomTheme()
+    if (theme) {
+      return {
+        theme,
+        cssVars: mapVSCodeThemeToCSS(theme)
+      }
+    }
+    return null
+  })
+
+  ipcMain.handle('load-vscode-theme', async () => {
+    const theme = await loadVSCodeThemeFile()
+    if (theme) {
+      return {
+        theme,
+        cssVars: mapVSCodeThemeToCSS(theme)
+      }
+    }
+    return null
+  })
+
+  ipcMain.handle('clear-custom-theme', () => {
+    clearCustomTheme()
+    return { success: true }
+  })
+
+  ipcMain.handle('load-built-in-theme', (_event, themeFileName: string) => {
+    const theme = loadBuiltInTheme(themeFileName)
+    if (theme) {
+      return {
+        theme,
+        cssVars: mapVSCodeThemeToCSS(theme)
+      }
+    }
+    return null
   })
 
   // Set app user model id for windows

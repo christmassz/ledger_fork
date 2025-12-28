@@ -1,4 +1,5 @@
 import type { TitlebarMenu } from '@/app/components/window/TitlebarMenu'
+import { toggleTheme, loadVSCodeTheme, clearCustomTheme, setThemeMode } from '@/app/theme'
 
 export const menuItems: TitlebarMenu[] = [
   {
@@ -105,11 +106,52 @@ export const menuItems: TitlebarMenu[] = [
     name: 'Window',
     items: [
       {
-        name: 'Dark Mode',
+        name: 'Toggle Dark Mode',
         action: 'window-darkmode-toggle',
         shortcut: 'Toggle',
-        actionCallback: () => {
-          document.documentElement.classList.toggle('dark')
+        actionCallback: async () => {
+          await toggleTheme()
+        },
+      },
+      {
+        name: '---',
+      },
+      {
+        name: 'Auto (System)',
+        action: 'window-theme-system',
+        actionCallback: async () => {
+          await setThemeMode('system')
+        },
+      },
+      {
+        name: 'Light Theme',
+        action: 'window-theme-light',
+        actionCallback: async () => {
+          await setThemeMode('light')
+        },
+      },
+      {
+        name: 'Dark Theme',
+        action: 'window-theme-dark',
+        actionCallback: async () => {
+          await setThemeMode('dark')
+        },
+      },
+      {
+        name: '---',
+      },
+      {
+        name: 'Load VSCode Theme...',
+        action: 'window-load-vscode-theme',
+        actionCallback: async () => {
+          await loadVSCodeTheme()
+        },
+      },
+      {
+        name: 'Clear Custom Theme',
+        action: 'window-clear-custom-theme',
+        actionCallback: async () => {
+          await clearCustomTheme()
         },
       },
       {

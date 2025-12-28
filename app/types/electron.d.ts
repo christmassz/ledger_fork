@@ -352,6 +352,38 @@ export interface ElectronAPI {
   getPRReviewComments: (prNumber: number) => Promise<PRReviewComment[]>
   getPRFileDiff: (prNumber: number, filePath: string) => Promise<string | null>
   commentOnPR: (prNumber: number, body: string) => Promise<{ success: boolean; message: string }>
+  // Theme operations
+  getThemeMode: () => Promise<'light' | 'dark' | 'system' | 'custom'>
+  setThemeMode: (mode: 'light' | 'dark' | 'system' | 'custom') => Promise<{ success: boolean }>
+  getSystemTheme: () => Promise<'light' | 'dark'>
+  getCustomTheme: () => Promise<{
+    theme: {
+      name: string
+      path: string
+      type: 'light' | 'dark'
+      colors: Record<string, string>
+    }
+    cssVars: Record<string, string>
+  } | null>
+  loadVSCodeTheme: () => Promise<{
+    theme: {
+      name: string
+      path: string
+      type: 'light' | 'dark'
+      colors: Record<string, string>
+    }
+    cssVars: Record<string, string>
+  } | null>
+  loadBuiltInTheme: (themeFileName: string) => Promise<{
+    theme: {
+      name: string
+      path: string
+      type: 'light' | 'dark'
+      colors: Record<string, string>
+    }
+    cssVars: Record<string, string>
+  } | null>
+  clearCustomTheme: () => Promise<{ success: boolean }>
 }
 
 declare global {

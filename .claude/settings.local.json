@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run build:mac:arm64:*)",
+      "Bash(npm run dev:*)"
+    ]
+  }
+}

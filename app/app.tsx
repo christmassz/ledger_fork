@@ -22,8 +22,11 @@ import type {
 } from './types/electron'
 import './styles/app.css'
 import { useWindowContext } from './components/window'
+import { SettingsPanel } from './components/SettingsPanel'
+import { initializeTheme, setThemeMode as applyThemeMode, getCurrentThemeMode, loadVSCodeTheme, type ThemeMode } from './theme'
 
 type ViewMode = 'radar' | 'focus'
+type MainPanelView = 'history' | 'settings'
 
 interface StatusMessage {
   type: 'success' | 'error' | 'info'
@@ -71,10 +74,12 @@ export default function App() {
   const [newBranchName, setNewBranchName] = useState('')
   const [creatingBranch, setCreatingBranch] = useState(false)
   const [githubUrl, setGithubUrl] = useState<string | null>(null)
+  const [themeMode, setThemeMode] = useState<ThemeMode>('light')
   const { setTitle, setTitlebarActions } = useWindowContext()
 
   // View mode state
   const [viewMode, setViewMode] = useState<ViewMode>('radar')
+  const [mainPanelView, setMainPanelView] = useState<MainPanelView>('history')
 
   // Focus mode state
   const [graphCommits, setGraphCommits] = useState<GraphCommit[]>([])
@@ -217,50 +222,84 @@ export default function App() {
     }
   }, [isResizingSidebar, isResizingDetail])
 
-  // Titlebar actions for Focus mode panel toggles
+  // Titlebar actions for Focus mode panel toggles and settings button
   useEffect(() => {
+    const actions: JSX.Element[] = []
+
+    // Add Focus mode panel toggles if in focus mode with a repo
     if (repoPath && viewMode === 'focus') {
-      setTitlebarActions(
-        <>
-          {/* Left sidebar toggle */}
-          <button
-            className="panel-toggle-btn"
-            onClick={() => setSidebarVisible(!sidebarVisible)}
-            title={sidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <rect x="0.5" y="0.5" width="15" height="15" rx="1.5" stroke="currentColor" strokeWidth="1" />
-              <rect x="1" y="1" width="4" height="14" fill={sidebarVisible ? 'currentColor' : 'none'} />
-            </svg>
-          </button>
-          {/* Main panel toggle */}
-          <button
-            className="panel-toggle-btn"
-            onClick={() => setMainVisible(!mainVisible)}
-            title={mainVisible ? 'Hide main panel' : 'Show main panel'}
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <rect x="0.5" y="0.5" width="15" height="15" rx="1.5" stroke="currentColor" strokeWidth="1" />
-              <rect x="5" y="1" width="6" height="14" fill={mainVisible ? 'currentColor' : 'none'} />
-            </svg>
-          </button>
-          {/* Right detail panel toggle */}
-          <button
-            className="panel-toggle-btn"
-            onClick={() => setDetailVisible(!detailVisible)}
-            title={detailVisible ? 'Hide detail panel' : 'Show detail panel'}
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <rect x="0.5" y="0.5" width="15" height="15" rx="1.5" stroke="currentColor" strokeWidth="1" />
-              <rect x="11" y="1" width="4" height="14" fill={detailVisible ? 'currentColor' : 'none'} />
-            </svg>
-          </button>
-        </>
+      actions.push(
+        <button
+          key="sidebar-toggle"
+          className="panel-toggle-btn"
+          onClick={() => setSidebarVisible(!sidebarVisible)}
+          title={sidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <rect x="0.5" y="0.5" width="15" height="15" rx="1.5" stroke="currentColor" strokeWidth="1" />
+            <rect x="1" y="1" width="4" height="14" fill={sidebarVisible ? 'currentColor' : 'none'} />
+          </svg>
+        </button>,
+        <button
+          key="main-toggle"
+          className="panel-toggle-btn"
+          onClick={() => setMainVisible(!mainVisible)}
+          title={mainVisible ? 'Hide main panel' : 'Show main panel'}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <rect x="0.5" y="0.5" width="15" height="15" rx="1.5" stroke="currentColor" strokeWidth="1" />
+            <rect x="5" y="1" width="6" height="14" fill={mainVisible ? 'currentColor' : 'none'} />
+          </svg>
+        </button>,
+        <button
+          key="detail-toggle"
+          className="panel-toggle-btn"
+          onClick={() => setDetailVisible(!detailVisible)}
+          title={detailVisible ? 'Hide detail panel' : 'Show detail panel'}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <rect x="0.5" y="0.5" width="15" height="15" rx="1.5" stroke="currentColor" strokeWidth="1" />
+            <rect x="11" y="1" width="4" height="14" fill={detailVisible ? 'currentColor' : 'none'} />
+          </svg>
+        </button>
       )
-    } else {
-      setTitlebarActions(null)
     }
-  }, [repoPath, viewMode, sidebarVisible, mainVisible, detailVisible, setTitlebarActions])
+
+    // Always add settings button
+    const isSettingsActive = viewMode === 'focus' && mainPanelView === 'settings'
+    actions.push(
+      <button
+        key="settings"
+        className={`panel-toggle-btn ${isSettingsActive ? 'active' : ''}`}
+        onClick={() => {
+          if (viewMode === 'radar') {
+            // Switch to Focus mode with Settings panel
+            setViewMode('focus')
+            setMainPanelView('settings')
+            setMainVisible(true)
+          } else {
+            // Toggle between history and settings in Focus mode
+            setMainPanelView(mainPanelView === 'settings' ? 'history' : 'settings')
+            setMainVisible(true)
+          }
+        }}
+        title="Settings"
+        style={{ cursor: 'pointer' }}
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="8" cy="8" r="2.5" stroke="currentColor" strokeWidth="1" fill="none" />
+          <path
+            d="M8 1 L8.5 3 L9.5 3.5 L11.5 2.5 L13 4 L12 6 L12.5 7 L14.5 7.5 L14.5 8.5 L12.5 9 L12 10 L13 12 L11.5 13.5 L9.5 12.5 L8.5 13 L8 15 L7.5 15 L7 13 L6 12.5 L4 13.5 L2.5 12 L3.5 10 L3 9 L1 8.5 L1 7.5 L3 7 L3.5 6 L2.5 4 L4 2.5 L6 3.5 L7 3 L7.5 1 Z"
+            stroke="currentColor"
+            strokeWidth="1"
+            fill="none"
+          />
+        </svg>
+      </button>
+    )
+
+    setTitlebarActions(actions.length > 0 ? <>{actions}</> : null)
+  }, [repoPath, viewMode, mainPanelView, sidebarVisible, mainVisible, detailVisible, setTitlebarActions])
 
   // Column drag and drop handlers for Radar view
   const handleColumnDragStart = useCallback((e: React.DragEvent, columnId: string) => {
@@ -910,6 +949,34 @@ export default function App() {
       }
     })
   }, [])
+
+  // Initialize theme on app mount
+  useEffect(() => {
+    if (!window.electronAPI) return
+    initializeTheme().catch(console.error)
+    getCurrentThemeMode().then(setThemeMode).catch(console.error)
+  }, [])
+
+  // Theme change handler
+  const handleThemeChange = useCallback(
+    async (newMode: ThemeMode) => {
+      try {
+        if (newMode === 'custom') {
+          const theme = await loadVSCodeTheme()
+          if (theme) {
+            setThemeMode('custom')
+          }
+        } else {
+          await applyThemeMode(newMode)
+          setThemeMode(newMode)
+        }
+      } catch (error) {
+        console.error('Failed to change theme:', error)
+        setStatus({ type: 'error', message: 'Failed to change theme' })
+      }
+    },
+    []
+  )
 
   // Filter and sort functions
   const filterBranches = (branchList: Branch[], filter: BranchFilter): Branch[] => {
@@ -1594,11 +1661,16 @@ export default function App() {
                         onContextMenu={(e) => handleContextMenu(e, 'worktree', wt)}
                       >
                         <div className="item-main">
-                          <span className="item-name">{wt.displayName}</span>
+                          <span className="item-name">
+                            {wt.branch || wt.displayName}
+                          </span>
                           {!isWorkingFolder && wt.branch === currentBranch && (
                             <span className="current-indicator">●</span>
                           )}
                         </div>
+                        {wt.branch && (
+                          <div className="item-agent-hint">{wt.displayName}</div>
+                        )}
                         <div className="item-path" title={wt.path}>
                           {wt.path.replace(/^\/Users\/[^/]+/, '~')}
                         </div>
@@ -2358,97 +2430,107 @@ export default function App() {
             />
           )}
 
-          {/* Main Content: Git Graph + Commit List */}
+          {/* Main Content: Settings Panel OR Git Graph + Commit List */}
           {mainVisible && (
             <div className="focus-main">
-              <div
-                className={`focus-main-header clickable-header ${historyFilterOpen ? 'open' : ''}`}
-                onClick={() => setHistoryFilterOpen(!historyFilterOpen)}
-              >
-                <div className="column-title">
-                  <h2>
-                    <span className="column-icon">◉</span>
-                    History
-                    {currentBranch && <code className="commit-hash branch-badge">{currentBranch}</code>}
-                  </h2>
-                  <button
-                    className={`header-filter-btn ${historyFilterOpen ? 'active' : ''}`}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setHistoryFilterOpen(!historyFilterOpen)
-                    }}
-                    title="Filter"
-                  >
-                    <svg
-                      width="12"
-                      height="12"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-                    </svg>
-                  </button>
-                </div>
-              </div>
-              {historyFilterOpen && (
-                <div className="history-filter-panel">
-                  <label className="history-filter-option">
-                    <input
-                      type="checkbox"
-                      checked={showCheckpoints}
-                      onChange={async (e) => {
-                        const newValue = e.target.checked
-                        setShowCheckpoints(newValue)
-                        // Reload commits with new filter
-                        const graphResult = await window.electronAPI.getCommitGraphHistory(100, true, newValue)
-                        setGraphCommits(graphResult)
-                      }}
-                    />
-                    <span>Checkpoints</span>
-                    <span className="history-filter-hint">Show agent checkpoint commits</span>
-                  </label>
-                  <label className="history-filter-option">
-                    <input
-                      type="checkbox"
-                      checked={showGraphLines}
-                      onChange={(e) => setShowGraphLines(e.target.checked)}
-                    />
-                    <span>Graph</span>
-                    <span className="history-filter-hint">Show branch/merge lines</span>
-                  </label>
-                  <label className="history-filter-option">
-                    <input
-                      type="checkbox"
-                      checked={onlyBranchHeads}
-                      onChange={(e) => setOnlyBranchHeads(e.target.checked)}
-                    />
-                    <span>Branch heads only</span>
-                    <span className="history-filter-hint">Latest commit per branch</span>
-                  </label>
-                  <label className="history-filter-option">
-                    <input
-                      type="checkbox"
-                      checked={onlyUnmergedBranches}
-                      onChange={(e) => setOnlyUnmergedBranches(e.target.checked)}
-                    />
-                    <span>Unmerged only</span>
-                    <span className="history-filter-hint">Commits from unmerged branches</span>
-                  </label>
-                </div>
-              )}
-              <div className="git-graph-container">
-                <GitGraph
-                  commits={filteredGraphCommits}
-                  selectedCommit={selectedCommit}
-                  onSelectCommit={handleSelectCommit}
-                  formatRelativeTime={formatRelativeTime}
-                  showGraph={showGraphLines}
+              {mainPanelView === 'settings' ? (
+                <SettingsPanel
+                  themeMode={themeMode}
+                  onThemeChange={handleThemeChange}
+                  onBack={() => setMainPanelView('history')}
                 />
-              </div>
+              ) : (
+                <>
+                  <div
+                    className={`focus-main-header clickable-header ${historyFilterOpen ? 'open' : ''}`}
+                    onClick={() => setHistoryFilterOpen(!historyFilterOpen)}
+                  >
+                    <div className="column-title">
+                      <h2>
+                        <span className="column-icon">◉</span>
+                        History
+                        {currentBranch && <code className="commit-hash branch-badge">{currentBranch}</code>}
+                      </h2>
+                      <button
+                        className={`header-filter-btn ${historyFilterOpen ? 'active' : ''}`}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setHistoryFilterOpen(!historyFilterOpen)
+                        }}
+                        title="Filter"
+                      >
+                        <svg
+                          width="12"
+                          height="12"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                  {historyFilterOpen && (
+                    <div className="history-filter-panel">
+                      <label className="history-filter-option">
+                        <input
+                          type="checkbox"
+                          checked={showCheckpoints}
+                          onChange={async (e) => {
+                            const newValue = e.target.checked
+                            setShowCheckpoints(newValue)
+                            // Reload commits with new filter
+                            const graphResult = await window.electronAPI.getCommitGraphHistory(100, true, newValue)
+                            setGraphCommits(graphResult)
+                          }}
+                        />
+                        <span>Checkpoints</span>
+                        <span className="history-filter-hint">Show agent checkpoint commits</span>
+                      </label>
+                      <label className="history-filter-option">
+                        <input
+                          type="checkbox"
+                          checked={showGraphLines}
+                          onChange={(e) => setShowGraphLines(e.target.checked)}
+                        />
+                        <span>Graph</span>
+                        <span className="history-filter-hint">Show branch/merge lines</span>
+                      </label>
+                      <label className="history-filter-option">
+                        <input
+                          type="checkbox"
+                          checked={onlyBranchHeads}
+                          onChange={(e) => setOnlyBranchHeads(e.target.checked)}
+                        />
+                        <span>Branch heads only</span>
+                        <span className="history-filter-hint">Latest commit per branch</span>
+                      </label>
+                      <label className="history-filter-option">
+                        <input
+                          type="checkbox"
+                          checked={onlyUnmergedBranches}
+                          onChange={(e) => setOnlyUnmergedBranches(e.target.checked)}
+                        />
+                        <span>Unmerged only</span>
+                        <span className="history-filter-hint">Commits from unmerged branches</span>
+                      </label>
+                    </div>
+                  )}
+                  <div className="git-graph-container">
+                    <GitGraph
+                      commits={filteredGraphCommits}
+                      selectedCommit={selectedCommit}
+                      onSelectCommit={handleSelectCommit}
+                      formatRelativeTime={formatRelativeTime}
+                      showGraph={showGraphLines}
+                    />
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -4457,18 +4539,21 @@ function WorktreeDetailPanel({
   return (
     <div className="sidebar-detail-panel">
       <div className="detail-type-badge">Worktree</div>
-      <h3 className="detail-title">{worktree.displayName}</h3>
+      <h3 className="detail-title">{worktree.branch || worktree.displayName}</h3>
+      {worktree.branch && (
+        <div className="detail-subtitle">{worktree.displayName}</div>
+      )}
       <div className="detail-meta-grid">
-        <div className="detail-meta-item full-width">
-          <span className="meta-label">Path</span>
-          <code className="meta-value path">{worktree.path}</code>
-        </div>
         {worktree.branch && (
-          <div className="detail-meta-item">
+          <div className="detail-meta-item full-width">
             <span className="meta-label">Branch</span>
             <code className="meta-value">{worktree.branch}</code>
           </div>
         )}
+        <div className="detail-meta-item full-width">
+          <span className="meta-label">Path</span>
+          <code className="meta-value path">{worktree.path}</code>
+        </div>
         <div className="detail-meta-item">
           <span className="meta-label">Status</span>
           <span className="meta-value">{isCurrent ? 'Current' : 'Not checked out'}</span>
@@ -4829,6 +4914,7 @@ function StashDetailPanel({
           </div>
         </div>
       )}
+
     </div>
   )
 }

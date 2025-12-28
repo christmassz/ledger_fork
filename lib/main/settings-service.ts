@@ -2,7 +2,7 @@ import { app } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 
-type ViewMode = 'radar' | 'focus';
+type ViewMode = 'columns' | 'work';
 
 interface Settings {
   lastRepoPath?: string;
@@ -54,7 +54,7 @@ export function clearLastRepoPath(): void {
 
 export function getViewMode(): ViewMode {
   const settings = loadSettings();
-  return settings.viewMode || 'radar';
+  return settings.viewMode || 'columns';
 }
 
 export function saveViewMode(viewMode: ViewMode): void {
