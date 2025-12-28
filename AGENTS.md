@@ -170,6 +170,32 @@ xcrun notarytool store-credentials "AC_PASSWORD" \
 
 **During signing:** macOS may show a keychain access dialog - click "Always Allow" to prevent it blocking future builds.
 
+### Notarization Troubleshooting
+
+⚠️ **Warning:** Apple's notarization service can be slow and unreliable. Builds may hang for 30+ minutes or even 24+ hours. The service occasionally has outages or backlogs. Proceed with patience.
+
+**Best practices:**
+- Copy build artifacts to `wip/builds/` before starting notarization (folder is gitignored)
+- Run notarization separately from the main build if experiencing issues
+- Don't assume a timeout means failure - check status manually
+
+**Check notarization status:**
+```bash
+# List recent submissions
+xcrun notarytool history --keychain-profile "AC_PASSWORD"
+
+# Get detailed log for a submission ID
+xcrun notarytool log <submission-id> --keychain-profile "AC_PASSWORD"
+
+# Check info for a specific submission
+xcrun notarytool info <submission-id> --keychain-profile "AC_PASSWORD"
+```
+
+**Common issues:**
+- "In Progress" for extended periods: Apple's servers may be slow; check back later
+- "Team is not yet configured for notarization": Contact Apple Developer support
+- ZIP files notarize; DMGs sometimes fail: Try rebuilding or contact support
+
 ### Build Artifacts
 - DMG: `dist/Ledger-{version}-arm64.dmg`
 - ZIP: `dist/Ledger-{version}-arm64-mac.zip`
