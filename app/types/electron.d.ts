@@ -277,6 +277,12 @@ export interface WorkingStatus {
   deletions: number
 }
 
+export interface CreateWorktreeOptions {
+  branchName: string
+  isNewBranch: boolean
+  folderPath: string
+}
+
 export interface ElectronAPI {
   selectRepo: () => Promise<string | null>
   getRepoPath: () => Promise<string | null>
@@ -329,6 +335,8 @@ export interface ElectronAPI {
   convertWorktreeToBranch: (worktreePath: string) => Promise<{ success: boolean; message: string; branchName?: string }>
   applyWorktreeChanges: (worktreePath: string) => Promise<{ success: boolean; message: string }>
   removeWorktree: (worktreePath: string, force?: boolean) => Promise<{ success: boolean; message: string }>
+  createWorktree: (options: CreateWorktreeOptions) => Promise<{ success: boolean; message: string; path?: string }>
+  selectWorktreeFolder: () => Promise<string | null>
   // Staging & commit operations
   stageFile: (filePath: string) => Promise<{ success: boolean; message: string }>
   unstageFile: (filePath: string) => Promise<{ success: boolean; message: string }>

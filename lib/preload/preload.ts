@@ -56,6 +56,9 @@ const electronAPI = {
   applyWorktreeChanges: (worktreePath: string) => ipcRenderer.invoke('apply-worktree-changes', worktreePath),
   removeWorktree: (worktreePath: string, force?: boolean) =>
     ipcRenderer.invoke('remove-worktree', worktreePath, force ?? false),
+  createWorktree: (options: { branchName: string; isNewBranch: boolean; folderPath: string }) =>
+    ipcRenderer.invoke('create-worktree', options),
+  selectWorktreeFolder: () => ipcRenderer.invoke('select-worktree-folder'),
   // Staging & commit operations
   stageFile: (filePath: string) => ipcRenderer.invoke('stage-file', filePath),
   unstageFile: (filePath: string) => ipcRenderer.invoke('unstage-file', filePath),

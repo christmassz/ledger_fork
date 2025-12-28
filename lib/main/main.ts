@@ -43,6 +43,7 @@ import {
   convertWorktreeToBranch,
   applyWorktreeChanges,
   removeWorktree,
+  createWorktree,
   // Staging & commit APIs
   stageFile,
   unstageFile,
@@ -312,6 +313,28 @@ app.whenReady().then(() => {
     } catch (error) {
       return { success: false, message: (error as Error).message }
     }
+  })
+
+  ipcMain.handle('create-worktree', async (_, options: { branchName: string; isNewBranch: boolean; folderPath: string }) => {
+    try {
+      return await createWorktree(options)
+    } catch (error) {
+      return { success: false, message: (error as Error).message }
+    }
+  })
+
+  ipcMain.handle('select-worktree-folder', async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ['openDirectory', 'createDirectory'],
+      title: 'Select Worktree Folder Location',
+      buttonLabel: 'Select',
+    })
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return null
+    }
+
+    return result.filePaths[0]
   })
 
   ipcMain.handle('get-stashes', async () => {

@@ -1771,6 +1771,78 @@ export async function removeWorktree(
   }
 }
 
+// Create a new worktree
+export interface CreateWorktreeOptions {
+  branchName: string
+  isNewBranch: boolean
+  folderPath: string
+}
+
+export async function createWorktree(
+  options: CreateWorktreeOptions
+): Promise<{ success: boolean; message: string; path?: string }> {
+  if (!git) throw new Error('No repository selected')
+
+  const { branchName, isNewBranch, folderPath } = options
+
+  try {
+    // Validate branch name
+    if (!branchName || !branchName.trim()) {
+      return { success: false, message: 'Branch name is required' }
+    }
+
+    // Validate folder path
+    if (!folderPath || !folderPath.trim()) {
+      return { success: false, message: 'Folder path is required' }
+    }
+
+    // Check if folder already exists
+    if (fs.existsSync(folderPath)) {
+      return { success: false, message: `Folder already exists: ${folderPath}` }
+    }
+
+    // Check if branch already exists (for new branches)
+    const branches = await git.branchLocal()
+    const branchExists = branches.all.includes(branchName)
+
+    if (isNewBranch && branchExists) {
+      return { success: false, message: `Branch '${branchName}' already exists` }
+    }
+
+    if (!isNewBranch && !branchExists) {
+      // Check if it's a remote branch we can track
+      const remoteBranches = await git.branch(['-r'])
+      const remoteBranchName = `origin/${branchName}`
+      if (!remoteBranches.all.includes(remoteBranchName)) {
+        return { success: false, message: `Branch '${branchName}' does not exist` }
+      }
+    }
+
+    // Ensure parent directory exists
+    const parentDir = path.dirname(folderPath)
+    if (!fs.existsSync(parentDir)) {
+      await fs.promises.mkdir(parentDir, { recursive: true })
+    }
+
+    // Create the worktree
+    if (isNewBranch) {
+      // Create worktree with new branch: git worktree add -b <branch> <path>
+      await git.raw(['worktree', 'add', '-b', branchName, folderPath])
+    } else {
+      // Create worktree with existing branch: git worktree add <path> <branch>
+      await git.raw(['worktree', 'add', folderPath, branchName])
+    }
+
+    return {
+      success: true,
+      message: `Created worktree at ${path.basename(folderPath)} on branch ${branchName}`,
+      path: folderPath,
+    }
+  } catch (error) {
+    return { success: false, message: (error as Error).message }
+  }
+}
+
 // Checkout a PR branch (by branch name)
 export async function checkoutPRBranch(
   branchName: string

@@ -3904,6 +3904,120 @@ body,
 }
 
 /* ========================================
+   Create Worktree Panel
+   ======================================== */
+
+.create-worktree-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.create-worktree-panel .detail-description {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 0 0 20px 0;
+  line-height: 1.4;
+}
+
+.create-worktree-form {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.create-worktree-form .form-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.create-worktree-form .form-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+}
+
+.create-worktree-form .branch-mode-toggle {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.create-worktree-form .radio-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.create-worktree-form .radio-option input[type="radio"] {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.create-worktree-form .form-input,
+.create-worktree-form .form-select {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.create-worktree-form .form-input:focus,
+.create-worktree-form .form-select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.create-worktree-form .form-input::placeholder {
+  color: var(--text-muted);
+}
+
+.create-worktree-form .folder-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.create-worktree-form .folder-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.create-worktree-form .browse-btn {
+  flex-shrink: 0;
+  padding: 8px 12px;
+}
+
+.create-worktree-form .form-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.create-worktree-actions {
+  margin-top: auto;
+  padding-top: 16px;
+  display: flex;
+  gap: 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.create-worktree-actions .btn {
+  flex: 1;
+}
+
+/* ========================================
    Modal
    ======================================== */
 
