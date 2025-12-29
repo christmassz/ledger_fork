@@ -534,10 +534,27 @@ export async function checkoutBranch(
     // branches that are already checked out in other worktrees
     await git.checkout(['--ignore-other-worktrees', branchName])
 
+    // If we stashed changes, try to pop them onto the new branch
+    if (stashResult.stashed) {
+      try {
+        await git.raw(['stash', 'pop'])
+        return {
+          success: true,
+          message: `Switched to branch '${branchName}' with uncommitted changes`,
+        }
+      } catch (_popError) {
+        // Pop failed (likely conflicts) - leave changes in stash
+        return {
+          success: true,
+          message: `Switched to '${branchName}'. Uncommitted changes moved to stash (conflicts detected).`,
+          stashed: stashResult.message,
+        }
+      }
+    }
+
     return {
       success: true,
       message: `Switched to branch '${branchName}'`,
-      stashed: stashResult.stashed ? stashResult.message : undefined,
     }
   } catch (error) {
     return {
@@ -634,6 +651,26 @@ export async function checkoutRemoteBranch(
 ): Promise<{ success: boolean; message: string; stashed?: string }> {
   if (!git) throw new Error('No repository selected')
 
+  // Helper to pop stash and return appropriate result
+  const popStashAndReturn = async (stashResult: { stashed: boolean; message: string }, successMessage: string) => {
+    if (stashResult.stashed) {
+      try {
+        await git!.raw(['stash', 'pop'])
+        return {
+          success: true,
+          message: `${successMessage} with uncommitted changes`,
+        }
+      } catch (_popError) {
+        return {
+          success: true,
+          message: `${successMessage}. Uncommitted changes moved to stash (conflicts detected).`,
+          stashed: stashResult.message,
+        }
+      }
+    }
+    return { success: true, message: successMessage }
+  }
+
   try {
     // Stash any uncommitted changes first
     const stashResult = await stashChanges()
@@ -648,11 +685,7 @@ export async function checkoutRemoteBranch(
     if (branches.all.includes(localBranchName)) {
       // Just checkout existing local branch (allow even if checked out in worktree)
       await git.checkout(['--ignore-other-worktrees', localBranchName])
-      return {
-        success: true,
-        message: `Switched to existing branch '${localBranchName}'`,
-        stashed: stashResult.stashed ? stashResult.message : undefined,
-      }
+      return popStashAndReturn(stashResult, `Switched to existing branch '${localBranchName}'`)
     }
 
     // Create and checkout tracking branch (--ignore-other-worktrees for the checkout part)
@@ -664,11 +697,7 @@ export async function checkoutRemoteBranch(
       remoteBranch.replace('remotes/', ''),
     ])
 
-    return {
-      success: true,
-      message: `Created and switched to branch '${localBranchName}' tracking '${remoteBranch}'`,
-      stashed: stashResult.stashed ? stashResult.message : undefined,
-    }
+    return popStashAndReturn(stashResult, `Created and switched to branch '${localBranchName}' tracking '${remoteBranch}'`)
   } catch (error) {
     return {
       success: false,
