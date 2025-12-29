@@ -5,7 +5,7 @@
  * for creating new branches and PRs.
  */
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import type { WorkingStatus, UncommittedFile, StagingFileDiff } from '../../../types/electron'
 import type { StatusMessage } from '../../../types/app-types'
 
@@ -14,6 +14,23 @@ export interface StagingPanelProps {
   currentBranch: string
   onRefresh: () => Promise<void>
   onStatusChange: (status: StatusMessage | null) => void
+}
+
+// Helper to generate branch name from commit message
+function generateBranchNameFromMessage(message: string): string {
+  if (!message.trim()) return ''
+  
+  return message
+    .toLowerCase()
+    .trim()
+    // Remove common prefixes
+    .replace(/^(fix|feat|feature|bugfix|hotfix|chore|docs|style|refactor|test|perf):\s*/i, '')
+    // Replace non-alphanumeric characters with hyphens
+    .replace(/[^a-z0-9]+/g, '-')
+    // Remove leading/trailing hyphens
+    .replace(/^-+|-+$/g, '')
+    // Limit length
+    .slice(0, 50)
 }
 
 export function StagingPanel({ workingStatus, currentBranch, onRefresh, onStatusChange }: StagingPanelProps) {
@@ -28,11 +45,13 @@ export function StagingPanel({ workingStatus, currentBranch, onRefresh, onStatus
   const [pushAfterCommit, setPushAfterCommit] = useState(true)
   const [fileContextMenu, setFileContextMenu] = useState<{ x: number; y: number; file: UncommittedFile } | null>(null)
   const fileMenuRef = useRef<HTMLDivElement>(null)
+  const fileListRef = useRef<HTMLDivElement>(null)
   // New branch creation
   const [createNewBranch, setCreateNewBranch] = useState(false)
   const [branchFolder, setBranchFolder] = useState<string>('feature')
   const [customFolder, setCustomFolder] = useState('')
   const [branchName, setBranchName] = useState('')
+  const [suggestedBranchName, setSuggestedBranchName] = useState('')
   // PR creation option (inline with commit flow)
   const [createPR, setCreatePR] = useState(false)
   const [prTitle, setPrTitle] = useState('')
@@ -41,6 +60,49 @@ export function StagingPanel({ workingStatus, currentBranch, onRefresh, onStatus
 
   const stagedFiles = workingStatus.files.filter((f) => f.staged)
   const unstagedFiles = workingStatus.files.filter((f) => !f.staged)
+  const allFiles = [...stagedFiles, ...unstagedFiles]
+
+  // Update suggested branch name when commit message changes
+  useEffect(() => {
+    const suggested = generateBranchNameFromMessage(commitMessage)
+    setSuggestedBranchName(suggested)
+  }, [commitMessage])
+
+  // Keyboard navigation for file list
+  const handleFileListKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (allFiles.length === 0) return
+
+    const currentIndex = selectedFile ? allFiles.findIndex(f => f.path === selectedFile.path && f.staged === selectedFile.staged) : -1
+    
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault()
+        if (currentIndex < allFiles.length - 1) {
+          setSelectedFile(allFiles[currentIndex + 1])
+        } else if (currentIndex === -1 && allFiles.length > 0) {
+          setSelectedFile(allFiles[0])
+        }
+        break
+      case 'ArrowUp':
+        e.preventDefault()
+        if (currentIndex > 0) {
+          setSelectedFile(allFiles[currentIndex - 1])
+        } else if (currentIndex === -1 && allFiles.length > 0) {
+          setSelectedFile(allFiles[allFiles.length - 1])
+        }
+        break
+      case ' ':
+        e.preventDefault()
+        if (selectedFile) {
+          if (selectedFile.staged) {
+            handleUnstageFile(selectedFile)
+          } else {
+            handleStageFile(selectedFile)
+          }
+        }
+        break
+    }
+  }, [allFiles, selectedFile])
 
 
   // Close file context menu when clicking outside
@@ -94,7 +156,6 @@ export function StagingPanel({ workingStatus, currentBranch, onRefresh, onStatus
   const handleStageFile = async (file: UncommittedFile) => {
     const result = await window.electronAPI.stageFile(file.path)
     if (result.success) {
-      onStatusChange({ type: 'success', message: result.message })
       await onRefresh()
     } else {
       onStatusChange({ type: 'error', message: result.message })
@@ -105,7 +166,6 @@ export function StagingPanel({ workingStatus, currentBranch, onRefresh, onStatus
   const handleUnstageFile = async (file: UncommittedFile) => {
     const result = await window.electronAPI.unstageFile(file.path)
     if (result.success) {
-      onStatusChange({ type: 'success', message: result.message })
       await onRefresh()
     } else {
       onStatusChange({ type: 'error', message: result.message })
@@ -157,7 +217,9 @@ export function StagingPanel({ workingStatus, currentBranch, onRefresh, onStatus
 
   // Get the effective folder name (custom or preset)
   const effectiveFolder = branchFolder === 'custom' ? customFolder.trim() : branchFolder
-  const fullBranchName = createNewBranch && branchName.trim() ? `${effectiveFolder}/${branchName.trim()}` : null
+  // Use explicit branch name, or fall back to suggested name from commit message
+  const effectiveBranchName = branchName.trim() || suggestedBranchName
+  const fullBranchName = createNewBranch && effectiveBranchName ? `${effectiveFolder}/${effectiveBranchName}` : null
 
   // Commit with optional force to skip behind-check
   const handleCommit = async (force: boolean = false) => {
@@ -368,7 +430,12 @@ export function StagingPanel({ workingStatus, currentBranch, onRefresh, onStatus
       </div>
 
       {/* File Lists */}
-      <div className="staging-files">
+      <div 
+        className="staging-files" 
+        ref={fileListRef}
+        tabIndex={0}
+        onKeyDown={handleFileListKeyDown}
+      >
         {/* Staged Section */}
         <div className="staging-section">
           <div className="staging-section-header">
@@ -657,7 +724,7 @@ export function StagingPanel({ workingStatus, currentBranch, onRefresh, onStatus
               !commitMessage.trim() ||
               stagedFiles.length === 0 ||
               isCommitting ||
-              (createNewBranch && !branchName.trim()) ||
+              (createNewBranch && !effectiveBranchName) ||
               (createNewBranch && branchFolder === 'custom' && !customFolder.trim())
             }
           >
