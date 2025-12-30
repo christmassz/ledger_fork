@@ -793,13 +793,12 @@ body,
 
 .item.selected,
 .commit-item.selected {
-  background: var(--accent-glow);
-  border-left-color: var(--accent);
+  background: var(--bg-tertiary);
 }
 
 .item.selected:hover,
 .commit-item.selected:hover {
-  background: var(--accent-glow);
+  background: var(--bg-tertiary);
 }
 
 /* Status Toast */

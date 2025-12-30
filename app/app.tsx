@@ -276,7 +276,7 @@ export default function App() {
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <rect x="0.5" y="0.5" width="15" height="15" rx="1.5" stroke="currentColor" strokeWidth="1" />
-            <rect x="11" y="1" width="4" height="14" fill={radarHasEditor ? 'currentColor' : 'none'} />
+            <rect x="5" y="1" width="6" height="14" fill={radarHasEditor ? 'currentColor' : 'none'} />
           </svg>
         </button>
       )
