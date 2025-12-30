@@ -23,9 +23,11 @@ import type {
   MenuItem,
   SidebarFocusType,
   SidebarFocus,
+  EditorPanelType,
 } from './types/app-types'
 import './styles/app.css'
 import { useWindowContext } from './components/window'
+import { useCanvas, useCanvasNavigation } from './components/canvas'
 import { SettingsPanel } from './components/SettingsPanel'
 import { GitGraph } from './components/panels/viz'
 import {
@@ -56,6 +58,48 @@ export default function App() {
   const [githubUrl, setGithubUrl] = useState<string | null>(null)
   const [themeMode, setThemeMode] = useState<ThemeMode>('light')
   const { setTitle, setTitlebarActions } = useWindowContext()
+
+  // Canvas navigation for global editor state
+  const { 
+    navigateToEditor, 
+    setActiveCanvas, 
+    hasEditorSlot,
+    state: canvasState,
+    currentEditorEntry,
+    addColumn,
+    removeColumn,
+    activeCanvas,
+  } = useCanvas()
+  const { 
+    goBack, 
+    goForward, 
+    canGoBack, 
+    canGoForward 
+  } = useCanvasNavigation()
+
+  // Check if Radar canvas has an editor column
+  const radarCanvas = canvasState.canvases.find(c => c.id === 'radar')
+  const radarHasEditor = radarCanvas?.columns.some(col => col.slotType === 'editor') ?? false
+
+  // Toggle editor column in Radar canvas
+  const toggleRadarEditor = useCallback(() => {
+    if (radarHasEditor) {
+      // Remove editor column from radar
+      const editorCol = radarCanvas?.columns.find(col => col.slotType === 'editor')
+      if (editorCol) {
+        removeColumn('radar', editorCol.id)
+      }
+    } else {
+      // Add editor column to radar
+      addColumn('radar', {
+        id: 'radar-editor',
+        slotType: 'editor',
+        panel: 'empty',
+        width: 400,
+        minWidth: 300,
+      })
+    }
+  }, [radarHasEditor, radarCanvas, removeColumn, addColumn])
 
   // View mode state
   const [viewMode, setViewMode] = useState<ViewMode>('radar')
@@ -451,6 +495,8 @@ export default function App() {
     setSidebarFocus(null) // Clear sidebar focus when selecting a commit
     setSelectedCommit(commit)
     setLoadingDiff(true)
+    // Also track in canvas navigation history
+    navigateToEditor('commit-detail', commit)
     try {
       const diff = await window.electronAPI.getCommitDiff(commit.hash)
       setCommitDiff(diff)
@@ -458,6 +504,20 @@ export default function App() {
       setCommitDiff(null)
     } finally {
       setLoadingDiff(false)
+    }
+  }, [navigateToEditor])
+
+  // Map sidebar focus type to editor panel type for canvas navigation
+  const sidebarToEditorPanel = useCallback((type: SidebarFocusType): EditorPanelType => {
+    switch (type) {
+      case 'pr': return 'pr-detail'
+      case 'branch': return 'branch-detail'
+      case 'remote': return 'remote-detail'
+      case 'worktree': return 'worktree-detail'
+      case 'stash': return 'stash-detail'
+      case 'uncommitted': return 'staging'
+      case 'create-worktree': return 'create-worktree'
+      default: return 'empty'
     }
   }, [])
 
@@ -467,8 +527,10 @@ export default function App() {
       setSelectedCommit(null) // Clear commit selection when focusing sidebar item
       setCommitDiff(null)
       setSidebarFocus({ type, data })
+      // Also track in canvas navigation history
+      navigateToEditor(sidebarToEditorPanel(type), data)
     },
-    []
+    [navigateToEditor, sidebarToEditorPanel]
   )
 
   // Toggle sidebar section
@@ -1371,6 +1433,59 @@ export default function App() {
     if (idx !== -1) setSidebarFocusedIndex(idx)
   }, [sidebarFocus, sidebarItems])
 
+  // Sync local state with canvas editor state (for back/forward navigation)
+  // This runs when currentEditorEntry changes (via goBack/goForward)
+  useEffect(() => {
+    if (!currentEditorEntry) {
+      // No editor entry - clear selection
+      setSidebarFocus(null)
+      setSelectedCommit(null)
+      setCommitDiff(null)
+      return
+    }
+    
+    const { panel, data } = currentEditorEntry
+    
+    // Map editor panel type back to sidebar focus type
+    const panelToSidebarType: Record<string, SidebarFocusType | 'commit'> = {
+      'pr-detail': 'pr',
+      'branch-detail': 'branch',
+      'remote-detail': 'remote',
+      'worktree-detail': 'worktree',
+      'stash-detail': 'stash',
+      'staging': 'uncommitted',
+      'create-worktree': 'create-worktree',
+      'commit-detail': 'commit',
+    }
+    
+    const focusType = panelToSidebarType[panel]
+    
+    if (focusType === 'commit') {
+      // Commit selection - set selectedCommit and load diff
+      const commit = data as GraphCommit
+      if (!selectedCommit || selectedCommit.hash !== commit.hash) {
+        setSidebarFocus(null)
+        setSelectedCommit(commit)
+        setLoadingDiff(true)
+        window.electronAPI.getCommitDiff(commit.hash)
+          .then(setCommitDiff)
+          .catch(() => setCommitDiff(null))
+          .finally(() => setLoadingDiff(false))
+      }
+    } else if (focusType && data) {
+      // Sidebar focus - set sidebarFocus
+      const newFocus = { type: focusType, data: data as SidebarFocus['data'] }
+      // Only update if different to avoid infinite loop
+      if (!sidebarFocus || sidebarFocus.type !== focusType || 
+          JSON.stringify(sidebarFocus.data) !== JSON.stringify(data)) {
+        setSelectedCommit(null)
+        setCommitDiff(null)
+        setSidebarFocus(newFocus)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentEditorEntry?.panel, currentEditorEntry?.timestamp])
+
   // Filter graph commits based on history panel filters
   const filteredGraphCommits = useMemo(() => {
     let filtered = graphCommits
@@ -1578,6 +1693,16 @@ export default function App() {
                 <span className="view-icon">☰</span>
                 <span className="view-label">Focus</span>
               </button>
+              {viewMode === 'radar' && (
+                <button
+                  className={`view-toggle-btn ${radarHasEditor ? 'active' : ''}`}
+                  onClick={toggleRadarEditor}
+                  title={radarHasEditor ? 'Hide Editor Panel' : 'Show Editor Panel'}
+                >
+                  <span className="view-icon">◫</span>
+                  <span className="view-label">{radarHasEditor ? 'Editor' : 'Editor'}</span>
+                </button>
+              )}
             </div>
           )}
           {!repoPath ? (
@@ -2232,6 +2357,98 @@ export default function App() {
               )}
             </div>
           </section>
+
+          {/* Editor Panel (optional in Radar) */}
+          {radarHasEditor && (
+            <section className="column editor-column">
+              <div className="column-header">
+                <div className="column-title">
+                  <h2>
+                    <span className="column-icon">◇</span>
+                    Editor
+                  </h2>
+                </div>
+              </div>
+              <div className="column-content editor-content">
+                {/* Editor Navigation */}
+                <div className="editor-nav">
+                  <button
+                    className="editor-nav-btn"
+                    onClick={goBack}
+                    disabled={!canGoBack}
+                    title="Go back (⌘[)"
+                  >
+                    ←
+                  </button>
+                  <button
+                    className="editor-nav-btn"
+                    onClick={goForward}
+                    disabled={!canGoForward}
+                    title="Go forward (⌘])"
+                  >
+                    →
+                  </button>
+                </div>
+                {/* Editor Panel Content - same as Focus mode */}
+                {sidebarFocus?.type === 'uncommitted' && workingStatus ? (
+                  <StagingPanel
+                    workingStatus={workingStatus}
+                    currentBranch={currentBranch}
+                    onRefresh={refresh}
+                    onStatusChange={setStatus}
+                  />
+                ) : sidebarFocus?.type === 'pr' ? (
+                  <PRReviewPanel
+                    pr={sidebarFocus.data as PullRequest}
+                    formatRelativeTime={formatRelativeTime}
+                    onCheckout={handlePRCheckout}
+                    onPRMerged={refresh}
+                    switching={switching}
+                  />
+                ) : sidebarFocus ? (
+                  <SidebarDetailPanel
+                    focus={sidebarFocus}
+                    formatRelativeTime={formatRelativeTime}
+                    formatDate={formatDate}
+                    currentBranch={currentBranch}
+                    switching={switching}
+                    onStatusChange={setStatus}
+                    onRefresh={refresh}
+                    onClearFocus={() => setSidebarFocus(null)}
+                    onCheckoutBranch={handleBranchDoubleClick}
+                    onCheckoutRemoteBranch={handleRemoteBranchDoubleClick}
+                    onCheckoutWorktree={handleWorktreeDoubleClick}
+                    branches={branches}
+                    repoPath={repoPath}
+                    worktrees={worktrees}
+                    onFocusWorktree={(wt) => setSidebarFocus({ type: 'worktree', data: wt })}
+                  />
+                ) : !selectedCommit ? (
+                  <div className="detail-empty">
+                    <span className="detail-empty-icon">◇</span>
+                    <p>Select an item to view details</p>
+                  </div>
+                ) : loadingDiff ? (
+                  <div className="detail-loading">Loading diff...</div>
+                ) : commitDiff ? (
+                  <DiffPanel 
+                    diff={commitDiff} 
+                    selectedCommit={selectedCommit}
+                    formatRelativeTime={formatRelativeTime} 
+                    branches={branches}
+                    onBranchClick={(branchName) => {
+                      const branch = branches.find((b) => b.name === branchName)
+                      if (branch) {
+                        handleSidebarFocus(branch.isRemote ? 'remote' : 'branch', branch)
+                      }
+                    }}
+                  />
+                ) : (
+                  <div className="detail-error">Could not load diff</div>
+                )}
+              </div>
+            </section>
+          )}
         </main>
       )}
 
@@ -2767,6 +2984,25 @@ export default function App() {
               className={`focus-detail ${!mainVisible ? 'detail-expanded' : ''}`} 
               style={mainVisible ? { width: detailWidth } : undefined}
             >
+              {/* Editor Navigation */}
+              <div className="editor-nav">
+                <button
+                  className="editor-nav-btn"
+                  onClick={goBack}
+                  disabled={!canGoBack}
+                  title="Go back (⌘[)"
+                >
+                  ←
+                </button>
+                <button
+                  className="editor-nav-btn"
+                  onClick={goForward}
+                  disabled={!canGoForward}
+                  title="Go forward (⌘])"
+                >
+                  →
+                </button>
+              </div>
               {sidebarFocus?.type === 'uncommitted' && workingStatus ? (
                 <StagingPanel
                   workingStatus={workingStatus}
