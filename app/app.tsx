@@ -182,6 +182,7 @@ export default function App() {
     'commits',
     'branches',
     'remotes',
+    'editor',
   ])
   const [draggingColumn, setDraggingColumn] = useState<string | null>(null)
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null)
@@ -2389,7 +2390,19 @@ export default function App() {
 
           {/* Editor Panel (optional in Radar) */}
           {radarHasEditor && (
-            <section className="column editor-column">
+            <section 
+              className={`column editor-column ${draggingColumn === 'editor' ? 'dragging' : ''} ${dragOverColumn === 'editor' ? 'drag-over' : ''}`}
+              style={{ order: radarColumnOrder.indexOf('editor') }}
+              draggable
+              onDragStart={(e) => handleColumnDragStart(e, 'editor')}
+              onDragOver={(e) => handleColumnDragOver(e, 'editor')}
+              onDragLeave={handleColumnDragLeave}
+              onDrop={(e) => handleColumnDrop(e, 'editor')}
+              onDragEnd={handleColumnDragEnd}
+            >
+              <div className="column-drag-handle" title="Drag to reorder">
+                ⋮⋮
+              </div>
               <div className="column-header">
                 <div className="column-title">
                   <h2>
