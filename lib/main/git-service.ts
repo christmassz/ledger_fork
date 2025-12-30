@@ -2891,11 +2891,23 @@ export async function unstageAll(): Promise<{ success: boolean; message: string 
   }
 }
 
-// Discard changes in a file (revert to last commit)
+// Discard changes in a file (revert to last commit, or delete if untracked)
 export async function discardFileChanges(filePath: string): Promise<{ success: boolean; message: string }> {
   if (!git) throw new Error('No repository selected')
 
   try {
+    // Check if the file is untracked
+    const status = await git.status()
+    const isUntracked = status.not_added.includes(filePath)
+
+    if (isUntracked) {
+      // For untracked files, delete the file
+      const fullPath = path.join(repoPath!, filePath)
+      await fs.promises.unlink(fullPath)
+      return { success: true, message: `Deleted untracked file ${filePath}` }
+    }
+
+    // For tracked files, restore to last commit
     await git.raw(['restore', filePath])
     return { success: true, message: `Discarded changes in ${filePath}` }
   } catch (error) {
