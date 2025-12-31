@@ -376,6 +376,13 @@ body,
   grid-template-columns: repeat(5, 1fr);
 }
 
+/* Canvas mode - uses flex layout managed by Canvas component */
+.ledger-content.canvas-mode {
+  display: flex;
+  grid-template-columns: none;
+  gap: 0;
+}
+
 /* Columns */
 .column {
   display: flex;
@@ -422,7 +429,13 @@ body,
   transition: background 0.15s ease;
 }
 
-.column-header.clickable-header:hover {
+/* Editor header hover effect */
+.column-header.editor-header {
+  transition: background 0.15s ease;
+}
+
+.column-header.clickable-header:hover,
+.column-header.editor-header:hover {
   background: var(--bg-tertiary);
 }
 
@@ -784,6 +797,12 @@ body,
   color: var(--warning-text);
 }
 
+.badge-redundant {
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-style: italic;
+}
+
 .badge-draft {
   background: var(--bg-tertiary);
   color: var(--text-secondary);
@@ -999,6 +1018,15 @@ body,
 /* Stash Styles */
 .stash-item {
   padding: 10px 12px;
+}
+
+.stash-item.redundant {
+  opacity: 0.6;
+}
+
+.stash-item.redundant .item-name {
+  text-decoration: line-through;
+  text-decoration-color: var(--text-muted);
 }
 
 .stash-item .item-name {
@@ -3281,37 +3309,7 @@ body,
   margin-left: 2px;
 }
 
-/* Legacy styles - kept for backward compat */
-.diff-commit-header {
-  padding: 12px 14px;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.diff-commit-message {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-primary);
-  margin-bottom: 8px;
-  line-height: 1.4;
-}
-
-.diff-commit-meta {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 11px;
-  color: var(--text-secondary);
-  margin-bottom: 8px;
-}
-
-.diff-commit-stats {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 11px;
-}
-
+/* Diff Stats */
 .diff-stat-files {
   color: var(--text-secondary);
 }
@@ -5346,7 +5344,7 @@ body,
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--border);
-  overflow: hidden;
+  overflow: visible; /* Allow resize handle to extend past edge */
   position: relative;
   background: var(--bg-primary);
 }
@@ -5360,6 +5358,298 @@ body,
   overflow: auto;
   display: flex;
   flex-direction: column;
+}
+
+/* List panel wrapper (inside canvas column) */
+.list-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Viz panel wrapper */
+.viz-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.viz-panel-content {
+  flex: 1;
+  overflow: auto;
+}
+
+/* Editor panel wrapper (inside canvas) */
+.editor-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.editor-panel .editor-slot {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.editor-panel .editor-slot-content {
+  flex: 1;
+  overflow: auto;
+}
+
+/* Editor slot header with nav buttons - matches standard column-header */
+.editor-slot .column-header.editor-header {
+  cursor: pointer;
+  user-select: none;
+}
+
+.editor-slot .editor-header .column-title h2 {
+  /* Inherits from .column-header h2 - no overrides needed */
+}
+
+.editor-slot .editor-nav {
+  display: flex;
+  gap: 4px;
+}
+
+.editor-slot .editor-nav-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.editor-slot .editor-nav-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.editor-slot .editor-nav-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* ========================================
+   Sidebar (Focus mode)
+   ======================================== */
+
+.sidebar-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg-primary);
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  min-height: 44px;
+  box-sizing: border-box;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.sidebar-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.sidebar-search {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.sidebar-search input {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.sidebar-search input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.sidebar-sections {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.sidebar-section {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.sidebar-section:last-child {
+  border-bottom: none;
+}
+
+.sidebar-section-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.sidebar-section-header:hover {
+  background: var(--bg-tertiary);
+}
+
+.sidebar-section-header.open {
+  color: var(--text-primary);
+}
+
+.section-icon {
+  margin-right: 6px;
+  font-size: 12px;
+}
+
+.section-label {
+  flex: 1;
+  font-weight: 500;
+}
+
+.section-count {
+  margin-right: 6px;
+  padding: 1px 5px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.section-chevron {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.sidebar-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px 6px 24px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.sidebar-item:hover {
+  background: var(--bg-hover);
+}
+
+.sidebar-item.selected {
+  background: var(--bg-selected);
+}
+
+.sidebar-item .item-title {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-item .item-meta {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-left: 8px;
+}
+
+.sidebar-empty {
+  padding: 8px 24px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Canvas column drag handle */
+.canvas-column-drag-handle {
+  position: absolute;
+  top: 10px;
+  right: 8px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: grab;
+  opacity: 0;
+  transition:
+    opacity 0.15s ease,
+    color 0.15s ease;
+  z-index: 10;
+  letter-spacing: -2px;
+  user-select: none;
+}
+
+.canvas-column:hover .canvas-column-drag-handle {
+  opacity: 0.6;
+}
+
+.canvas-column-drag-handle:hover {
+  opacity: 1 !important;
+  color: var(--accent);
+}
+
+.canvas-column-drag-handle:active {
+  cursor: grabbing;
+}
+
+/* Canvas column drag states */
+.canvas-column.dragging {
+  opacity: 0.5;
+  transform: scale(0.98);
+}
+
+.canvas-column.drag-over {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.canvas-column.drag-over::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(91, 155, 213, 0.08);
+  pointer-events: none;
+  z-index: 5;
 }
 
 /* Slot type styling */

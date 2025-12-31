@@ -26,28 +26,41 @@ import type {
 export const RADAR_CANVAS: Canvas = {
   id: 'radar',
   name: 'Radar',
+  icon: '📡',
   isPreset: true,
   columns: [
-    { id: 'radar-prs', slotType: 'list', panel: 'pr-list', width: 'flex', minWidth: 200 },
-    { id: 'radar-worktrees', slotType: 'list', panel: 'worktree-list', width: 'flex', minWidth: 200 },
-    { id: 'radar-commits', slotType: 'list', panel: 'commit-list', width: 'flex', minWidth: 200 },
-    { id: 'radar-branches', slotType: 'list', panel: 'branch-list', width: 'flex', minWidth: 200 },
-    { id: 'radar-remotes', slotType: 'list', panel: 'remote-list', width: 'flex', minWidth: 200 },
+    { id: 'radar-stashes', slotType: 'list', panel: 'stash-list', width: 'flex', minWidth: 150, label: 'Stashes', icon: '⊡', collapsible: true },
+    { id: 'radar-prs', slotType: 'list', panel: 'pr-list', width: 'flex', minWidth: 150, label: 'Pull Requests', icon: '⊕', collapsible: true },
+    { id: 'radar-worktrees', slotType: 'list', panel: 'worktree-list', width: 'flex', minWidth: 150, label: 'Worktrees', icon: '⊙', collapsible: true },
+    { id: 'radar-branches', slotType: 'list', panel: 'branch-list', width: 'flex', minWidth: 150, label: 'Branches', icon: '⎇', collapsible: true },
+    { id: 'radar-remotes', slotType: 'list', panel: 'remote-list', width: 'flex', minWidth: 150, label: 'Remotes', icon: '◈', collapsible: true },
+    { id: 'radar-editor', slotType: 'editor', panel: 'empty', width: 400, minWidth: 300, label: 'Editor', icon: '◇', collapsible: true, visible: false },
   ],
 }
 
 export const FOCUS_CANVAS: Canvas = {
   id: 'focus',
   name: 'Focus',
+  icon: '🎯',
   isPreset: true,
   columns: [
-    { id: 'focus-list', slotType: 'list', panel: 'unified-list', width: 220, minWidth: 180 },
-    { id: 'focus-viz', slotType: 'viz', panel: 'git-graph', width: 'flex', minWidth: 300 },
-    { id: 'focus-editor', slotType: 'editor', panel: 'empty', width: 400, minWidth: 300 },
+    { id: 'focus-sidebar', slotType: 'list', panel: 'sidebar', width: 220, minWidth: 180, label: 'All', icon: '☰', collapsible: true },
+    { id: 'focus-viz', slotType: 'viz', panel: 'git-graph', width: 'flex', minWidth: 300, label: 'History', icon: '◉', collapsible: true },
+    { id: 'focus-editor', slotType: 'editor', panel: 'empty', width: 400, minWidth: 300, label: 'Editor', icon: '◇', collapsible: true },
   ],
 }
 
-export const PRESET_CANVASES = [RADAR_CANVAS, FOCUS_CANVAS]
+export const GRAPH_CANVAS: Canvas = {
+  id: 'graph',
+  name: 'Graph',
+  icon: '◉',
+  isPreset: true,
+  columns: [
+    { id: 'graph-viz', slotType: 'viz', panel: 'git-graph', width: 'flex', minWidth: 400, label: 'History', icon: '◉' },
+  ],
+}
+
+export const PRESET_CANVASES = [RADAR_CANVAS, FOCUS_CANVAS, GRAPH_CANVAS]
 
 // ========================================
 // Initial State
@@ -60,7 +73,7 @@ const initialEditorState: EditorState = {
 
 const initialCanvasState: CanvasState = {
   canvases: [...PRESET_CANVASES],
-  activeCanvasId: 'focus',
+  activeCanvasId: 'radar',
   editorState: initialEditorState,
 }
 
@@ -75,6 +88,7 @@ type CanvasAction =
   | { type: 'ADD_COLUMN'; canvasId: string; column: Column; index?: number }
   | { type: 'REMOVE_COLUMN'; canvasId: string; columnId: string }
   | { type: 'RESIZE_COLUMN'; canvasId: string; columnId: string; width: number }
+  | { type: 'TOGGLE_COLUMN_VISIBILITY'; canvasId: string; columnId: string }
   | { type: 'NAVIGATE_TO_EDITOR'; panel: EditorPanelType; data?: unknown }
   | { type: 'EDITOR_GO_BACK' }
   | { type: 'EDITOR_GO_FORWARD' }
@@ -165,6 +179,24 @@ function canvasReducer(state: CanvasState, action: CanvasAction): CanvasState {
       }
     }
 
+    case 'TOGGLE_COLUMN_VISIBILITY': {
+      return {
+        ...state,
+        canvases: state.canvases.map((canvas) =>
+          canvas.id === action.canvasId
+            ? {
+                ...canvas,
+                columns: canvas.columns.map((col) =>
+                  col.id === action.columnId
+                    ? { ...col, visible: col.visible === false }
+                    : col
+                ),
+              }
+            : canvas
+        ),
+      }
+    }
+
     case 'NAVIGATE_TO_EDITOR': {
       const entry: EditorHistoryEntry = {
         panel: action.panel,
@@ -238,11 +270,57 @@ function canvasReducer(state: CanvasState, action: CanvasAction): CanvasState {
     }
 
     case 'LOAD_CANVASES': {
-      // Merge with presets (presets always win)
-      const userCanvases = action.canvases.filter((c) => !PRESET_CANVASES.some((p) => p.id === c.id))
+      // Merge saved canvases with code-defined presets
+      // For presets: preserve user's column modifications (width, visible, order)
+      // but pick up any new columns added in code
+      const mergedCanvases = PRESET_CANVASES.map((preset) => {
+        const savedPreset = action.canvases.find((c) => c.id === preset.id)
+        if (!savedPreset) return preset
+
+        // Create a map of saved column state keyed by column ID
+        const savedColumnMap = new Map(
+          savedPreset.columns.map((col) => [col.id, col])
+        )
+
+        // Merge columns: preserve saved width/visible, but use code-defined structure
+        const mergedColumns = preset.columns.map((codeCol) => {
+          const savedCol = savedColumnMap.get(codeCol.id)
+          if (!savedCol) return codeCol // New column in code, use as-is
+
+          // Preserve user modifications (width, visible) from saved state
+          return {
+            ...codeCol, // Use code-defined structure (slotType, panel, label, icon, etc.)
+            width: savedCol.width, // User's width preference
+            visible: savedCol.visible, // User's visibility preference
+          }
+        })
+
+        // Check for saved columns that were reordered
+        // If user reordered columns, use their order (but only for columns that exist in code)
+        const savedOrder = savedPreset.columns
+          .map((sc) => sc.id)
+          .filter((id) => mergedColumns.some((mc) => mc.id === id))
+
+        // Sort mergedColumns according to saved order, with new columns at the end
+        const orderedColumns = [
+          ...savedOrder.map((id) => mergedColumns.find((c) => c.id === id)!),
+          ...mergedColumns.filter((c) => !savedOrder.includes(c.id)),
+        ]
+
+        return {
+          ...preset,
+          columns: orderedColumns,
+        }
+      })
+
+      // Add custom (non-preset) canvases from saved state
+      const customCanvases = action.canvases.filter(
+        (c) => !PRESET_CANVASES.some((p) => p.id === c.id)
+      )
+
       return {
         ...state,
-        canvases: [...PRESET_CANVASES, ...userCanvases],
+        canvases: [...mergedCanvases, ...customCanvases],
         activeCanvasId: action.activeCanvasId || state.activeCanvasId,
       }
     }
@@ -283,6 +361,11 @@ interface CanvasContextValue {
   goBack: () => void
   goForward: () => void
   clearEditor: () => void
+
+  // Column visibility
+  toggleColumnVisibility: (canvasId: string, columnId: string) => void
+  isColumnVisible: (canvasId: string, columnId: string) => boolean
+  getVisibleColumns: (canvasId?: string) => Column[]
 
   // Helpers
   hasEditorSlot: (canvasId?: string) => boolean
@@ -352,6 +435,32 @@ export function CanvasProvider({ children }: CanvasProviderProps) {
     dispatch({ type: 'UPDATE_COLUMN', canvasId, columnId, updates: { panel } })
   }, [])
 
+  // Column visibility
+  const toggleColumnVisibility = useCallback((canvasId: string, columnId: string) => {
+    dispatch({ type: 'TOGGLE_COLUMN_VISIBILITY', canvasId, columnId })
+  }, [])
+
+  const isColumnVisible = useCallback(
+    (canvasId: string, columnId: string) => {
+      const canvas = state.canvases.find((c) => c.id === canvasId)
+      const column = canvas?.columns.find((col) => col.id === columnId)
+      // Default to visible if not explicitly set to false
+      return column?.visible !== false
+    },
+    [state.canvases]
+  )
+
+  const getVisibleColumns = useCallback(
+    (canvasId?: string) => {
+      const canvas = canvasId
+        ? state.canvases.find((c) => c.id === canvasId)
+        : activeCanvas
+      if (!canvas) return []
+      return canvas.columns.filter((col) => col.visible !== false)
+    },
+    [state.canvases, activeCanvas]
+  )
+
   // Editor navigation
   const navigateToEditor = useCallback((panel: EditorPanelType, data?: unknown) => {
     dispatch({ type: 'NAVIGATE_TO_EDITOR', panel, data })
@@ -400,6 +509,9 @@ export function CanvasProvider({ children }: CanvasProviderProps) {
     removeColumn,
     resizeColumn,
     setColumnPanel,
+    toggleColumnVisibility,
+    isColumnVisible,
+    getVisibleColumns,
     navigateToEditor,
     goBack,
     goForward,

@@ -12,8 +12,8 @@ import type {
   StashEntry,
 } from './electron'
 
-// View modes for the app layout
-export type ViewMode = 'radar' | 'focus'
+// Canvas identifiers (matches canvas IDs in CanvasContext)
+export type ViewMode = 'radar' | 'focus' | 'graph'
 export type MainPanelView = 'history' | 'settings'
 
 // Status messages shown as toasts
@@ -64,8 +64,9 @@ export type ListPanelType =
   | 'branch-list'
   | 'remote-list'
   | 'worktree-list'
+  | 'stash-list'
   | 'commit-list'
-  | 'unified-list'
+  | 'sidebar'
 
 export type EditorPanelType =
   | 'pr-detail'
@@ -86,6 +87,11 @@ export type PanelType = ListPanelType | EditorPanelType | VizPanelType
 
 /**
  * Column definition within a canvas
+ * 
+ * All columns support:
+ * - Drag reorder (via header drag handle)
+ * - Resize (via edge drag, respects minWidth)
+ * - Visibility toggle (if collapsible: true)
  */
 export interface Column {
   id: string
@@ -94,14 +100,29 @@ export interface Column {
   width: number | 'flex'       // Width in pixels or flex grow
   minWidth?: number            // Minimum width for resizing
   config?: Record<string, unknown>  // Panel-specific config
+  
+  // Display
+  label?: string               // Header label (e.g., "Pull Requests")
+  icon?: string                // Header icon (e.g., "⊕")
+  
+  // Visibility
+  visible?: boolean            // Is column shown? (default: true)
+  collapsible?: boolean        // Can user toggle visibility? (default: false)
 }
 
 /**
  * Canvas definition - a named layout with columns
+ * 
+ * All canvases share the same behaviors:
+ * - Column drag reorder
+ * - Column resize
+ * - Column visibility toggle
+ * - Editor back/forward navigation (if has editor slot)
  */
 export interface Canvas {
   id: string
   name: string
+  icon?: string                // Tab icon (e.g., "📡")
   columns: Column[]
   isPreset?: boolean           // Built-in canvases that can't be deleted
 }

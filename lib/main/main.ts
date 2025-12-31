@@ -79,6 +79,7 @@ import {
   saveLastRepoPath,
   getThemeMode,
   saveThemeMode,
+  getSelectedThemeId,
   getCustomTheme,
   loadVSCodeThemeFile,
   loadBuiltInTheme,
@@ -640,8 +641,12 @@ app.whenReady().then(() => {
     return getThemeMode()
   })
 
-  ipcMain.handle('set-theme-mode', (_, mode: 'light' | 'dark' | 'system' | 'custom') => {
-    saveThemeMode(mode)
+  ipcMain.handle('get-selected-theme-id', () => {
+    return getSelectedThemeId()
+  })
+
+  ipcMain.handle('set-theme-mode', (_, mode: 'light' | 'dark' | 'system' | 'custom', themeId?: string) => {
+    saveThemeMode(mode, themeId)
     return { success: true }
   })
 
@@ -676,8 +681,8 @@ app.whenReady().then(() => {
     return { success: true }
   })
 
-  ipcMain.handle('load-built-in-theme', (_event, themeFileName: string) => {
-    const theme = loadBuiltInTheme(themeFileName)
+  ipcMain.handle('load-built-in-theme', (_event, themeFileName: string, themeId?: string) => {
+    const theme = loadBuiltInTheme(themeFileName, themeId)
     if (theme) {
       return {
         theme,

@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useRef } from 'react'
-import { useCanvas, PRESET_CANVASES } from './CanvasContext'
+import { useCanvas } from './CanvasContext'
 import type { Canvas } from '../../types/app-types'
 
 export interface UseCanvasPersistenceOptions {
@@ -35,13 +35,18 @@ export function useCanvasPersistence(options: UseCanvasPersistenceOptions = {}) 
         const canvases: Canvas[] = savedCanvases.map((c) => ({
           id: c.id,
           name: c.name,
+          icon: c.icon,
           columns: c.columns.map((col) => ({
             id: col.id,
             slotType: col.slotType,
-            panel: col.panel as any,
+            panel: col.panel as Canvas['columns'][0]['panel'],
             width: col.width,
             minWidth: col.minWidth,
             config: col.config,
+            label: col.label,
+            icon: col.icon,
+            visible: col.visible,
+            collapsible: col.collapsible,
           })),
           isPreset: c.isPreset,
         }))
@@ -75,15 +80,13 @@ export function useCanvasPersistence(options: UseCanvasPersistenceOptions = {}) 
     // Debounce save
     saveTimeout.current = setTimeout(async () => {
       try {
-        // Filter out preset canvases (they're defined in code)
-        const customCanvases = state.canvases.filter(
-          (c) => !PRESET_CANVASES.some((p) => p.id === c.id)
-        )
-
-        // Convert to CanvasConfig format
-        const canvasConfigs = customCanvases.map((c) => ({
+        // Save ALL canvases including presets to preserve user modifications
+        // (column widths, visibility, order). On load, preset columns will be
+        // merged with code definitions to pick up any new columns.
+        const canvasConfigs = state.canvases.map((c) => ({
           id: c.id,
           name: c.name,
+          icon: c.icon,
           columns: c.columns.map((col) => ({
             id: col.id,
             slotType: col.slotType,
@@ -91,6 +94,10 @@ export function useCanvasPersistence(options: UseCanvasPersistenceOptions = {}) 
             width: col.width,
             minWidth: col.minWidth,
             config: col.config,
+            label: col.label,
+            icon: col.icon,
+            visible: col.visible,
+            collapsible: col.collapsible,
           })),
           isPreset: c.isPreset,
         }))
@@ -113,3 +120,4 @@ export function useCanvasPersistence(options: UseCanvasPersistenceOptions = {}) 
     isInitialized: isInitialized.current,
   }
 }
+

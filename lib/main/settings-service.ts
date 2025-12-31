@@ -22,6 +22,12 @@ interface CanvasColumn {
   width: number | 'flex';
   minWidth?: number;
   config?: Record<string, unknown>;
+  // Display
+  label?: string;
+  icon?: string;
+  // Visibility
+  visible?: boolean;
+  collapsible?: boolean;
 }
 
 interface CanvasConfig {
@@ -35,6 +41,7 @@ interface Settings {
   lastRepoPath?: string;
   viewMode?: ViewMode;
   themeMode?: ThemeMode;
+  selectedThemeId?: string;  // e.g., 'dracula', 'claude-desktop', 'light'
   customTheme?: VSCodeTheme;
   // Canvas settings
   canvases?: CanvasConfig[];
@@ -101,10 +108,16 @@ export function getThemeMode(): ThemeMode {
   return settings.themeMode || 'system';
 }
 
-export function saveThemeMode(mode: ThemeMode): void {
+export function saveThemeMode(mode: ThemeMode, themeId?: string): void {
   const settings = loadSettings();
   settings.themeMode = mode;
+  settings.selectedThemeId = themeId || mode;  // Default to mode for base themes
   saveSettings(settings);
+}
+
+export function getSelectedThemeId(): string {
+  const settings = loadSettings();
+  return settings.selectedThemeId || settings.themeMode || 'system';
 }
 
 export function getCustomTheme(): VSCodeTheme | null {
@@ -140,18 +153,19 @@ export async function loadVSCodeThemeFile(): Promise<VSCodeTheme | null> {
   }
 }
 
-export function loadBuiltInTheme(themeFileName: string): VSCodeTheme | null {
+export function loadBuiltInTheme(themeFileName: string, themeId?: string): VSCodeTheme | null {
   try {
     const themePath = path.join(app.getAppPath(), 'resources', 'themes', themeFileName);
     const data = fs.readFileSync(themePath, 'utf-8');
     const theme = JSON.parse(data) as VSCodeTheme;
-    
-    // Save the custom theme
+
+    // Save the custom theme and track which theme was selected
     const settings = loadSettings();
     settings.customTheme = theme;
     settings.themeMode = 'custom';
+    settings.selectedThemeId = themeId || themeFileName.replace('.json', '');
     saveSettings(settings);
-    
+
     return theme;
   } catch (error) {
     console.error('Failed to load built-in theme:', error);
@@ -202,14 +216,16 @@ export function getCanvases(): CanvasConfig[] {
 
 export function saveCanvases(canvases: CanvasConfig[]): void {
   const settings = loadSettings();
-  // Only save non-preset canvases (presets are defined in code)
-  settings.canvases = canvases.filter(c => !c.isPreset);
+  // Save all canvases - presets included to preserve user modifications
+  // (column widths, visibility, order). On load, preset columns will be
+  // merged with code definitions to pick up any new columns.
+  settings.canvases = canvases;
   saveSettings(settings);
 }
 
 export function getActiveCanvasId(): string {
   const settings = loadSettings();
-  return settings.activeCanvasId || 'focus';
+  return settings.activeCanvasId || 'radar';
 }
 
 export function saveActiveCanvasId(canvasId: string): void {
@@ -231,9 +247,9 @@ export function addCanvas(canvas: CanvasConfig): void {
 export function removeCanvas(canvasId: string): void {
   const settings = loadSettings();
   settings.canvases = (settings.canvases || []).filter(c => c.id !== canvasId);
-  // If we removed the active canvas, reset to focus
+  // If we removed the active canvas, reset to radar
   if (settings.activeCanvasId === canvasId) {
-    settings.activeCanvasId = 'focus';
+    settings.activeCanvasId = 'radar';
   }
   saveSettings(settings);
 }

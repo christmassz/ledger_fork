@@ -2,14 +2,10 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import type {
   Branch,
   Worktree,
-  BranchFilter,
-  BranchSort,
   CheckoutResult,
   PullRequest,
   Commit,
   WorkingStatus,
-  PRFilter,
-  PRSort,
   GraphCommit,
   CommitDiff,
   StashEntry,
@@ -27,16 +23,15 @@ import type {
 } from './types/app-types'
 import './styles/app.css'
 import { useWindowContext } from './components/window'
-import { useCanvas, useCanvasNavigation } from './components/canvas'
-import { SettingsPanel } from './components/SettingsPanel'
-import { GitGraph } from './components/panels/viz'
+import { useCanvas, useCanvasNavigation, useCanvasPersistence, CanvasRenderer, type CanvasData, type CanvasSelection, type CanvasHandlers, type CanvasUIState } from './components/canvas'
 import {
   DiffPanel,
   StagingPanel,
   PRReviewPanel,
   SidebarDetailPanel,
 } from './components/panels/editor'
-import { initializeTheme, setThemeMode as applyThemeMode, getCurrentThemeMode, loadVSCodeTheme, type ThemeMode } from './theme'
+import { SettingsPanel } from './components/SettingsPanel'
+import { initializeTheme, setThemeMode as applyThemeMode, getCurrentThemeMode, type ThemeMode } from './theme'
 
 export default function App() {
   const [repoPath, setRepoPath] = useState<string | null>(null)
@@ -64,46 +59,39 @@ export default function App() {
   const { 
     navigateToEditor, 
     setActiveCanvas, 
-    hasEditorSlot,
     state: canvasState,
     currentEditorEntry,
-    addColumn,
-    removeColumn,
-    activeCanvas,
+    toggleColumnVisibility,
+    isColumnVisible,
   } = useCanvas()
-  const { 
-    goBack, 
-    goForward, 
-    canGoBack, 
-    canGoForward 
-  } = useCanvasNavigation()
+  
+  // Initialize keyboard shortcuts for editor navigation
+  useCanvasNavigation()
+  
+  // Initialize canvas persistence (auto-save custom canvases and active canvas)
+  useCanvasPersistence()
 
-  // Check if Radar canvas has an editor column
+  // Check if Radar canvas has a VISIBLE editor column
   const radarCanvas = canvasState.canvases.find(c => c.id === 'radar')
-  const radarHasEditor = radarCanvas?.columns.some(col => col.slotType === 'editor') ?? false
+  const radarEditorColumn = radarCanvas?.columns.find(col => col.slotType === 'editor')
+  const radarEditorVisible = radarEditorColumn?.visible !== false
 
-  // Toggle editor column in Radar canvas
+  // Toggle editor column visibility in Radar canvas
   const toggleRadarEditor = useCallback(() => {
-    if (radarHasEditor) {
-      // Remove editor column from radar
-      const editorCol = radarCanvas?.columns.find(col => col.slotType === 'editor')
-      if (editorCol) {
-        removeColumn('radar', editorCol.id)
-      }
-    } else {
-      // Add editor column to radar
-      addColumn('radar', {
-        id: 'radar-editor',
-        slotType: 'editor',
-        panel: 'empty',
-        width: 400,
-        minWidth: 300,
-      })
+    if (radarEditorColumn) {
+      // Toggle visibility of existing editor column
+      toggleColumnVisibility('radar', radarEditorColumn.id)
     }
-  }, [radarHasEditor, radarCanvas, removeColumn, addColumn])
+  }, [radarEditorColumn, toggleColumnVisibility])
 
-  // View mode state
-  const [viewMode, setViewMode] = useState<ViewMode>('radar')
+  // Theme change handler for Settings panel
+  const handleThemeChange = useCallback(async (mode: ThemeMode) => {
+    setThemeMode(mode)
+    await applyThemeMode(mode)
+  }, [])
+
+  // Current canvas mode for titlebar button styling
+  const viewMode = canvasState.activeCanvasId as ViewMode
   const [mainPanelView, setMainPanelView] = useState<MainPanelView>('history')
 
   // Focus mode state
@@ -114,83 +102,13 @@ export default function App() {
   const [loadingDiff, setLoadingDiff] = useState(false)
   const [sidebarFocus, setSidebarFocus] = useState<SidebarFocus | null>(null)
   // History/Commits panel filters (shared between Radar and Focus modes)
-  const [historyFilterOpen, setHistoryFilterOpen] = useState(false) // Focus mode filter panel
-  const [radarCommitsFilterOpen, setRadarCommitsFilterOpen] = useState(false) // Radar mode filter panel
-  const [showCheckpoints, setShowCheckpoints] = useState(false) // Hide Conductor checkpoints by default
-  const [showGraphLines, setShowGraphLines] = useState(true) // Show git graph visualization (Focus mode only)
-  const [onlyBranchHeads, setOnlyBranchHeads] = useState(false) // Show only commits that are branch HEADs
-  const [onlyUnmergedBranches, setOnlyUnmergedBranches] = useState(false) // Show only commits from unmerged branches
+  // Graph display options
+  const [showCheckpoints] = useState(false) // Hide Conductor checkpoints by default
 
-  // Sidebar collapsed state
-  const [sidebarSections, setSidebarSections] = useState({
-    branches: true,
-    remotes: false,
-    worktrees: true,
-    stashes: false,
-    prs: true,
-  })
 
-  // Sidebar filter panels open state
-  const [sidebarFiltersOpen, setSidebarFiltersOpen] = useState({
-    prs: false,
-    branches: false,
-    remotes: false,
-    worktrees: false,
-  })
 
-  // Filter and sort state
-  const [localFilter, setLocalFilter] = useState<BranchFilter>('all')
-  const [localSort, setLocalSort] = useState<BranchSort>('name')
-  const [remoteFilter, setRemoteFilter] = useState<BranchFilter>('all')
-  const [remoteSort, setRemoteSort] = useState<BranchSort>('name')
-  const [prFilter, setPrFilter] = useState<PRFilter>('open-not-draft')
-  const [prSort, setPrSort] = useState<PRSort>('updated')
-
-  // Search state for Radar mode columns
-  const [prSearch, setPrSearch] = useState('')
-  const [localBranchSearch, setLocalBranchSearch] = useState('')
-  const [remoteBranchSearch, setRemoteBranchSearch] = useState('')
-  const [worktreeSearch, setWorktreeSearch] = useState('')
-  const [stashSearch, setStashSearch] = useState('')
-
-  // Collapsible controls state
-  const [prControlsOpen, setPrControlsOpen] = useState(false)
-  const [localControlsOpen, setLocalControlsOpen] = useState(false)
-  const [remoteControlsOpen, setRemoteControlsOpen] = useState(false)
-  const [worktreeControlsOpen, setWorktreeControlsOpen] = useState(false)
-  const [stashControlsOpen, setStashControlsOpen] = useState(false)
-
-  // Worktree filter state
-  const [worktreeParentFilter, setWorktreeParentFilter] = useState<string>('all')
-
-  // Focus view panel state (resizable + collapsible)
-  const [sidebarWidth, setSidebarWidth] = useState(220)
-  const [detailWidth, setDetailWidth] = useState(400)
-  const [graphWidth, setGraphWidth] = useState<number | null>(null) // null = auto-size
-  const [sidebarVisible, setSidebarVisible] = useState(true)
-  const [mainVisible, setMainVisible] = useState(true)
-  const [detailVisible, setDetailVisible] = useState(true)
-  const [isResizingSidebar, setIsResizingSidebar] = useState(false)
-  const [isResizingDetail, setIsResizingDetail] = useState(false)
-  const [isResizingGraph, setIsResizingGraph] = useState(false)
+  // Panel visibility is now handled by the canvas system via toggleColumnVisibility
   
-  // Sidebar keyboard navigation
-  const [sidebarFocusedIndex, setSidebarFocusedIndex] = useState(-1)
-  const sidebarRef = useRef<HTMLElement>(null)
-
-  // Radar view column order (drag-and-drop)
-  const [radarColumnOrder, setRadarColumnOrder] = useState<string[]>([
-    'stashes',
-    'prs',
-    'worktrees',
-    'commits',
-    'branches',
-    'remotes',
-    'editor',
-  ])
-  const [draggingColumn, setDraggingColumn] = useState<string | null>(null)
-  const [dragOverColumn, setDragOverColumn] = useState<string | null>(null)
-
   const menuRef = useRef<HTMLDivElement>(null)
 
   // Close context menu when clicking outside
@@ -224,48 +142,6 @@ export default function App() {
     return undefined
   }, [status])
 
-  // Handle panel resizing
-  const graphResizeStartX = useRef(0)
-  const graphResizeStartWidth = useRef(0)
-  
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (isResizingSidebar) {
-        const newWidth = Math.max(100, e.clientX)
-        setSidebarWidth(newWidth)
-      }
-      if (isResizingDetail) {
-        const newWidth = Math.max(200, window.innerWidth - e.clientX)
-        setDetailWidth(newWidth)
-      }
-      if (isResizingGraph) {
-        const delta = e.clientX - graphResizeStartX.current
-        const newWidth = Math.max(60, graphResizeStartWidth.current + delta)
-        setGraphWidth(newWidth)
-      }
-    }
-
-    const handleMouseUp = () => {
-      setIsResizingSidebar(false)
-      setIsResizingDetail(false)
-      setIsResizingGraph(false)
-    }
-
-    if (isResizingSidebar || isResizingDetail || isResizingGraph) {
-      document.addEventListener('mousemove', handleMouseMove)
-      document.addEventListener('mouseup', handleMouseUp)
-      document.body.style.cursor = 'col-resize'
-      document.body.style.userSelect = 'none'
-    }
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove)
-      document.removeEventListener('mouseup', handleMouseUp)
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
-    }
-  }, [isResizingSidebar, isResizingDetail, isResizingGraph])
-
   // Titlebar actions for panel toggles and settings button
   useEffect(() => {
     const actions: JSX.Element[] = []
@@ -277,11 +153,11 @@ export default function App() {
           key="editor-toggle"
           className="panel-toggle-btn"
           onClick={toggleRadarEditor}
-          title={radarHasEditor ? 'Hide Detail Panel' : 'Show Detail Panel'}
+          title={radarEditorVisible ? 'Hide Detail Panel' : 'Show Detail Panel'}
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <rect x="0.5" y="0.5" width="15" height="15" rx="1.5" stroke="currentColor" strokeWidth="1" />
-            <rect x="5" y="1" width="6" height="14" fill={radarHasEditor ? 'currentColor' : 'none'} />
+            <rect x="5" y="1" width="6" height="14" fill={radarEditorVisible ? 'currentColor' : 'none'} />
           </svg>
         </button>
       )
@@ -289,11 +165,15 @@ export default function App() {
 
     // Add Focus mode panel toggles if in focus mode with a repo
     if (repoPath && viewMode === 'focus') {
+      const sidebarVisible = isColumnVisible('focus', 'focus-sidebar')
+      const graphVisible = isColumnVisible('focus', 'focus-viz')
+      const editorVisible = isColumnVisible('focus', 'focus-editor')
+      
       actions.push(
         <button
           key="sidebar-toggle"
           className="panel-toggle-btn"
-          onClick={() => setSidebarVisible(!sidebarVisible)}
+          onClick={() => toggleColumnVisibility('focus', 'focus-sidebar')}
           title={sidebarVisible ? 'Hide Sidebar Panel' : 'Show Sidebar Panel'}
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -302,46 +182,49 @@ export default function App() {
           </svg>
         </button>,
         <button
-          key="main-toggle"
+          key="graph-toggle"
           className="panel-toggle-btn"
-          onClick={() => setMainVisible(!mainVisible)}
-          title={mainVisible ? 'Hide Graph Panel' : 'Show Graph Panel'}
+          onClick={() => toggleColumnVisibility('focus', 'focus-viz')}
+          title={graphVisible ? 'Hide Graph Panel' : 'Show Graph Panel'}
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <rect x="0.5" y="0.5" width="15" height="15" rx="1.5" stroke="currentColor" strokeWidth="1" />
-            <rect x="5" y="1" width="6" height="14" fill={mainVisible ? 'currentColor' : 'none'} />
+            <rect x="5" y="1" width="6" height="14" fill={graphVisible ? 'currentColor' : 'none'} />
           </svg>
         </button>,
         <button
-          key="detail-toggle"
+          key="editor-toggle"
           className="panel-toggle-btn"
-          onClick={() => setDetailVisible(!detailVisible)}
-          title={detailVisible ? 'Hide Detail Panel' : 'Show Detail Panel'}
+          onClick={() => toggleColumnVisibility('focus', 'focus-editor')}
+          title={editorVisible ? 'Hide Detail Panel' : 'Show Detail Panel'}
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <rect x="0.5" y="0.5" width="15" height="15" rx="1.5" stroke="currentColor" strokeWidth="1" />
-            <rect x="11" y="1" width="4" height="14" fill={detailVisible ? 'currentColor' : 'none'} />
+            <rect x="11" y="1" width="4" height="14" fill={editorVisible ? 'currentColor' : 'none'} />
           </svg>
         </button>
       )
     }
 
-    // Always add settings button
-    const isSettingsActive = viewMode === 'focus' && mainPanelView === 'settings'
+    // Always add settings button - works from ANY canvas
+    // Settings is active if mainPanelView is 'settings', regardless of current canvas
+    const isSettingsActive = mainPanelView === 'settings'
     actions.push(
       <button
         key="settings"
         className={`panel-toggle-btn ${isSettingsActive ? 'active' : ''}`}
         onClick={() => {
-          if (viewMode === 'radar') {
-            // Switch to Focus mode with Settings panel
-            setViewMode('focus')
-            setMainPanelView('settings')
-            setMainVisible(true)
+          if (isSettingsActive) {
+            // Already showing settings in Focus - toggle back to history
+            setMainPanelView('history')
           } else {
-            // Toggle between history and settings in Focus mode
-            setMainPanelView(mainPanelView === 'settings' ? 'history' : 'settings')
-            setMainVisible(true)
+            // From any canvas: go to Focus (home) and show Settings
+            setActiveCanvas('focus')
+            setMainPanelView('settings')
+            // Ensure editor column is visible to show settings
+            if (!isColumnVisible('focus', 'focus-editor')) {
+              toggleColumnVisibility('focus', 'focus-editor')
+            }
           }
         }}
         title="Settings"
@@ -360,52 +243,7 @@ export default function App() {
     )
 
     setTitlebarActions(actions.length > 0 ? <>{actions}</> : null)
-  }, [repoPath, viewMode, mainPanelView, sidebarVisible, mainVisible, detailVisible, radarHasEditor, toggleRadarEditor, setTitlebarActions])
-
-  // Column drag and drop handlers for Radar view
-  const handleColumnDragStart = useCallback((e: React.DragEvent, columnId: string) => {
-    setDraggingColumn(columnId)
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('text/plain', columnId)
-  }, [])
-
-  const handleColumnDragOver = useCallback(
-    (e: React.DragEvent, columnId: string) => {
-      e.preventDefault()
-      if (draggingColumn && draggingColumn !== columnId) {
-        setDragOverColumn(columnId)
-      }
-    },
-    [draggingColumn]
-  )
-
-  const handleColumnDragLeave = useCallback(() => {
-    setDragOverColumn(null)
-  }, [])
-
-  const handleColumnDrop = useCallback(
-    (e: React.DragEvent, targetColumnId: string) => {
-      e.preventDefault()
-      if (!draggingColumn || draggingColumn === targetColumnId) return
-
-      setRadarColumnOrder((prev) => {
-        const newOrder = [...prev]
-        const dragIndex = newOrder.indexOf(draggingColumn)
-        const targetIndex = newOrder.indexOf(targetColumnId)
-        newOrder.splice(dragIndex, 1)
-        newOrder.splice(targetIndex, 0, draggingColumn)
-        return newOrder
-      })
-      setDraggingColumn(null)
-      setDragOverColumn(null)
-    },
-    [draggingColumn]
-  )
-
-  const handleColumnDragEnd = useCallback(() => {
-    setDraggingColumn(null)
-    setDragOverColumn(null)
-  }, [])
+  }, [repoPath, viewMode, mainPanelView, canvasState, radarEditorVisible, toggleRadarEditor, setTitlebarActions, setActiveCanvas, isColumnVisible, toggleColumnVisibility])
 
   const selectRepo = async () => {
     if (switching) return
@@ -555,33 +393,6 @@ export default function App() {
     [navigateToEditor, sidebarToEditorPanel]
   )
 
-  // Toggle sidebar section
-  const toggleSidebarSection = useCallback((section: keyof typeof sidebarSections) => {
-    setSidebarSections((prev) => ({ ...prev, [section]: !prev[section] }))
-  }, [])
-
-  // Check if all sidebar sections are expanded
-  const allSectionsExpanded = useMemo(() => {
-    return Object.values(sidebarSections).every((v) => v)
-  }, [sidebarSections])
-
-  // Toggle all sidebar sections
-  const toggleAllSidebarSections = useCallback(() => {
-    const newState = !allSectionsExpanded
-    setSidebarSections({
-      branches: newState,
-      remotes: newState,
-      worktrees: newState,
-      stashes: newState,
-      prs: newState,
-    })
-  }, [allSectionsExpanded])
-
-  // Toggle sidebar filter panel
-  const toggleSidebarFilter = useCallback((section: keyof typeof sidebarFiltersOpen) => {
-    setSidebarFiltersOpen((prev) => ({ ...prev, [section]: !prev[section] }))
-  }, [])
-
   // Radar single-click handlers - soft select item (always works, drives editor when visible)
   const handleRadarItemClick = useCallback(
     (type: SidebarFocusType, data: PullRequest | Branch | Worktree | StashEntry | WorkingStatus) => {
@@ -595,58 +406,60 @@ export default function App() {
   // Radar card double-click handlers - switch to Focus mode with item selected
   const handleRadarPRClick = useCallback(
     (pr: PullRequest) => {
-      setViewMode('focus')
-      setSidebarSections((prev) => ({ ...prev, prs: true }))
+      setActiveCanvas('focus')
       handleSidebarFocus('pr', pr)
     },
-    [handleSidebarFocus]
+    [setActiveCanvas, handleSidebarFocus]
   )
 
   const handleRadarWorktreeClick = useCallback(
     (wt: Worktree) => {
-      setViewMode('focus')
-      setSidebarSections((prev) => ({ ...prev, worktrees: true }))
+      setActiveCanvas('focus')
       handleSidebarFocus('worktree', wt)
     },
-    [handleSidebarFocus]
+    [setActiveCanvas, handleSidebarFocus]
   )
 
   const handleRadarBranchClick = useCallback(
     (branch: Branch) => {
-      setViewMode('focus')
-      setSidebarSections((prev) => ({ ...prev, branches: true }))
+      setActiveCanvas('focus')
       handleSidebarFocus('branch', branch)
     },
-    [handleSidebarFocus]
+    [setActiveCanvas, handleSidebarFocus]
   )
 
   const handleRadarRemoteBranchClick = useCallback(
     (branch: Branch) => {
-      setViewMode('focus')
-      setSidebarSections((prev) => ({ ...prev, remotes: true }))
+      setActiveCanvas('focus')
       handleSidebarFocus('remote', branch)
     },
-    [handleSidebarFocus]
+    [setActiveCanvas, handleSidebarFocus]
   )
 
   const handleRadarCommitClick = useCallback(
     (commit: Commit) => {
-      setViewMode('focus')
-      // Find the matching GraphCommit by hash and select it
+      setActiveCanvas('focus')
       const graphCommit = graphCommits.find((gc) => gc.hash === commit.hash)
       if (graphCommit) {
         handleSelectCommit(graphCommit)
       }
     },
-    [graphCommits, handleSelectCommit]
+    [setActiveCanvas, graphCommits, handleSelectCommit]
+  )
+
+  const handleRadarStashClick = useCallback(
+    (stash: StashEntry) => {
+      setActiveCanvas('focus')
+      handleSidebarFocus('stash', stash)
+    },
+    [setActiveCanvas, handleSidebarFocus]
   )
 
   const handleRadarUncommittedClick = useCallback(() => {
     if (!workingStatus) return
-    setViewMode('focus')
-    setSidebarSections((prev) => ({ ...prev, branches: true }))
+    setActiveCanvas('focus')
     handleSidebarFocus('uncommitted', workingStatus)
-  }, [workingStatus, handleSidebarFocus])
+  }, [setActiveCanvas, workingStatus, handleSidebarFocus])
 
   // Context menu handlers
   const handleContextMenu = (
@@ -1148,10 +961,6 @@ export default function App() {
     [currentBranch, switching]
   )
 
-  const handlePRDoubleClick = useCallback(async (pr: PullRequest) => {
-    handlePRViewRemote(pr)
-  }, [])
-
   const handleCommitDoubleClick = useCallback(
     async (commit: Commit) => {
       if (switching) return
@@ -1201,365 +1010,6 @@ export default function App() {
     initializeTheme().catch(console.error)
     getCurrentThemeMode().then(setThemeMode).catch(console.error)
   }, [])
-
-  // Theme change handler
-  const handleThemeChange = useCallback(
-    async (newMode: ThemeMode) => {
-      try {
-        if (newMode === 'custom') {
-          const theme = await loadVSCodeTheme()
-          if (theme) {
-            setThemeMode('custom')
-          }
-        } else {
-          await applyThemeMode(newMode)
-          setThemeMode(newMode)
-        }
-      } catch (error) {
-        console.error('Failed to change theme:', error)
-        setStatus({ type: 'error', message: 'Failed to change theme' })
-      }
-    },
-    []
-  )
-
-  // Filter and sort functions
-  const filterBranches = (branchList: Branch[], filter: BranchFilter): Branch[] => {
-    switch (filter) {
-      case 'local-only':
-        return branchList.filter((b) => b.isLocalOnly)
-      case 'unmerged':
-        // Always include master/main even if merged (they're never really "merged away")
-        return branchList.filter((b) => {
-          const baseName = b.name.replace('remotes/', '').replace(/^origin\//, '')
-          const isMainBranch = baseName === 'main' || baseName === 'master'
-          return !b.isMerged || isMainBranch
-        })
-      default:
-        return branchList
-    }
-  }
-
-  const sortBranches = (branchList: Branch[], sort: BranchSort): Branch[] => {
-    const sorted = [...branchList]
-    switch (sort) {
-      case 'last-commit':
-        return sorted.sort((a, b) => {
-          if (!a.lastCommitDate) return 1
-          if (!b.lastCommitDate) return -1
-          return new Date(b.lastCommitDate).getTime() - new Date(a.lastCommitDate).getTime()
-        })
-      case 'first-commit':
-        return sorted.sort((a, b) => {
-          if (!a.firstCommitDate) return 1
-          if (!b.firstCommitDate) return -1
-          return new Date(a.firstCommitDate).getTime() - new Date(b.firstCommitDate).getTime()
-        })
-      case 'most-commits':
-        return sorted.sort((a, b) => (b.commitCount || 0) - (a.commitCount || 0))
-      case 'name':
-      default:
-        return sorted.sort((a, b) => a.name.localeCompare(b.name))
-    }
-  }
-
-  const localBranches = useMemo(() => {
-    const local = branches.filter((b) => !b.isRemote)
-    let filtered = filterBranches(local, localFilter)
-    // Apply search filter
-    if (localBranchSearch.trim()) {
-      const search = localBranchSearch.toLowerCase().trim()
-      filtered = filtered.filter((b) => b.name.toLowerCase().includes(search))
-    }
-    return sortBranches(filtered, localSort)
-  }, [branches, localFilter, localSort, localBranchSearch])
-
-  const remoteBranches = useMemo(() => {
-    const remote = branches.filter((b) => b.isRemote)
-    let filtered = filterBranches(remote, remoteFilter)
-    // Apply search filter
-    if (remoteBranchSearch.trim()) {
-      const search = remoteBranchSearch.toLowerCase().trim()
-      filtered = filtered.filter((b) => b.name.toLowerCase().includes(search))
-    }
-    return sortBranches(filtered, remoteSort)
-  }, [branches, remoteFilter, remoteSort, remoteBranchSearch])
-
-  // Create the "Working Folder" pseudo-worktree representing the main repo folder
-  // This helps users understand they're already using worktrees conceptually
-  const workingFolderWorktree: Worktree | null = useMemo(() => {
-    if (!repoPath) return null
-
-    // Get repo name from path (last segment)
-    const repoName = repoPath.split('/').pop() || 'Repository'
-
-    return {
-      path: repoPath,
-      head: '', // Will show current commit
-      branch: currentBranch || null,
-      bare: false,
-      agent: 'working-folder' as const,
-      agentIndex: 1,
-      contextHint: repoName,
-      displayName: `Working Folder`,
-      changedFileCount: workingStatus?.files.length ?? 0,
-      additions: workingStatus?.additions ?? 0,
-      deletions: workingStatus?.deletions ?? 0,
-      lastModified: new Date().toISOString(),
-      activityStatus: 'active' as const, // Working folder is always "active"
-      agentTaskHint: null, // No agent task for working folder
-    }
-  }, [repoPath, currentBranch, workingStatus])
-
-  // Extract unique parent folders from worktrees
-  const worktreeParents = useMemo(() => {
-    const parents = new Set<string>()
-    // Always include 'main' since working folder is always there
-    if (repoPath) parents.add('main')
-
-    for (const wt of worktrees) {
-      // Extract parent folder from path (e.g., ~/.cursor/worktrees/xxx -> .cursor)
-      const pathParts = wt.path.split('/')
-      // Find known agent folders like .cursor, .claude, conductor, etc.
-      for (let i = 0; i < pathParts.length; i++) {
-        const part = pathParts[i]
-        // Check for dot folders (.cursor, .claude, etc.)
-        if (
-          part.startsWith('.') &&
-          ['cursor', 'claude', 'gemini', 'junie'].some((a) => part.toLowerCase().includes(a))
-        ) {
-          parents.add(part)
-          break
-        }
-        // Check for Conductor workspaces (~/conductor/workspaces/)
-        if (part === 'conductor' && pathParts[i + 1] === 'workspaces') {
-          parents.add('conductor')
-          break
-        }
-      }
-      // Also check for worktrees in the main repo path
-      if (repoPath && wt.path.startsWith(repoPath)) {
-        parents.add('main')
-      }
-    }
-    return Array.from(parents).sort()
-  }, [worktrees, repoPath])
-
-  // Filter worktrees by parent and search
-  const filteredWorktrees = useMemo(() => {
-    // Filter out the main repo worktree since we show it as "Working Folder" pseudo-entry
-    let filtered = worktrees.filter((wt) => wt.path !== repoPath)
-
-    // Apply parent filter
-    if (worktreeParentFilter !== 'all') {
-      filtered = filtered.filter((wt) => {
-        if (worktreeParentFilter === 'main') {
-          return repoPath && wt.path.startsWith(repoPath)
-        }
-        return wt.path.includes(`/${worktreeParentFilter}/`)
-      })
-    }
-
-    // Apply search filter
-    if (worktreeSearch.trim()) {
-      const search = worktreeSearch.toLowerCase().trim()
-      filtered = filtered.filter(
-        (wt) => wt.displayName.toLowerCase().includes(search) || (wt.branch && wt.branch.toLowerCase().includes(search))
-      )
-    }
-
-    // Prepend the working folder pseudo-worktree
-    // It should appear first and match the 'main' filter
-    if (workingFolderWorktree) {
-      const matchesParentFilter = worktreeParentFilter === 'all' || worktreeParentFilter === 'main'
-      const matchesSearch =
-        !worktreeSearch.trim() ||
-        workingFolderWorktree.displayName.toLowerCase().includes(worktreeSearch.toLowerCase().trim()) ||
-        (workingFolderWorktree.branch &&
-          workingFolderWorktree.branch.toLowerCase().includes(worktreeSearch.toLowerCase().trim()))
-
-      if (matchesParentFilter && matchesSearch) {
-        filtered = [workingFolderWorktree, ...filtered]
-      }
-    }
-
-    return filtered
-  }, [worktrees, worktreeParentFilter, repoPath, worktreeSearch, workingFolderWorktree])
-
-  // Filter stashes
-  const filteredStashes = useMemo(() => {
-    if (!stashSearch.trim()) return stashes
-
-    const search = stashSearch.toLowerCase().trim()
-    return stashes.filter(
-      (stash) =>
-        stash.message.toLowerCase().includes(search) ||
-        (stash.branch && stash.branch.toLowerCase().includes(search))
-    )
-  }, [stashes, stashSearch])
-
-  // Filter and sort PRs
-  const filteredPRs = useMemo(() => {
-    let filtered = [...pullRequests]
-
-    // Apply filter
-    switch (prFilter) {
-      case 'open-not-draft':
-        filtered = filtered.filter((pr) => !pr.isDraft)
-        break
-      case 'open-draft':
-        filtered = filtered.filter((pr) => pr.isDraft)
-        break
-      case 'all':
-      default:
-        break
-    }
-
-    // Apply search filter
-    if (prSearch.trim()) {
-      const search = prSearch.toLowerCase().trim()
-      filtered = filtered.filter(
-        (pr) =>
-          pr.title.toLowerCase().includes(search) ||
-          pr.branch.toLowerCase().includes(search) ||
-          pr.author.toLowerCase().includes(search)
-      )
-    }
-
-    // Apply sort
-    switch (prSort) {
-      case 'comments':
-        filtered.sort((a, b) => b.comments - a.comments)
-        break
-      case 'first-commit':
-        filtered.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-        break
-      case 'last-commit':
-        filtered.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-        break
-      case 'updated':
-      default:
-        filtered.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-        break
-    }
-
-    return filtered
-  }, [pullRequests, prFilter, prSort, prSearch])
-
-  // Build flat list of sidebar items for keyboard navigation
-  const sidebarItems = useMemo(() => {
-    const items: Array<{ type: SidebarFocusType; data: PullRequest | Branch | Worktree | StashEntry | WorkingStatus; action?: () => void }> = []
-    
-    // PRs
-    if (sidebarSections.prs && !prError) {
-      filteredPRs.forEach((pr) => items.push({ type: 'pr', data: pr, action: () => handlePRDoubleClick(pr) }))
-    }
-    
-    // Uncommitted changes
-    if (sidebarSections.branches && workingStatus?.hasChanges) {
-      items.push({ type: 'uncommitted', data: workingStatus })
-    }
-    
-    // Branches
-    if (sidebarSections.branches) {
-      localBranches.forEach((branch) => items.push({ type: 'branch', data: branch, action: () => handleBranchDoubleClick(branch) }))
-    }
-    
-    // Remotes
-    if (sidebarSections.remotes) {
-      remoteBranches.forEach((branch) => items.push({ type: 'remote', data: branch, action: () => handleRemoteBranchDoubleClick(branch) }))
-    }
-    
-    // Worktrees (including working folder pseudo-worktree)
-    if (sidebarSections.worktrees) {
-      // Working folder first
-      const workingFolder = filteredWorktrees.find((wt) => wt.agent === 'working-folder')
-      if (workingFolder) {
-        items.push({ type: 'worktree', data: workingFolder })
-      }
-      // Then other worktrees
-      filteredWorktrees
-        .filter((wt) => wt.agent !== 'working-folder' && wt.path !== repoPath)
-        .forEach((wt) => items.push({ type: 'worktree', data: wt, action: () => handleWorktreeDoubleClick(wt) }))
-    }
-    
-    // Stashes
-    if (sidebarSections.stashes) {
-      stashes.forEach((stash) => items.push({ type: 'stash', data: stash }))
-    }
-    
-    return items
-  }, [sidebarSections, filteredPRs, prError, workingStatus, localBranches, remoteBranches, filteredWorktrees, repoPath, stashes])
-
-  // Sidebar keyboard navigation handler
-  const handleSidebarKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (sidebarItems.length === 0) return
-
-    switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault()
-        setSidebarFocusedIndex((prev) => {
-          const next = prev + 1
-          if (next >= sidebarItems.length) return sidebarItems.length - 1
-          const item = sidebarItems[next]
-          handleSidebarFocus(item.type, item.data)
-          return next
-        })
-        break
-      case 'ArrowUp':
-        e.preventDefault()
-        setSidebarFocusedIndex((prev) => {
-          const next = prev - 1
-          if (next < 0) return 0
-          const item = sidebarItems[next]
-          handleSidebarFocus(item.type, item.data)
-          return next
-        })
-        break
-      case 'Enter':
-        e.preventDefault()
-        if (sidebarFocusedIndex >= 0 && sidebarFocusedIndex < sidebarItems.length) {
-          const item = sidebarItems[sidebarFocusedIndex]
-          if (item.action) {
-            item.action()
-          }
-        }
-        break
-      case 'Home':
-        e.preventDefault()
-        if (sidebarItems.length > 0) {
-          setSidebarFocusedIndex(0)
-          handleSidebarFocus(sidebarItems[0].type, sidebarItems[0].data)
-        }
-        break
-      case 'End':
-        e.preventDefault()
-        if (sidebarItems.length > 0) {
-          const lastIdx = sidebarItems.length - 1
-          setSidebarFocusedIndex(lastIdx)
-          handleSidebarFocus(sidebarItems[lastIdx].type, sidebarItems[lastIdx].data)
-        }
-        break
-    }
-  }, [sidebarItems, sidebarFocusedIndex, handleSidebarFocus])
-
-  // Sync sidebar focused index with sidebar focus state
-  useEffect(() => {
-    if (!sidebarFocus) {
-      setSidebarFocusedIndex(-1)
-      return
-    }
-    const idx = sidebarItems.findIndex((item) => {
-      if (item.type !== sidebarFocus.type) return false
-      if (item.type === 'pr') return (item.data as PullRequest).number === (sidebarFocus.data as PullRequest).number
-      if (item.type === 'branch' || item.type === 'remote') return (item.data as Branch).name === (sidebarFocus.data as Branch).name
-      if (item.type === 'worktree') return (item.data as Worktree).path === (sidebarFocus.data as Worktree).path
-      if (item.type === 'stash') return (item.data as StashEntry).index === (sidebarFocus.data as StashEntry).index
-      if (item.type === 'uncommitted') return true
-      return false
-    })
-    if (idx !== -1) setSidebarFocusedIndex(idx)
-  }, [sidebarFocus, sidebarItems])
 
   // Sync local state with canvas editor state (for back/forward navigation)
   // This runs when currentEditorEntry changes (via goBack/goForward)
@@ -1611,46 +1061,6 @@ export default function App() {
   }, [canvasState.editorState.historyIndex])
 
   // Filter graph commits based on history panel filters
-  const filteredGraphCommits = useMemo(() => {
-    let filtered = graphCommits
-
-    // Filter to only branch heads (commits with refs that are branches)
-    if (onlyBranchHeads) {
-      filtered = filtered.filter((commit) => {
-        // Keep commits that have branch refs (not just tags)
-        return commit.refs.some((ref) => {
-          const cleanRef = ref.replace('HEAD -> ', '')
-          // It's a branch if it's not a tag and doesn't look like a tag (v1.0.0 etc)
-          return !cleanRef.startsWith('tag:') && !cleanRef.match(/^v?\d+\.\d+/)
-        })
-      })
-    }
-
-    // Filter to only unmerged branches
-    if (onlyUnmergedBranches) {
-      // Get list of unmerged branch names from the branches data
-      const unmergedBranchNames = new Set(
-        branches.filter((b) => !b.isMerged).map((b) => b.name.replace('remotes/origin/', '').replace('origin/', ''))
-      )
-      // Also add the branch without origin/ prefix
-      branches
-        .filter((b) => !b.isMerged)
-        .forEach((b) => {
-          unmergedBranchNames.add(b.name)
-        })
-
-      filtered = filtered.filter((commit) => {
-        // Keep commits that are on unmerged branches (via refs)
-        return commit.refs.some((ref) => {
-          const cleanRef = ref.replace('HEAD -> ', '').replace('origin/', '')
-          return unmergedBranchNames.has(cleanRef)
-        })
-      })
-    }
-
-    return filtered
-  }, [graphCommits, onlyBranchHeads, onlyUnmergedBranches, branches])
-
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return ''
     const date = new Date(dateStr)
@@ -1673,20 +1083,174 @@ export default function App() {
     return `${Math.floor(diffDays / 30)}mo ago`
   }
 
-  const getReviewBadge = (decision: string | null) => {
-    switch (decision) {
-      case 'APPROVED':
-        return <span className="badge badge-approved">Approved</span>
-      case 'CHANGES_REQUESTED':
-        return <span className="badge badge-changes">Changes</span>
-      case 'REVIEW_REQUIRED':
-        return <span className="badge badge-review">Review</span>
-      default:
-        return null
-    }
-  }
-
   const menuItems = getMenuItems()
+
+  // ========================================
+  // Canvas Data & Props
+  // ========================================
+
+  const canvasData: CanvasData = useMemo(() => ({
+    repoPath,
+    prs: pullRequests,
+    prError,
+    branches,
+    currentBranch,
+    worktrees,
+    stashes,
+    commits: graphCommits,
+    workingStatus,
+    commitDiff,
+    loadingDiff,
+  }), [repoPath, pullRequests, prError, branches, currentBranch, worktrees, stashes, graphCommits, workingStatus, commitDiff, loadingDiff])
+
+  const canvasSelection: CanvasSelection = useMemo(() => ({
+    selectedPR: sidebarFocus?.type === 'pr' ? (sidebarFocus.data as PullRequest) : null,
+    selectedBranch: sidebarFocus?.type === 'branch' || sidebarFocus?.type === 'remote' ? (sidebarFocus.data as Branch) : null,
+    selectedWorktree: sidebarFocus?.type === 'worktree' ? (sidebarFocus.data as Worktree) : null,
+    selectedStash: sidebarFocus?.type === 'stash' ? (sidebarFocus.data as StashEntry) : null,
+    selectedCommit,
+  }), [sidebarFocus, selectedCommit])
+
+  // Render editor panel content based on current selection
+  const renderEditorContent = useCallback(() => {
+    // Settings panel takes priority when active
+    if (mainPanelView === 'settings') {
+      return (
+        <SettingsPanel
+          themeMode={themeMode}
+          onThemeChange={handleThemeChange}
+          onBack={() => setMainPanelView('history')}
+        />
+      )
+    }
+
+    // Staging panel for uncommitted changes
+    if (sidebarFocus?.type === 'uncommitted' && workingStatus) {
+      return (
+        <StagingPanel
+          workingStatus={workingStatus}
+          currentBranch={currentBranch}
+          onRefresh={refresh}
+          onStatusChange={setStatus}
+        />
+      )
+    }
+    
+    // PR Review panel
+    if (sidebarFocus?.type === 'pr') {
+      return (
+        <PRReviewPanel
+          pr={sidebarFocus.data as PullRequest}
+          formatRelativeTime={formatRelativeTime}
+          onCheckout={handlePRCheckout}
+          onPRMerged={refresh}
+          switching={switching}
+        />
+      )
+    }
+    
+    // Sidebar detail panel for branches, worktrees, stashes
+    if (sidebarFocus) {
+      return (
+        <SidebarDetailPanel
+          focus={sidebarFocus}
+          formatRelativeTime={formatRelativeTime}
+          formatDate={formatDate}
+          currentBranch={currentBranch}
+          switching={switching}
+          deleting={deleting}
+          onStatusChange={setStatus}
+          onRefresh={refresh}
+          onClearFocus={() => setSidebarFocus(null)}
+          onCheckoutBranch={handleBranchDoubleClick}
+          onCheckoutRemoteBranch={handleRemoteBranchDoubleClick}
+          onCheckoutWorktree={handleWorktreeDoubleClick}
+          onDeleteBranch={handleDeleteBranch}
+          onDeleteRemoteBranch={handleDeleteRemoteBranch}
+          branches={branches}
+          repoPath={repoPath}
+          worktrees={worktrees}
+          onFocusWorktree={(wt) => setSidebarFocus({ type: 'worktree', data: wt })}
+        />
+      )
+    }
+    
+    // Diff panel for selected commit
+    if (selectedCommit) {
+      if (loadingDiff) {
+        return <div className="detail-loading">Loading diff...</div>
+      }
+      if (commitDiff) {
+        return (
+          <DiffPanel
+            diff={commitDiff}
+            selectedCommit={selectedCommit}
+            formatRelativeTime={formatRelativeTime}
+            branches={branches}
+            onBranchClick={(branchName) => {
+              const branch = branches.find((b) => b.name === branchName)
+              if (branch) {
+                handleSidebarFocus(branch.isRemote ? 'remote' : 'branch', branch)
+              }
+            }}
+          />
+        )
+      }
+      return <div className="detail-error">Could not load diff</div>
+    }
+    
+    // Empty state
+    return null
+  }, [
+    mainPanelView, themeMode, handleThemeChange,
+    sidebarFocus, workingStatus, currentBranch, refresh, switching, deleting,
+    formatRelativeTime, formatDate, handlePRCheckout, handleBranchDoubleClick,
+    handleRemoteBranchDoubleClick, handleWorktreeDoubleClick, handleDeleteBranch,
+    handleDeleteRemoteBranch, branches, repoPath, worktrees, handleSidebarFocus,
+    selectedCommit, loadingDiff, commitDiff
+  ])
+
+  const canvasHandlers: CanvasHandlers = useMemo(() => ({
+    formatRelativeTime,
+    formatDate,
+    // PR handlers
+    onSelectPR: (pr) => handleRadarItemClick('pr', pr),
+    onDoubleClickPR: handleRadarPRClick,
+    onContextMenuPR: (e, pr) => handleContextMenu(e, 'pr', pr),
+    // Branch handlers
+    onSelectBranch: (branch) => handleRadarItemClick(branch.isRemote ? 'remote' : 'branch', branch),
+    onDoubleClickBranch: handleRadarBranchClick,
+    onContextMenuLocalBranch: (e, branch) => handleContextMenu(e, 'branch', branch),
+    onContextMenuRemoteBranch: (e, branch) => handleContextMenu(e, 'remote', branch),
+    onCreateBranch: () => setShowNewBranchModal(true),
+    // Worktree handlers
+    onSelectWorktree: (wt) => handleRadarItemClick('worktree', wt),
+    onDoubleClickWorktree: handleRadarWorktreeClick,
+    onContextMenuWorktree: (e, wt) => handleContextMenu(e, 'worktree', wt),
+    onCreateWorktree: () => navigateToEditor('create-worktree'),
+    // Stash handlers
+    onSelectStash: (stash) => handleRadarItemClick('stash', stash),
+    onDoubleClickStash: handleRadarStashClick,
+    onContextMenuStash: (e, stash) => handleContextMenu(e, 'stash', stash as unknown as Worktree),
+    // Commit handlers
+    onSelectCommit: handleSelectCommit,
+    onDoubleClickCommit: (commit) => {
+      // Switch to Focus (editor home) and select commit
+      setActiveCanvas('focus')
+      handleSelectCommit(commit)
+    },
+    // Editor content - renders actual panels
+    renderEditorContent,
+  }), [
+    formatRelativeTime, formatDate, handleRadarItemClick, handleRadarPRClick, handleRadarBranchClick,
+    handleRadarWorktreeClick, handleRadarStashClick, handleContextMenu, handleSelectCommit, navigateToEditor,
+    renderEditorContent, setActiveCanvas
+  ])
+
+  const canvasUIState: CanvasUIState = useMemo(() => ({
+    switching,
+    deleting,
+  }), [switching, deleting])
 
   return (
     <div className="ledger-app">
@@ -1803,7 +1367,7 @@ export default function App() {
             <div className="view-toggle">
               <button
                 className={`view-toggle-btn ${viewMode === 'radar' ? 'active' : ''}`}
-                onClick={() => setViewMode('radar')}
+                onClick={() => setActiveCanvas('radar')}
                 title="Radar Mode"
               >
                 <span className="view-icon">⊞</span>
@@ -1811,11 +1375,19 @@ export default function App() {
               </button>
               <button
                 className={`view-toggle-btn ${viewMode === 'focus' ? 'active' : ''}`}
-                onClick={() => setViewMode('focus')}
+                onClick={() => setActiveCanvas('focus')}
                 title="Focus Mode"
               >
                 <span className="view-icon">☰</span>
                 <span className="view-label">Focus</span>
+              </button>
+              <button
+                className={`view-toggle-btn ${viewMode === 'graph' ? 'active' : ''}`}
+                onClick={() => setActiveCanvas('graph')}
+                title="Graph View"
+              >
+                <span className="view-icon">◉</span>
+                <span className="view-label">Graph</span>
               </button>
             </div>
           )}
@@ -1895,1405 +1467,18 @@ export default function App() {
         </div>
       )}
 
-      {/* Main Content */}
-      {repoPath && !error && viewMode === 'radar' && (
-        <main className="ledger-content five-columns">
-          {/* Stashes Column */}
-          <section
-            className={`column stashes-column ${draggingColumn === 'stashes' ? 'dragging' : ''} ${dragOverColumn === 'stashes' ? 'drag-over' : ''}`}
-            style={{ order: radarColumnOrder.indexOf('stashes') }}
-            draggable
-            onDragStart={(e) => handleColumnDragStart(e, 'stashes')}
-            onDragOver={(e) => handleColumnDragOver(e, 'stashes')}
-            onDragLeave={handleColumnDragLeave}
-            onDrop={(e) => handleColumnDrop(e, 'stashes')}
-            onDragEnd={handleColumnDragEnd}
-          >
-            <div className="column-drag-handle" title="Drag to reorder">
-              ⋮⋮
-            </div>
-            <div
-              className={`column-header clickable-header ${stashControlsOpen ? 'open' : ''}`}
-              onClick={() => setStashControlsOpen(!stashControlsOpen)}
-            >
-              <div className="column-title">
-                <h2>
-                  <span className="column-icon">⊡</span>
-                  Stashes
-                </h2>
-                <span className={`header-chevron ${stashControlsOpen ? 'open' : ''}`}>▾</span>
-              </div>
-              <span className="count-badge">{filteredStashes.length}</span>
-            </div>
-            {stashControlsOpen && (
-              <div className="column-controls" onClick={(e) => e.stopPropagation()}>
-                <div className="control-row">
-                  <label>Search</label>
-                  <input
-                    type="text"
-                    className="control-search"
-                    placeholder="Message or branch..."
-                    value={stashSearch}
-                    onChange={(e) => setStashSearch(e.target.value)}
-                  />
-                </div>
-              </div>
-            )}
-            <div className="column-content">
-              {filteredStashes.length === 0 ? (
-                <div className="empty-column">
-                  {stashSearch.trim() ? 'No stashes match filter' : 'No stashes'}
-                </div>
-              ) : (
-                <ul className="item-list">
-                  {filteredStashes.map((stash) => (
-                    <li
-                      key={stash.index}
-                      className={`item stash-item clickable ${sidebarFocus?.type === 'stash' && (sidebarFocus.data as StashEntry).index === stash.index ? 'selected' : ''}`}
-                      onClick={() => handleRadarItemClick('stash', stash)}
-                      onDoubleClick={() => handleSidebarFocus('stash', stash)}
-                    >
-                      <div className="item-main">
-                        <span className="item-name" title={stash.message}>
-                          {stash.message}
-                        </span>
-                      </div>
-                      <div className="item-meta">
-                        <code className="commit-hash">stash@{'{' + stash.index + '}'}</code>
-                        {stash.branch && <span className="stash-branch">on {stash.branch}</span>}
-                        <span className="stash-time">{formatRelativeTime(stash.date)}</span>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </section>
-
-          {/* Pull Requests Column */}
-          <section
-            className={`column pr-column ${draggingColumn === 'prs' ? 'dragging' : ''} ${dragOverColumn === 'prs' ? 'drag-over' : ''}`}
-            style={{ order: radarColumnOrder.indexOf('prs') }}
-            draggable
-            onDragStart={(e) => handleColumnDragStart(e, 'prs')}
-            onDragOver={(e) => handleColumnDragOver(e, 'prs')}
-            onDragLeave={handleColumnDragLeave}
-            onDrop={(e) => handleColumnDrop(e, 'prs')}
-            onDragEnd={handleColumnDragEnd}
-          >
-            <div className="column-drag-handle" title="Drag to reorder">
-              ⋮⋮
-            </div>
-            <div
-              className={`column-header clickable-header ${prControlsOpen ? 'open' : ''}`}
-              onClick={() => setPrControlsOpen(!prControlsOpen)}
-            >
-              <div className="column-title">
-                <h2>
-                  <span className="column-icon">⬡</span>
-                  Pull Requests
-                </h2>
-                <span className={`header-chevron ${prControlsOpen ? 'open' : ''}`}>▾</span>
-              </div>
-              <span className="count-badge">{filteredPRs.length}</span>
-            </div>
-            {prControlsOpen && (
-              <div className="column-controls" onClick={(e) => e.stopPropagation()}>
-                <div className="control-row">
-                  <label>Search</label>
-                  <input
-                    type="text"
-                    className="control-search"
-                    placeholder="Title, branch, author..."
-                    value={prSearch}
-                    onChange={(e) => setPrSearch(e.target.value)}
-                  />
-                </div>
-                <div className="control-row">
-                  <label>Filter</label>
-                  <select
-                    value={prFilter}
-                    onChange={(e) => setPrFilter(e.target.value as PRFilter)}
-                    className="control-select"
-                  >
-                    <option value="all">All Open</option>
-                    <option value="open-not-draft">Open + Not Draft</option>
-                    <option value="open-draft">Open + Draft</option>
-                  </select>
-                </div>
-                <div className="control-row">
-                  <label>Sort</label>
-                  <select
-                    value={prSort}
-                    onChange={(e) => setPrSort(e.target.value as PRSort)}
-                    className="control-select"
-                  >
-                    <option value="updated">Last Updated</option>
-                    <option value="comments">Comments</option>
-                    <option value="first-commit">First Commit</option>
-                    <option value="last-commit">Last Commit</option>
-                  </select>
-                </div>
-              </div>
-            )}
-            <div className="column-content">
-              {prError ? (
-                <div className="empty-column pr-error">
-                  <span className="pr-error-icon">⚠</span>
-                  {prError}
-                </div>
-              ) : filteredPRs.length === 0 ? (
-                <div className="empty-column">
-                  {prSearch.trim() || prFilter !== 'all' ? 'No PRs match filter' : 'No open PRs'}
-                </div>
-              ) : (
-                <ul className="item-list">
-                  {filteredPRs.map((pr) => (
-                    <li
-                      key={pr.number}
-                      className={`item pr-item clickable ${pr.isDraft ? 'draft' : ''} ${sidebarFocus?.type === 'pr' && (sidebarFocus.data as PullRequest).number === pr.number ? 'selected' : ''}`}
-                      onClick={() => handleRadarItemClick('pr', pr)}
-                      onDoubleClick={() => handleRadarPRClick(pr)}
-                      onContextMenu={(e) => handleContextMenu(e, 'pr', pr)}
-                    >
-                      <div className="item-main">
-                        <span className="item-name" title={pr.title}>
-                          {pr.title}
-                        </span>
-                        <div className="item-badges">
-                          {pr.isDraft && <span className="badge badge-draft">draft</span>}
-                          {getReviewBadge(pr.reviewDecision)}
-                        </div>
-                      </div>
-                      <div className="pr-branch">
-                        <span className="pr-branch-name">{pr.branch}</span>
-                        <span className="pr-arrow">→</span>
-                        <span className="pr-base">{pr.baseBranch}</span>
-                      </div>
-                      <div className="item-meta">
-                        <code className="commit-hash">#{pr.number}</code>
-                        <span className="pr-author">@{pr.author}</span>
-                        <span className="pr-time">{formatRelativeTime(pr.updatedAt)}</span>
-                        {pr.comments > 0 && <span className="pr-comments">💬 {pr.comments}</span>}
-                        <span className="pr-diff">
-                          <span className="pr-additions">+{pr.additions}</span>
-                          <span className="pr-deletions">-{pr.deletions}</span>
-                        </span>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </section>
-
-          {/* Worktrees Column */}
-          <section
-            className={`column worktrees-column ${draggingColumn === 'worktrees' ? 'dragging' : ''} ${dragOverColumn === 'worktrees' ? 'drag-over' : ''}`}
-            style={{ order: radarColumnOrder.indexOf('worktrees') }}
-            draggable
-            onDragStart={(e) => handleColumnDragStart(e, 'worktrees')}
-            onDragOver={(e) => handleColumnDragOver(e, 'worktrees')}
-            onDragLeave={handleColumnDragLeave}
-            onDrop={(e) => handleColumnDrop(e, 'worktrees')}
-            onDragEnd={handleColumnDragEnd}
-          >
-            <div className="column-drag-handle" title="Drag to reorder">
-              ⋮⋮
-            </div>
-            <div
-              className={`column-header clickable-header ${worktreeControlsOpen ? 'open' : ''}`}
-              onClick={() => setWorktreeControlsOpen(!worktreeControlsOpen)}
-            >
-              <div className="column-title">
-                <h2>
-                  <span className="column-icon">⧉</span>
-                  Worktrees
-                </h2>
-                <span className={`header-chevron ${worktreeControlsOpen ? 'open' : ''}`}>▾</span>
-              </div>
-              <span className="count-badge">{filteredWorktrees.length}</span>
-            </div>
-            {worktreeControlsOpen && (
-              <div className="column-controls" onClick={(e) => e.stopPropagation()}>
-                <div className="control-row">
-                  <label>Search</label>
-                  <input
-                    type="text"
-                    className="control-search"
-                    placeholder="Name or branch..."
-                    value={worktreeSearch}
-                    onChange={(e) => setWorktreeSearch(e.target.value)}
-                  />
-                </div>
-                <div className="control-row">
-                  <label>Filter</label>
-                  <select
-                    value={worktreeParentFilter}
-                    onChange={(e) => setWorktreeParentFilter(e.target.value)}
-                    className="control-select"
-                  >
-                    <option value="all">All</option>
-                    {worktreeParents.map((parent) => (
-                      <option key={parent} value={parent}>
-                        {parent}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            )}
-            <div className="column-content">
-              {filteredWorktrees.length === 0 ? (
-                <div className="empty-column">
-                  {worktreeSearch.trim() || worktreeParentFilter !== 'all'
-                    ? 'No worktrees match filter'
-                    : 'No worktrees found'}
-                </div>
-              ) : (
-                <ul className="item-list">
-                  {filteredWorktrees.map((wt) => {
-                    const isWorkingFolder = wt.agent === 'working-folder'
-                    return (
-                      <li
-                        key={wt.path}
-                        className={`item worktree-item clickable ${!isWorkingFolder && wt.branch === currentBranch ? 'current' : ''} ${isWorkingFolder ? 'working-folder' : ''} ${sidebarFocus?.type === 'worktree' && (sidebarFocus.data as Worktree).path === wt.path ? 'selected' : ''}`}
-                        onClick={() => handleRadarItemClick('worktree', wt)}
-                        onDoubleClick={() => !isWorkingFolder && handleRadarWorktreeClick(wt)}
-                        onContextMenu={(e) => handleContextMenu(e, 'worktree', wt)}
-                      >
-                        <div className="item-main">
-                          <span className="item-name">
-                            {isWorkingFolder ? `Working Folder: ${wt.branch || 'detached'}` : (wt.branch || wt.displayName)}
-                          </span>
-                          {!isWorkingFolder && wt.branch === currentBranch && (
-                            <span className="current-indicator">●</span>
-                          )}
-                        </div>
-                        {!isWorkingFolder && wt.branch && (
-                          <div className="item-agent-hint">{wt.displayName}</div>
-                        )}
-                        <div className="item-path" title={wt.path}>
-                          {wt.path.replace(/^\/Users\/[^/]+/, '~')}
-                        </div>
-                        <div className="item-meta worktree-stats">
-                          <code className="commit-hash">{wt.path.split('/').pop()}</code>
-                          {(wt.additions > 0 || wt.deletions > 0) && (
-                            <>
-                              {wt.additions > 0 && <span className="diff-additions">+{wt.additions}</span>}
-                              {wt.deletions > 0 && <span className="diff-deletions">-{wt.deletions}</span>}
-                              <span className="diff-separator">·</span>
-                            </>
-                          )}
-                          {wt.changedFileCount > 0 && (
-                            <span className="file-count">
-                              {wt.changedFileCount} {wt.changedFileCount === 1 ? 'file' : 'files'}
-                            </span>
-                          )}
-                          {wt.changedFileCount === 0 && <span className="clean-indicator">clean</span>}
-                        </div>
-                      </li>
-                    )
-                  })}
-                </ul>
-              )}
-            </div>
-          </section>
-
-          {/* Commits Timeline Column */}
-          <section
-            className={`column commits-column ${draggingColumn === 'commits' ? 'dragging' : ''} ${dragOverColumn === 'commits' ? 'drag-over' : ''}`}
-            style={{ order: radarColumnOrder.indexOf('commits') }}
-            draggable
-            onDragStart={(e) => handleColumnDragStart(e, 'commits')}
-            onDragOver={(e) => handleColumnDragOver(e, 'commits')}
-            onDragLeave={handleColumnDragLeave}
-            onDrop={(e) => handleColumnDrop(e, 'commits')}
-            onDragEnd={handleColumnDragEnd}
-          >
-            <div className="column-drag-handle" title="Drag to reorder">
-              ⋮⋮
-            </div>
-            <div
-              className={`column-header clickable-header ${radarCommitsFilterOpen ? 'open' : ''}`}
-              onClick={() => setRadarCommitsFilterOpen(!radarCommitsFilterOpen)}
-            >
-              <div className="column-title">
-                <h2>
-                  <span className="column-icon">◉</span>
-                  Commits
-                  {currentBranch && <code className="commit-hash branch-badge">{currentBranch}</code>}
-                </h2>
-                <span className={`header-chevron ${radarCommitsFilterOpen ? 'open' : ''}`}>▾</span>
-              </div>
-              <span className="count-badge">{filteredGraphCommits.length}</span>
-            </div>
-            {radarCommitsFilterOpen && (
-              <div className="column-filter-panel">
-                <label className="column-filter-option">
-                  <input
-                    type="checkbox"
-                    checked={showCheckpoints}
-                    onChange={async (e) => {
-                      const newValue = e.target.checked
-                      setShowCheckpoints(newValue)
-                      try {
-                        const graphResult = await window.electronAPI.getCommitGraphHistory(100, true, newValue)
-                        setGraphCommits(graphResult)
-                      } catch (err) {
-                        console.error('Failed to update commit graph:', err)
-                        setShowCheckpoints(!newValue)
-                      }
-                    }}
-                  />
-                  <span>Checkpoints</span>
-                </label>
-                <label className="column-filter-option">
-                  <input
-                    type="checkbox"
-                    checked={onlyBranchHeads}
-                    onChange={(e) => setOnlyBranchHeads(e.target.checked)}
-                  />
-                  <span>Branch heads only</span>
-                </label>
-                <label className="column-filter-option">
-                  <input
-                    type="checkbox"
-                    checked={onlyUnmergedBranches}
-                    onChange={(e) => setOnlyUnmergedBranches(e.target.checked)}
-                  />
-                  <span>Unmerged only</span>
-                </label>
-              </div>
-            )}
-            <div className="column-content">
-              {/* Uncommitted changes as virtual commit */}
-              {workingStatus?.hasChanges && (
-                <div
-                  className={`item commit-item uncommitted clickable ${sidebarFocus?.type === 'uncommitted' ? 'selected' : ''}`}
-                  onClick={() => handleRadarItemClick('uncommitted', workingStatus)}
-                  onDoubleClick={() => handleRadarUncommittedClick()}
-                  onContextMenu={(e) => handleContextMenu(e, 'uncommitted', workingStatus)}
-                >
-                  <div className="commit-message uncommitted-label">Uncommitted changes</div>
-                  <div className="commit-meta">
-                    <code className="commit-hash">working</code>
-                    <span className="commit-files-count">
-                      {workingStatus.stagedCount + workingStatus.unstagedCount}{' '}
-                      {workingStatus.stagedCount + workingStatus.unstagedCount === 1 ? 'file' : 'files'}
-                    </span>
-                    {(workingStatus.additions > 0 || workingStatus.deletions > 0) && (
-                      <span className="commit-diff">
-                        {workingStatus.additions > 0 && (
-                          <span className="diff-additions">+{workingStatus.additions}</span>
-                        )}
-                        {workingStatus.deletions > 0 && (
-                          <span className="diff-deletions">-{workingStatus.deletions}</span>
-                        )}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )}
-              {/* Actual commits */}
-              {filteredGraphCommits.length === 0 && !workingStatus?.hasChanges ? (
-                <div className="empty-column">No commits found</div>
-              ) : (
-                filteredGraphCommits.map((commit) => (
-                  <div
-                    key={commit.hash}
-                    className={`item commit-item clickable ${commit.isMerge ? 'merge' : ''} ${switching ? 'disabled' : ''} ${selectedCommit?.hash === commit.hash ? 'selected' : ''}`}
-                    onClick={() => handleSelectCommit(commit)}
-                    onDoubleClick={() => handleRadarCommitClick(commit)}
-                    onContextMenu={(e) => handleContextMenu(e, 'commit', commit)}
-                  >
-                    <div className="commit-message" title={commit.message}>
-                      {commit.message}
-                    </div>
-                    <div className="commit-meta">
-                      <code className="commit-hash">{commit.shortHash}</code>
-                      <span className="commit-author">{commit.author}</span>
-                      <span className="commit-date">{formatRelativeTime(commit.date)}</span>
-                      {(commit.additions !== undefined || commit.deletions !== undefined) && (
-                        <span className="commit-diff">
-                          {commit.additions !== undefined && commit.additions > 0 && (
-                            <span className="diff-additions">+{commit.additions}</span>
-                          )}
-                          {commit.deletions !== undefined && commit.deletions > 0 && (
-                            <span className="diff-deletions">-{commit.deletions}</span>
-                          )}
-                        </span>
-                      )}
-                      {commit.filesChanged !== undefined && commit.filesChanged > 0 && (
-                        <span className="commit-files-count">
-                          {commit.filesChanged} {commit.filesChanged === 1 ? 'file' : 'files'}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </section>
-
-          {/* Local Branches Column */}
-          <section
-            className={`column branches-column ${draggingColumn === 'branches' ? 'dragging' : ''} ${dragOverColumn === 'branches' ? 'drag-over' : ''}`}
-            style={{ order: radarColumnOrder.indexOf('branches') }}
-            draggable
-            onDragStart={(e) => handleColumnDragStart(e, 'branches')}
-            onDragOver={(e) => handleColumnDragOver(e, 'branches')}
-            onDragLeave={handleColumnDragLeave}
-            onDrop={(e) => handleColumnDrop(e, 'branches')}
-            onDragEnd={handleColumnDragEnd}
-          >
-            <div className="column-drag-handle" title="Drag to reorder">
-              ⋮⋮
-            </div>
-            <div
-              className={`column-header clickable-header ${localControlsOpen ? 'open' : ''}`}
-              onClick={() => setLocalControlsOpen(!localControlsOpen)}
-            >
-              <div className="column-title">
-                <h2>
-                  <span className="column-icon">⎇</span>
-                  Local Branches
-                </h2>
-                <span className={`header-chevron ${localControlsOpen ? 'open' : ''}`}>▾</span>
-              </div>
-              <span className="count-badge">{localBranches.length}</span>
-            </div>
-            {localControlsOpen && (
-              <div className="column-controls" onClick={(e) => e.stopPropagation()}>
-                <div className="control-row">
-                  <label>Search</label>
-                  <input
-                    type="text"
-                    className="control-search"
-                    placeholder="Branch name..."
-                    value={localBranchSearch}
-                    onChange={(e) => setLocalBranchSearch(e.target.value)}
-                  />
-                </div>
-                <div className="control-row">
-                  <label>Filter</label>
-                  <select
-                    value={localFilter}
-                    onChange={(e) => setLocalFilter(e.target.value as BranchFilter)}
-                    className="control-select"
-                  >
-                    <option value="all">All</option>
-                    <option value="local-only">Local Only</option>
-                    <option value="unmerged">Unmerged</option>
-                  </select>
-                </div>
-                <div className="control-row">
-                  <label>Sort</label>
-                  <select
-                    value={localSort}
-                    onChange={(e) => setLocalSort(e.target.value as BranchSort)}
-                    className="control-select"
-                  >
-                    <option value="name">Name</option>
-                    <option value="last-commit">Last Commit</option>
-                    <option value="first-commit">First Commit</option>
-                    <option value="most-commits">Most Commits</option>
-                  </select>
-                </div>
-              </div>
-            )}
-            <div className="column-content">
-              {localBranches.length === 0 ? (
-                <div className="empty-column">
-                  {localBranchSearch.trim() || localFilter !== 'all' ? 'No branches match filter' : 'No local branches'}
-                </div>
-              ) : (
-                <ul className="item-list">
-                  {localBranches.map((branch) => (
-                    <li
-                      key={branch.name}
-                      className={`item branch-item clickable ${branch.current ? 'current' : ''} ${switching ? 'disabled' : ''} ${sidebarFocus?.type === 'branch' && (sidebarFocus.data as Branch).name === branch.name ? 'selected' : ''}`}
-                      onClick={() => handleRadarItemClick('branch', branch)}
-                      onDoubleClick={() => handleRadarBranchClick(branch)}
-                      onContextMenu={(e) => handleContextMenu(e, 'local-branch', branch)}
-                    >
-                      <div className="item-main">
-                        <span className="item-name">
-                          {branch.current && <span className="arrow">→</span>}
-                          {branch.name}
-                        </span>
-                        <div className="item-badges">
-                          {branch.isLocalOnly && <span className="badge badge-local">local</span>}
-                          {!branch.isMerged && <span className="badge badge-unmerged">unmerged</span>}
-                          {branch.current && <span className="current-indicator">●</span>}
-                        </div>
-                      </div>
-                      <div className="item-meta">
-                        <code className="commit-hash">{branch.commit?.slice(0, 7)}</code>
-                        {branch.lastCommitDate && (
-                          <span className="date-info">{formatDate(branch.lastCommitDate)}</span>
-                        )}
-                        {branch.commitCount !== undefined && (
-                          <span className="commit-count">{branch.commitCount} commits</span>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </section>
-
-          {/* Remote Branches Column */}
-          <section
-            className={`column remotes-column ${draggingColumn === 'remotes' ? 'dragging' : ''} ${dragOverColumn === 'remotes' ? 'drag-over' : ''}`}
-            style={{ order: radarColumnOrder.indexOf('remotes') }}
-            draggable
-            onDragStart={(e) => handleColumnDragStart(e, 'remotes')}
-            onDragOver={(e) => handleColumnDragOver(e, 'remotes')}
-            onDragLeave={handleColumnDragLeave}
-            onDrop={(e) => handleColumnDrop(e, 'remotes')}
-            onDragEnd={handleColumnDragEnd}
-          >
-            <div className="column-drag-handle" title="Drag to reorder">
-              ⋮⋮
-            </div>
-            <div
-              className={`column-header clickable-header ${remoteControlsOpen ? 'open' : ''}`}
-              onClick={() => setRemoteControlsOpen(!remoteControlsOpen)}
-            >
-              <div className="column-title">
-                <h2>
-                  <span className="column-icon">☁</span>
-                  Remote Branches
-                </h2>
-                <span className={`header-chevron ${remoteControlsOpen ? 'open' : ''}`}>▾</span>
-              </div>
-              <span className="count-badge">{remoteBranches.length}</span>
-            </div>
-            {remoteControlsOpen && (
-              <div className="column-controls" onClick={(e) => e.stopPropagation()}>
-                <div className="control-row">
-                  <label>Search</label>
-                  <input
-                    type="text"
-                    className="control-search"
-                    placeholder="Branch name..."
-                    value={remoteBranchSearch}
-                    onChange={(e) => setRemoteBranchSearch(e.target.value)}
-                  />
-                </div>
-                <div className="control-row">
-                  <label>Filter</label>
-                  <select
-                    value={remoteFilter}
-                    onChange={(e) => setRemoteFilter(e.target.value as BranchFilter)}
-                    className="control-select"
-                  >
-                    <option value="all">All</option>
-                    <option value="unmerged">Unmerged</option>
-                  </select>
-                </div>
-                <div className="control-row">
-                  <label>Sort</label>
-                  <select
-                    value={remoteSort}
-                    onChange={(e) => setRemoteSort(e.target.value as BranchSort)}
-                    className="control-select"
-                  >
-                    <option value="name">Name</option>
-                    <option value="last-commit">Last Commit</option>
-                    <option value="first-commit">First Commit</option>
-                    <option value="most-commits">Most Commits</option>
-                  </select>
-                </div>
-              </div>
-            )}
-            <div className="column-content">
-              {remoteBranches.length === 0 ? (
-                <div className="empty-column">
-                  {remoteBranchSearch.trim() || remoteFilter !== 'all'
-                    ? 'No branches match filter'
-                    : 'No remote branches'}
-                </div>
-              ) : (
-                <ul className="item-list">
-                  {remoteBranches.map((branch) => (
-                    <li
-                      key={branch.name}
-                      className={`item remote-item clickable ${switching ? 'disabled' : ''} ${sidebarFocus?.type === 'remote' && (sidebarFocus.data as Branch).name === branch.name ? 'selected' : ''}`}
-                      onClick={() => handleRadarItemClick('remote', branch)}
-                      onDoubleClick={() => handleRadarRemoteBranchClick(branch)}
-                      onContextMenu={(e) => handleContextMenu(e, 'remote-branch', branch)}
-                    >
-                      <div className="item-main">
-                        <span className="item-name">
-                          {branch.name.replace('remotes/', '').replace(/^origin\//, '')}
-                        </span>
-                        <div className="item-badges">
-                          {!branch.isMerged && <span className="badge badge-unmerged">unmerged</span>}
-                        </div>
-                      </div>
-                      <div className="item-meta">
-                        <code className="commit-hash">{branch.commit?.slice(0, 7)}</code>
-                        {branch.lastCommitDate && (
-                          <span className="date-info">{formatDate(branch.lastCommitDate)}</span>
-                        )}
-                        {branch.commitCount !== undefined && (
-                          <span className="commit-count">{branch.commitCount} commits</span>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </section>
-
-          {/* Editor Panel (optional in Radar) */}
-          {radarHasEditor && (
-            <section 
-              className={`column editor-column ${draggingColumn === 'editor' ? 'dragging' : ''} ${dragOverColumn === 'editor' ? 'drag-over' : ''}`}
-              style={{ order: radarColumnOrder.indexOf('editor') }}
-              draggable
-              onDragStart={(e) => handleColumnDragStart(e, 'editor')}
-              onDragOver={(e) => handleColumnDragOver(e, 'editor')}
-              onDragLeave={handleColumnDragLeave}
-              onDrop={(e) => handleColumnDrop(e, 'editor')}
-              onDragEnd={handleColumnDragEnd}
-            >
-              <div className="column-drag-handle" title="Drag to reorder">
-                ⋮⋮
-              </div>
-              <div className="column-header">
-                <div className="column-title">
-                  <h2>
-                    <span className="column-icon">◇</span>
-                    Editor
-                  </h2>
-                </div>
-                <div className="editor-nav">
-                  <button
-                    className="editor-nav-btn"
-                    onClick={goBack}
-                    disabled={!canGoBack}
-                    title="Go back (⌘[)"
-                  >
-                    ←
-                  </button>
-                  <button
-                    className="editor-nav-btn"
-                    onClick={goForward}
-                    disabled={!canGoForward}
-                    title="Go forward (⌘])"
-                  >
-                    →
-                  </button>
-                </div>
-              </div>
-              <div className="column-content editor-content">
-                {/* Editor Panel Content - same as Focus mode */}
-                {sidebarFocus?.type === 'uncommitted' && workingStatus ? (
-                  <StagingPanel
-                    workingStatus={workingStatus}
-                    currentBranch={currentBranch}
-                    onRefresh={refresh}
-                    onStatusChange={setStatus}
-                  />
-                ) : sidebarFocus?.type === 'pr' ? (
-                  <PRReviewPanel
-                    pr={sidebarFocus.data as PullRequest}
-                    formatRelativeTime={formatRelativeTime}
-                    onCheckout={handlePRCheckout}
-                    onPRMerged={refresh}
-                    switching={switching}
-                  />
-                ) : sidebarFocus ? (
-                  <SidebarDetailPanel
-                    focus={sidebarFocus}
-                    formatRelativeTime={formatRelativeTime}
-                    formatDate={formatDate}
-                    currentBranch={currentBranch}
-                    switching={switching}
-                    deleting={deleting}
-                    onStatusChange={setStatus}
-                    onRefresh={refresh}
-                    onClearFocus={() => setSidebarFocus(null)}
-                    onCheckoutBranch={handleBranchDoubleClick}
-                    onCheckoutRemoteBranch={handleRemoteBranchDoubleClick}
-                    onCheckoutWorktree={handleWorktreeDoubleClick}
-                    onDeleteBranch={handleDeleteBranch}
-                    onDeleteRemoteBranch={handleDeleteRemoteBranch}
-                    branches={branches}
-                    repoPath={repoPath}
-                    worktrees={worktrees}
-                    onFocusWorktree={(wt) => setSidebarFocus({ type: 'worktree', data: wt })}
-                  />
-                ) : !selectedCommit ? (
-                  <div className="detail-empty">
-                    <span className="detail-empty-icon">◇</span>
-                    <p>Select an item to view details</p>
-                  </div>
-                ) : loadingDiff ? (
-                  <div className="detail-loading">Loading diff...</div>
-                ) : commitDiff ? (
-                  <DiffPanel 
-                    diff={commitDiff} 
-                    selectedCommit={selectedCommit}
-                    formatRelativeTime={formatRelativeTime} 
-                    branches={branches}
-                    onBranchClick={(branchName) => {
-                      const branch = branches.find((b) => b.name === branchName)
-                      if (branch) {
-                        handleSidebarFocus(branch.isRemote ? 'remote' : 'branch', branch)
-                      }
-                    }}
-                  />
-                ) : (
-                  <div className="detail-error">Could not load diff</div>
-                )}
-              </div>
-            </section>
-          )}
+      {/* Main Content - Canvas Renderer for ALL canvases */}
+      {repoPath && !error && (
+        <main className="ledger-content canvas-mode">
+          <CanvasRenderer
+            data={canvasData}
+            selection={canvasSelection}
+            handlers={canvasHandlers}
+            uiState={canvasUIState}
+          />
         </main>
       )}
 
-      {/* Focus Mode Layout */}
-      {repoPath && !error && viewMode === 'focus' && (
-        <main className="focus-mode-layout">
-          {/* Sidebar */}
-          {sidebarVisible && (
-            <aside 
-              className="focus-sidebar" 
-              style={{ width: sidebarWidth, minWidth: sidebarWidth }}
-              ref={sidebarRef}
-              tabIndex={0}
-              onKeyDown={handleSidebarKeyDown}
-            >
-              {/* All Header - expand/collapse all sections */}
-              <div className="sidebar-all-header">
-                <div className="sidebar-all-drag-handle">⋮⋮</div>
-                <div className="sidebar-all-content" onClick={toggleAllSidebarSections}>
-                  <div className="column-title">
-                    <h2>
-                      <span className="column-icon">☰</span>
-                      All
-                    </h2>
-                  </div>
-                  <span className={`sidebar-all-chevron ${allSectionsExpanded ? 'open' : ''}`}>▾</span>
-                </div>
-              </div>
-
-              {/* PRs Section */}
-              <div className="sidebar-section">
-                <div className="sidebar-section-header">
-                  <div className="sidebar-section-toggle" onClick={() => toggleSidebarSection('prs')}>
-                    <span className={`sidebar-chevron ${sidebarSections.prs ? 'open' : ''}`}>▸</span>
-                    <span className="sidebar-section-title">Pull Requests</span>
-                    <span className="sidebar-count">{filteredPRs.length}</span>
-                  </div>
-                  <button
-                    className={`sidebar-section-action sidebar-filter-btn ${sidebarFiltersOpen.prs ? 'active' : ''}`}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      toggleSidebarFilter('prs')
-                    }}
-                    title="Filter & Sort"
-                  >
-                    <svg
-                      width="12"
-                      height="12"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-                    </svg>
-                  </button>
-                </div>
-                {sidebarFiltersOpen.prs && (
-                  <div className="sidebar-filter-panel" onClick={(e) => e.stopPropagation()}>
-                    <div className="sidebar-filter-group">
-                      <label>Filter</label>
-                      <select
-                        value={prFilter}
-                        onChange={(e) => setPrFilter(e.target.value as PRFilter)}
-                        className="sidebar-filter-select"
-                      >
-                        <option value="all">All Open</option>
-                        <option value="open-not-draft">Open + Not Draft</option>
-                        <option value="open-draft">Open + Draft</option>
-                      </select>
-                    </div>
-                    <div className="sidebar-filter-group">
-                      <label>Sort</label>
-                      <select
-                        value={prSort}
-                        onChange={(e) => setPrSort(e.target.value as PRSort)}
-                        className="sidebar-filter-select"
-                      >
-                        <option value="updated">Last Updated</option>
-                        <option value="comments">Comments</option>
-                        <option value="first-commit">First Commit</option>
-                        <option value="last-commit">Last Commit</option>
-                      </select>
-                    </div>
-                  </div>
-                )}
-                {sidebarSections.prs && (
-                  <ul className="sidebar-list">
-                    {prError ? (
-                      <li className="sidebar-empty sidebar-error">{prError}</li>
-                    ) : filteredPRs.length === 0 ? (
-                      <li className="sidebar-empty">No open PRs</li>
-                    ) : (
-                      filteredPRs.map((pr) => (
-                        <li
-                          key={pr.number}
-                          className={`sidebar-item ${pr.isDraft ? 'draft' : ''} ${switching ? 'disabled' : ''} ${sidebarFocus?.type === 'pr' && (sidebarFocus.data as PullRequest).number === pr.number ? 'selected' : ''}`}
-                          onClick={() => handleSidebarFocus('pr', pr)}
-                          onDoubleClick={() => handlePRDoubleClick(pr)}
-                          onContextMenu={(e) => handleContextMenu(e, 'pr', pr)}
-                          title={`#${pr.number} ${pr.title}`}
-                        >
-                          <span className="sidebar-item-name">{pr.title}</span>
-                          {pr.isDraft && <span className="sidebar-pr-draft">draft</span>}
-                        </li>
-                      ))
-                    )}
-                  </ul>
-                )}
-              </div>
-
-              {/* Branches Section */}
-              <div className="sidebar-section">
-                <div className="sidebar-section-header">
-                  <div className="sidebar-section-toggle" onClick={() => toggleSidebarSection('branches')}>
-                    <span className={`sidebar-chevron ${sidebarSections.branches ? 'open' : ''}`}>▸</span>
-                    <span className="sidebar-section-title">Branches</span>
-                    <span className="sidebar-count">{localBranches.length}</span>
-                  </div>
-                  <button
-                    className={`sidebar-section-action sidebar-filter-btn ${sidebarFiltersOpen.branches ? 'active' : ''}`}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      toggleSidebarFilter('branches')
-                    }}
-                    title="Filter & Sort"
-                  >
-                    <svg
-                      width="12"
-                      height="12"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-                    </svg>
-                  </button>
-                  <button
-                    className="sidebar-section-action"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setShowNewBranchModal(true)
-                    }}
-                    title="Create new branch"
-                  >
-                    +
-                  </button>
-                </div>
-                {sidebarFiltersOpen.branches && (
-                  <div className="sidebar-filter-panel" onClick={(e) => e.stopPropagation()}>
-                    <div className="sidebar-filter-group">
-                      <label>Filter</label>
-                      <select
-                        value={localFilter}
-                        onChange={(e) => setLocalFilter(e.target.value as BranchFilter)}
-                        className="sidebar-filter-select"
-                      >
-                        <option value="all">All</option>
-                        <option value="local-only">Local Only</option>
-                        <option value="unmerged">Unmerged</option>
-                      </select>
-                    </div>
-                    <div className="sidebar-filter-group">
-                      <label>Sort</label>
-                      <select
-                        value={localSort}
-                        onChange={(e) => setLocalSort(e.target.value as BranchSort)}
-                        className="sidebar-filter-select"
-                      >
-                        <option value="name">Name</option>
-                        <option value="last-commit">Last Commit</option>
-                        <option value="first-commit">First Commit</option>
-                        <option value="most-commits">Most Commits</option>
-                      </select>
-                    </div>
-                  </div>
-                )}
-                {sidebarSections.branches && (
-                  <ul className="sidebar-list">
-                    {/* Uncommitted changes entry */}
-                    {workingStatus?.hasChanges && (
-                      <li
-                        className={`sidebar-item uncommitted ${sidebarFocus?.type === 'uncommitted' ? 'selected' : ''}`}
-                        onClick={() => handleSidebarFocus('uncommitted', workingStatus)}
-                      >
-                        <span className="sidebar-uncommitted-icon">◐</span>
-                        <span className="sidebar-item-name">Uncommitted</span>
-                        <span className="sidebar-uncommitted-count">
-                          {workingStatus.stagedCount + workingStatus.unstagedCount}
-                        </span>
-                      </li>
-                    )}
-                    {localBranches.map((branch) => (
-                      <li
-                        key={branch.name}
-                        className={`sidebar-item ${branch.current ? 'current' : ''} ${switching ? 'disabled' : ''} ${sidebarFocus?.type === 'branch' && (sidebarFocus.data as Branch).name === branch.name ? 'selected' : ''}`}
-                        onClick={() => handleSidebarFocus('branch', branch)}
-                        onDoubleClick={() => handleBranchDoubleClick(branch)}
-                      >
-                        {branch.current && <span className="sidebar-current-dot">●</span>}
-                        <span className="sidebar-item-name">{branch.name}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-
-              {/* Remotes Section */}
-              <div className="sidebar-section">
-                <div className="sidebar-section-header">
-                  <div className="sidebar-section-toggle" onClick={() => toggleSidebarSection('remotes')}>
-                    <span className={`sidebar-chevron ${sidebarSections.remotes ? 'open' : ''}`}>▸</span>
-                    <span className="sidebar-section-title">Remotes</span>
-                    <span className="sidebar-count">{remoteBranches.length}</span>
-                  </div>
-                  <button
-                    className={`sidebar-section-action sidebar-filter-btn ${sidebarFiltersOpen.remotes ? 'active' : ''}`}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      toggleSidebarFilter('remotes')
-                    }}
-                    title="Filter & Sort"
-                  >
-                    <svg
-                      width="12"
-                      height="12"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-                    </svg>
-                  </button>
-                </div>
-                {sidebarFiltersOpen.remotes && (
-                  <div className="sidebar-filter-panel" onClick={(e) => e.stopPropagation()}>
-                    <div className="sidebar-filter-group">
-                      <label>Filter</label>
-                      <select
-                        value={remoteFilter}
-                        onChange={(e) => setRemoteFilter(e.target.value as BranchFilter)}
-                        className="sidebar-filter-select"
-                      >
-                        <option value="all">All</option>
-                        <option value="unmerged">Unmerged</option>
-                      </select>
-                    </div>
-                    <div className="sidebar-filter-group">
-                      <label>Sort</label>
-                      <select
-                        value={remoteSort}
-                        onChange={(e) => setRemoteSort(e.target.value as BranchSort)}
-                        className="sidebar-filter-select"
-                      >
-                        <option value="name">Name</option>
-                        <option value="last-commit">Last Commit</option>
-                        <option value="first-commit">First Commit</option>
-                        <option value="most-commits">Most Commits</option>
-                      </select>
-                    </div>
-                  </div>
-                )}
-                {sidebarSections.remotes && (
-                  <ul className="sidebar-list">
-                    {remoteBranches.map((branch) => (
-                      <li
-                        key={branch.name}
-                        className={`sidebar-item ${switching ? 'disabled' : ''} ${sidebarFocus?.type === 'remote' && (sidebarFocus.data as Branch).name === branch.name ? 'selected' : ''}`}
-                        onClick={() => handleSidebarFocus('remote', branch)}
-                        onDoubleClick={() => handleRemoteBranchDoubleClick(branch)}
-                      >
-                        <span className="sidebar-item-name">
-                          {branch.name.replace('remotes/', '').replace(/^origin\//, '')}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-
-              {/* Worktrees Section */}
-              <div className="sidebar-section">
-                <div className="sidebar-section-header">
-                  <div className="sidebar-section-toggle" onClick={() => toggleSidebarSection('worktrees')}>
-                    <span className={`sidebar-chevron ${sidebarSections.worktrees ? 'open' : ''}`}>▸</span>
-                    <span className="sidebar-section-title">Worktrees</span>
-                    <span className="sidebar-count">
-                      {worktrees.filter((wt) => wt.path !== repoPath).length + (workingFolderWorktree ? 1 : 0)}
-                    </span>
-                  </div>
-                  <button
-                    className="sidebar-section-action"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setSidebarFocus({ type: 'create-worktree', data: null })
-                    }}
-                    title="Create Worktree"
-                  >
-                    +
-                  </button>
-                  <button
-                    className={`sidebar-section-action sidebar-filter-btn ${sidebarFiltersOpen.worktrees ? 'active' : ''}`}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      toggleSidebarFilter('worktrees')
-                    }}
-                    title="Filter"
-                  >
-                    <svg
-                      width="12"
-                      height="12"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-                    </svg>
-                  </button>
-                </div>
-                {sidebarFiltersOpen.worktrees && (
-                  <div className="sidebar-filter-panel" onClick={(e) => e.stopPropagation()}>
-                    <div className="sidebar-filter-group">
-                      <label>Parent</label>
-                      <select
-                        value={worktreeParentFilter}
-                        onChange={(e) => setWorktreeParentFilter(e.target.value)}
-                        className="sidebar-filter-select"
-                      >
-                        <option value="all">All</option>
-                        {worktreeParents.map((parent) => (
-                          <option key={parent} value={parent}>
-                            {parent}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                )}
-                {sidebarSections.worktrees && (
-                  <ul className="sidebar-list">
-                    {/* Working Folder pseudo-worktree - always first */}
-                    {workingFolderWorktree && (
-                      <li
-                        key="working-folder"
-                        className={`sidebar-item working-folder-sidebar-item ${switching ? 'disabled' : ''} ${sidebarFocus?.type === 'worktree' && (sidebarFocus.data as Worktree).agent === 'working-folder' ? 'selected' : ''}`}
-                        onClick={() => handleSidebarFocus('worktree', workingFolderWorktree)}
-                      >
-                        <span className="sidebar-item-name">{workingFolderWorktree.displayName}</span>
-                      </li>
-                    )}
-                    {worktrees
-                      .filter((wt) => wt.path !== repoPath)
-                      .map((wt) => (
-                        <li
-                          key={wt.path}
-                          className={`sidebar-item ${wt.branch === currentBranch ? 'current' : ''} ${switching ? 'disabled' : ''} ${sidebarFocus?.type === 'worktree' && (sidebarFocus.data as Worktree).path === wt.path ? 'selected' : ''}`}
-                          onClick={() => handleSidebarFocus('worktree', wt)}
-                          onDoubleClick={() => handleWorktreeDoubleClick(wt)}
-                        >
-                          {wt.branch === currentBranch && <span className="sidebar-current-dot">●</span>}
-                          <span className="sidebar-item-name">{wt.displayName}</span>
-                        </li>
-                      ))}
-                  </ul>
-                )}
-              </div>
-
-              {/* Stashes Section */}
-              <div className="sidebar-section">
-                <div className="sidebar-section-header">
-                  <div className="sidebar-section-toggle" onClick={() => toggleSidebarSection('stashes')}>
-                    <span className={`sidebar-chevron ${sidebarSections.stashes ? 'open' : ''}`}>▸</span>
-                    <span className="sidebar-section-title">Stashes</span>
-                    <span className="sidebar-count">{stashes.length}</span>
-                  </div>
-                </div>
-                {sidebarSections.stashes && (
-                  <ul className="sidebar-list">
-                    {stashes.length === 0 ? (
-                      <li className="sidebar-empty">No stashes</li>
-                    ) : (
-                      stashes.map((stash) => (
-                        <li
-                          key={stash.index}
-                          className={`sidebar-item ${sidebarFocus?.type === 'stash' && (sidebarFocus.data as StashEntry).index === stash.index ? 'selected' : ''}`}
-                          onClick={() => handleSidebarFocus('stash', stash)}
-                        >
-                          <span className="sidebar-item-name" title={`stash@{${stash.index}}: ${stash.message}`}>
-                            {stash.message || `Stash ${stash.index}`}
-                          </span>
-                        </li>
-                      ))
-                    )}
-                  </ul>
-                )}
-              </div>
-            </aside>
-          )}
-
-          {/* Sidebar Resize Handle */}
-          {sidebarVisible && (
-            <div
-              className={`resize-handle resize-handle-sidebar ${isResizingSidebar ? 'active' : ''}`}
-              onMouseDown={() => setIsResizingSidebar(true)}
-            />
-          )}
-
-          {/* Main Content: Settings Panel OR Git Graph + Commit List */}
-          {mainVisible && (
-            <div className="focus-main">
-              {mainPanelView === 'settings' ? (
-                <SettingsPanel
-                  themeMode={themeMode}
-                  onThemeChange={handleThemeChange}
-                  onBack={() => setMainPanelView('history')}
-                />
-              ) : (
-                <>
-                  <div
-                    className={`focus-main-header clickable-header ${historyFilterOpen ? 'open' : ''}`}
-                    onClick={() => setHistoryFilterOpen(!historyFilterOpen)}
-                  >
-                    <div className="column-title">
-                      <h2>
-                        <span className="column-icon">◉</span>
-                        History
-                        {currentBranch && <code className="commit-hash branch-badge">{currentBranch}</code>}
-                      </h2>
-                      <button
-                        className={`header-filter-btn ${historyFilterOpen ? 'active' : ''}`}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setHistoryFilterOpen(!historyFilterOpen)
-                        }}
-                        title="Filter"
-                      >
-                        <svg
-                          width="12"
-                          height="12"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                  {historyFilterOpen && (
-                    <div className="history-filter-panel">
-                      <label className="history-filter-option">
-                        <input
-                          type="checkbox"
-                          checked={showCheckpoints}
-                          onChange={async (e) => {
-                            const newValue = e.target.checked
-                            setShowCheckpoints(newValue)
-                            try {
-                              // Reload commits with new filter
-                              const graphResult = await window.electronAPI.getCommitGraphHistory(100, true, newValue)
-                              setGraphCommits(graphResult)
-                            } catch (err) {
-                              console.error('Failed to update commit graph:', err)
-                              setShowCheckpoints(!newValue)
-                            }
-                          }}
-                        />
-                        <span>Checkpoints</span>
-                        <span className="history-filter-hint">Show agent checkpoint commits</span>
-                      </label>
-                      <label className="history-filter-option">
-                        <input
-                          type="checkbox"
-                          checked={showGraphLines}
-                          onChange={(e) => setShowGraphLines(e.target.checked)}
-                        />
-                        <span>Graph</span>
-                        <span className="history-filter-hint">Show branch/merge lines</span>
-                      </label>
-                      <label className="history-filter-option">
-                        <input
-                          type="checkbox"
-                          checked={onlyBranchHeads}
-                          onChange={(e) => setOnlyBranchHeads(e.target.checked)}
-                        />
-                        <span>Branch heads only</span>
-                        <span className="history-filter-hint">Latest commit per branch</span>
-                      </label>
-                      <label className="history-filter-option">
-                        <input
-                          type="checkbox"
-                          checked={onlyUnmergedBranches}
-                          onChange={(e) => setOnlyUnmergedBranches(e.target.checked)}
-                        />
-                        <span>Unmerged only</span>
-                        <span className="history-filter-hint">Commits from unmerged branches</span>
-                      </label>
-                    </div>
-                  )}
-                  <div className="git-graph-container">
-                    <GitGraph
-                      commits={filteredGraphCommits}
-                      selectedCommit={selectedCommit}
-                      onSelectCommit={handleSelectCommit}
-                      formatRelativeTime={formatRelativeTime}
-                      showGraph={showGraphLines}
-                      graphWidth={graphWidth}
-                      onStartResize={(startX, currentWidth) => {
-                        graphResizeStartX.current = startX
-                        graphResizeStartWidth.current = currentWidth
-                        setIsResizingGraph(true)
-                      }}
-                      onResetWidth={() => setGraphWidth(null)}
-                      isResizing={isResizingGraph}
-                    />
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* Detail Panel Resize Handle - only show when main is visible */}
-          {detailVisible && mainVisible && (
-            <div
-              className={`resize-handle resize-handle-detail ${isResizingDetail ? 'active' : ''}`}
-              onMouseDown={() => setIsResizingDetail(true)}
-            />
-          )}
-
-          {/* Detail Panel */}
-          {detailVisible && (
-            <aside 
-              className={`focus-detail ${!mainVisible ? 'detail-expanded' : ''}`} 
-              style={mainVisible ? { width: detailWidth } : undefined}
-            >
-              {/* Editor Header */}
-              <div className="column-header editor-header">
-                <div className="column-title">
-                  <h2>
-                    <span className="column-icon">◇</span>
-                    Editor
-                  </h2>
-                </div>
-                <div className="editor-nav">
-                  <button
-                    className="editor-nav-btn"
-                    onClick={goBack}
-                    disabled={!canGoBack}
-                    title="Go back (⌘[)"
-                  >
-                    ←
-                  </button>
-                  <button
-                    className="editor-nav-btn"
-                    onClick={goForward}
-                    disabled={!canGoForward}
-                    title="Go forward (⌘])"
-                  >
-                    →
-                  </button>
-                </div>
-              </div>
-              <div className="editor-panel-content">
-                {sidebarFocus?.type === 'uncommitted' && workingStatus ? (
-                  <StagingPanel
-                    workingStatus={workingStatus}
-                    currentBranch={currentBranch}
-                    onRefresh={refresh}
-                    onStatusChange={setStatus}
-                  />
-                ) : sidebarFocus?.type === 'pr' ? (
-                  <PRReviewPanel
-                    pr={sidebarFocus.data as PullRequest}
-                    formatRelativeTime={formatRelativeTime}
-                    onCheckout={handlePRCheckout}
-                    onPRMerged={refresh}
-                    switching={switching}
-                  />
-                ) : sidebarFocus ? (
-                  <SidebarDetailPanel
-                    focus={sidebarFocus}
-                    formatRelativeTime={formatRelativeTime}
-                    formatDate={formatDate}
-                    currentBranch={currentBranch}
-                    switching={switching}
-                    onStatusChange={setStatus}
-                    onRefresh={refresh}
-                    onClearFocus={() => setSidebarFocus(null)}
-                    onCheckoutBranch={handleBranchDoubleClick}
-                    onCheckoutRemoteBranch={handleRemoteBranchDoubleClick}
-                    onCheckoutWorktree={handleWorktreeDoubleClick}
-                  branches={branches}
-                  repoPath={repoPath}
-                  worktrees={worktrees}
-                  onFocusWorktree={(wt) => setSidebarFocus({ type: 'worktree', data: wt })}
-                  />
-                ) : !selectedCommit ? (
-                  <div className="detail-empty">
-                    <span className="detail-empty-icon">◇</span>
-                    <p>Select an item to view details</p>
-                  </div>
-                ) : loadingDiff ? (
-                  <div className="detail-loading">Loading diff...</div>
-                ) : commitDiff ? (
-                  <DiffPanel 
-                    diff={commitDiff} 
-                    selectedCommit={selectedCommit}
-                    formatRelativeTime={formatRelativeTime} 
-                    branches={branches}
-                    onBranchClick={(branchName) => {
-                      // Find the branch and focus it
-                      const branch = branches.find((b) => b.name === branchName)
-                      if (branch) {
-                        handleSidebarFocus(branch.isRemote ? 'remote' : 'branch', branch)
-                      }
-                    }}
-                  />
-                ) : (
-                  <div className="detail-error">Could not load diff</div>
-                )}
-              </div>
-            </aside>
-          )}
-        </main>
-      )}
     </div>
   )
 }

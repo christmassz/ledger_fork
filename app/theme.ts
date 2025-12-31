@@ -121,11 +121,12 @@ export async function setThemeMode(mode: ThemeMode): Promise<void> {
     clearCustomCSSVariables();
     const effectiveTheme = await getEffectiveTheme(mode);
     setThemeClass(effectiveTheme);
-    await window.electronAPI.setThemeMode('system');
+    await window.electronAPI.setThemeMode('system', 'system');
   } else {
     clearCustomCSSVariables();
     setThemeClass(mode);
-    await window.electronAPI.setThemeMode(mode);
+    // Pass mode as both themeMode and themeId for base themes
+    await window.electronAPI.setThemeMode(mode, mode);
   }
 }
 
@@ -149,9 +150,9 @@ export async function loadVSCodeTheme(): Promise<CustomTheme | null> {
 }
 
 // Load a built-in theme from resources/themes
-export async function loadBuiltInTheme(themeFileName: string): Promise<CustomTheme | null> {
+export async function loadBuiltInTheme(themeFileName: string, themeId?: string): Promise<CustomTheme | null> {
   try {
-    const result = await window.electronAPI.loadBuiltInTheme(themeFileName) as ThemeData | null;
+    const result = await window.electronAPI.loadBuiltInTheme(themeFileName, themeId) as ThemeData | null;
 
     if (result) {
       // Apply the theme
@@ -177,6 +178,11 @@ export async function clearCustomTheme(): Promise<void> {
 // Get current theme mode
 export async function getCurrentThemeMode(): Promise<ThemeMode> {
   return await window.electronAPI.getThemeMode() as ThemeMode;
+}
+
+// Get the selected theme ID (e.g., 'dracula', 'claude-desktop', 'light')
+export async function getSelectedThemeId(): Promise<string> {
+  return await window.electronAPI.getSelectedThemeId();
 }
 
 // Check if dark mode is currently active
