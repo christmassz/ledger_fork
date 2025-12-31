@@ -454,3 +454,4 @@ Support patterns like WorktreeWise:
 - [git-worktree-runner (gtr)](https://github.com/coderabbitai/git-worktree-runner)
 - [Cursor Worktree Behavior](https://forum.cursor.com/t/worktrees-and-cursor/1234) (needs research)
 
+

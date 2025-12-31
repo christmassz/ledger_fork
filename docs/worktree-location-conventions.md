@@ -213,3 +213,4 @@ For now, Ledger adds `.worktrees/` to the project's `.gitignore` and documents t
 - [Ledger Worktrees Feature](./features/worktrees.md)
 - [Ledger Opinionated Git](./opinionated-git.md) - Includes Leapfrog Stash
 
+

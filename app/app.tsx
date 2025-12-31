@@ -63,6 +63,8 @@ export default function App() {
     currentEditorEntry,
     addColumn,
     removeColumn,
+    toggleColumnVisibility,
+    isColumnVisible,
   } = useCanvas()
   
   // Initialize keyboard shortcuts for editor navigation
@@ -115,10 +117,7 @@ export default function App() {
 
 
 
-  // Panel visibility (for titlebar toggle buttons)
-  const [sidebarVisible, setSidebarVisible] = useState(true)
-  const [mainVisible, setMainVisible] = useState(true)
-  const [detailVisible, setDetailVisible] = useState(true)
+  // Panel visibility is now handled by the canvas system via toggleColumnVisibility
   
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -176,11 +175,15 @@ export default function App() {
 
     // Add Focus mode panel toggles if in focus mode with a repo
     if (repoPath && viewMode === 'focus') {
+      const sidebarVisible = isColumnVisible('focus', 'focus-sidebar')
+      const graphVisible = isColumnVisible('focus', 'focus-viz')
+      const editorVisible = isColumnVisible('focus', 'focus-editor')
+      
       actions.push(
         <button
           key="sidebar-toggle"
           className="panel-toggle-btn"
-          onClick={() => setSidebarVisible(!sidebarVisible)}
+          onClick={() => toggleColumnVisibility('focus', 'focus-sidebar')}
           title={sidebarVisible ? 'Hide Sidebar Panel' : 'Show Sidebar Panel'}
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -189,25 +192,25 @@ export default function App() {
           </svg>
         </button>,
         <button
-          key="main-toggle"
+          key="graph-toggle"
           className="panel-toggle-btn"
-          onClick={() => setMainVisible(!mainVisible)}
-          title={mainVisible ? 'Hide Graph Panel' : 'Show Graph Panel'}
+          onClick={() => toggleColumnVisibility('focus', 'focus-viz')}
+          title={graphVisible ? 'Hide Graph Panel' : 'Show Graph Panel'}
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <rect x="0.5" y="0.5" width="15" height="15" rx="1.5" stroke="currentColor" strokeWidth="1" />
-            <rect x="5" y="1" width="6" height="14" fill={mainVisible ? 'currentColor' : 'none'} />
+            <rect x="5" y="1" width="6" height="14" fill={graphVisible ? 'currentColor' : 'none'} />
           </svg>
         </button>,
         <button
-          key="detail-toggle"
+          key="editor-toggle"
           className="panel-toggle-btn"
-          onClick={() => setDetailVisible(!detailVisible)}
-          title={detailVisible ? 'Hide Detail Panel' : 'Show Detail Panel'}
+          onClick={() => toggleColumnVisibility('focus', 'focus-editor')}
+          title={editorVisible ? 'Hide Detail Panel' : 'Show Detail Panel'}
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <rect x="0.5" y="0.5" width="15" height="15" rx="1.5" stroke="currentColor" strokeWidth="1" />
-            <rect x="11" y="1" width="4" height="14" fill={detailVisible ? 'currentColor' : 'none'} />
+            <rect x="11" y="1" width="4" height="14" fill={editorVisible ? 'currentColor' : 'none'} />
           </svg>
         </button>
       )
@@ -227,7 +230,10 @@ export default function App() {
             // From any canvas: go to Focus (home) and show Settings
             setActiveCanvas('focus')
             setMainPanelView('settings')
-            setMainVisible(true)
+            // Ensure editor column is visible to show settings
+            if (!isColumnVisible('focus', 'focus-editor')) {
+              toggleColumnVisibility('focus', 'focus-editor')
+            }
           }
         }}
         title="Settings"
@@ -246,7 +252,7 @@ export default function App() {
     )
 
     setTitlebarActions(actions.length > 0 ? <>{actions}</> : null)
-  }, [repoPath, viewMode, mainPanelView, sidebarVisible, mainVisible, detailVisible, radarHasEditor, toggleRadarEditor, setTitlebarActions])
+  }, [repoPath, viewMode, mainPanelView, canvasState, radarHasEditor, toggleRadarEditor, setTitlebarActions, setActiveCanvas, isColumnVisible, toggleColumnVisibility])
 
   const selectRepo = async () => {
     if (switching) return

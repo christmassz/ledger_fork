@@ -119,7 +119,8 @@ export function Column({
         </div>
       )}
       <div className="canvas-column-content">{children}</div>
-      {!isLast && onResize && column.width !== 'flex' && (
+      {/* Resize handle on right edge - show for all non-last columns */}
+      {!isLast && onResize && (
         <ResizeHandle onResize={handleResize} />
       )}
     </div>
