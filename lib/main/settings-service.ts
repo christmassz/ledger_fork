@@ -41,6 +41,7 @@ interface Settings {
   lastRepoPath?: string;
   viewMode?: ViewMode;
   themeMode?: ThemeMode;
+  selectedThemeId?: string;  // e.g., 'dracula', 'claude-desktop', 'light'
   customTheme?: VSCodeTheme;
   // Canvas settings
   canvases?: CanvasConfig[];
@@ -107,10 +108,16 @@ export function getThemeMode(): ThemeMode {
   return settings.themeMode || 'system';
 }
 
-export function saveThemeMode(mode: ThemeMode): void {
+export function saveThemeMode(mode: ThemeMode, themeId?: string): void {
   const settings = loadSettings();
   settings.themeMode = mode;
+  settings.selectedThemeId = themeId || mode;  // Default to mode for base themes
   saveSettings(settings);
+}
+
+export function getSelectedThemeId(): string {
+  const settings = loadSettings();
+  return settings.selectedThemeId || settings.themeMode || 'system';
 }
 
 export function getCustomTheme(): VSCodeTheme | null {
@@ -146,18 +153,19 @@ export async function loadVSCodeThemeFile(): Promise<VSCodeTheme | null> {
   }
 }
 
-export function loadBuiltInTheme(themeFileName: string): VSCodeTheme | null {
+export function loadBuiltInTheme(themeFileName: string, themeId?: string): VSCodeTheme | null {
   try {
     const themePath = path.join(app.getAppPath(), 'resources', 'themes', themeFileName);
     const data = fs.readFileSync(themePath, 'utf-8');
     const theme = JSON.parse(data) as VSCodeTheme;
-    
-    // Save the custom theme
+
+    // Save the custom theme and track which theme was selected
     const settings = loadSettings();
     settings.customTheme = theme;
     settings.themeMode = 'custom';
+    settings.selectedThemeId = themeId || themeFileName.replace('.json', '');
     saveSettings(settings);
-    
+
     return theme;
   } catch (error) {
     console.error('Failed to load built-in theme:', error);

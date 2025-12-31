@@ -57,6 +57,11 @@ test.describe('Ledger App - Main View', () => {
   let repoLoaded = false
 
   test.beforeAll(async () => {
+    // Clear settings to ensure fresh start with default canvas (Radar)
+    if (fs.existsSync(SETTINGS_PATH)) {
+      fs.unlinkSync(SETTINGS_PATH)
+    }
+    
     // Launch app with --repo argument to load test repo directly
     app = await electron.launch({
       args: [
@@ -85,39 +90,57 @@ test.describe('Ledger App - Main View', () => {
     await app.close()
   })
 
-  test('displays five-column layout', async () => {
+  test('displays canvas layout', async () => {
     test.skip(!repoLoaded, 'Repo did not auto-load')
-    await expect(page.locator('.ledger-content.five-columns')).toBeVisible()
+    // Canvas system uses .canvas-layout inside .ledger-content.canvas-mode
+    await expect(page.locator('.ledger-content.canvas-mode')).toBeVisible()
+    await expect(page.locator('.canvas-layout')).toBeVisible()
   })
 
   test('displays Pull Requests column', async () => {
     test.skip(!repoLoaded, 'Repo did not auto-load')
-    await expect(page.locator('.pr-column')).toBeVisible()
-    await expect(page.locator('.pr-column h2')).toContainText('Pull Requests')
+    // Wait for canvas layout to be rendered first
+    await page.waitForSelector('.canvas-layout', { timeout: 5000 })
+    // Ensure we're in Radar mode (click Radar button)
+    await page.locator('button.view-toggle-btn[title="Radar Mode"]').click()
+    await page.waitForTimeout(100) // Brief wait for canvas switch
+    // New selector uses data-panel attribute
+    const prColumn = page.locator('.canvas-column[data-panel="pr-list"]')
+    await expect(prColumn).toBeVisible({ timeout: 10000 })
+    await expect(prColumn.locator('h2')).toContainText('Pull Requests')
   })
 
   test('displays Worktrees column', async () => {
     test.skip(!repoLoaded, 'Repo did not auto-load')
-    await expect(page.locator('.worktrees-column')).toBeVisible()
-    await expect(page.locator('.worktrees-column h2')).toContainText('Worktrees')
+    await page.waitForSelector('.canvas-layout', { timeout: 5000 })
+    const wtColumn = page.locator('.canvas-column[data-panel="worktree-list"]')
+    await expect(wtColumn).toBeVisible({ timeout: 10000 })
+    await expect(wtColumn.locator('h2')).toContainText('Worktrees')
   })
 
   test('displays Local Branches column', async () => {
     test.skip(!repoLoaded, 'Repo did not auto-load')
-    await expect(page.locator('.branches-column')).toBeVisible()
-    await expect(page.locator('.branches-column h2')).toContainText('Local Branches')
+    await page.waitForSelector('.canvas-layout', { timeout: 5000 })
+    const branchColumn = page.locator('.canvas-column[data-panel="branch-list"]')
+    await expect(branchColumn).toBeVisible({ timeout: 10000 })
+    await expect(branchColumn.locator('h2')).toContainText('Branches')
   })
 
   test('displays Remote Branches column', async () => {
     test.skip(!repoLoaded, 'Repo did not auto-load')
-    await expect(page.locator('.remotes-column')).toBeVisible()
-    await expect(page.locator('.remotes-column h2')).toContainText('Remote Branches')
+    await page.waitForSelector('.canvas-layout', { timeout: 5000 })
+    const remoteColumn = page.locator('.canvas-column[data-panel="remote-list"]')
+    await expect(remoteColumn).toBeVisible({ timeout: 10000 })
+    await expect(remoteColumn.locator('h2')).toContainText('Remotes')
   })
 
   test('displays filter and sort controls in columns', async () => {
     test.skip(!repoLoaded, 'Repo did not auto-load')
-    // Click to expand PR controls
-    const prHeader = page.locator('.pr-column .column-header')
+    await page.waitForSelector('.canvas-layout', { timeout: 5000 })
+    // Click to expand PR controls using new selector
+    const prColumn = page.locator('.canvas-column[data-panel="pr-list"]')
+    await expect(prColumn).toBeVisible({ timeout: 10000 })
+    const prHeader = prColumn.locator('.column-header')
     await prHeader.click()
     // Now controls should be visible
     const controls = page.locator('.control-select')
@@ -143,20 +166,27 @@ test.describe('Ledger App - Main View', () => {
 
   test('displays branch list items', async () => {
     test.skip(!repoLoaded, 'Repo did not auto-load')
-    const branchItems = page.locator('.branches-column .item')
-    await expect(branchItems.first()).toBeVisible()
+    await page.waitForSelector('.canvas-layout', { timeout: 5000 })
+    const branchColumn = page.locator('.canvas-column[data-panel="branch-list"]')
+    await expect(branchColumn).toBeVisible({ timeout: 10000 })
+    const branchItems = branchColumn.locator('.item')
+    await expect(branchItems.first()).toBeVisible({ timeout: 10000 })
   })
 
   test('displays count badges', async () => {
     test.skip(!repoLoaded, 'Repo did not auto-load')
+    await page.waitForSelector('.canvas-layout', { timeout: 5000 })
     const badges = page.locator('.count-badge')
-    await expect(badges.first()).toBeVisible()
+    await expect(badges.first()).toBeVisible({ timeout: 10000 })
   })
 
   test('current branch has indicator', async () => {
     test.skip(!repoLoaded, 'Repo did not auto-load')
-    const currentBranch = page.locator('.branches-column .item.current')
-    await expect(currentBranch).toBeVisible()
+    await page.waitForSelector('.canvas-layout', { timeout: 5000 })
+    const branchColumn = page.locator('.canvas-column[data-panel="branch-list"]')
+    await expect(branchColumn).toBeVisible({ timeout: 10000 })
+    const currentBranch = branchColumn.locator('.item.current')
+    await expect(currentBranch).toBeVisible({ timeout: 10000 })
   })
 
   test('displays Focus Mode toggle button', async () => {
@@ -173,16 +203,13 @@ test.describe('Ledger App - Main View', () => {
     const toggleButton = page.locator('button.view-toggle-btn[title="Focus Mode"]')
     await toggleButton.click()
     
-    // Verify Focus Mode layout is visible
-    await expect(page.locator('.focus-mode-layout')).toBeVisible()
+    // Verify Focus Mode canvas is active (has sidebar panel)
+    await expect(page.locator('.canvas-column[data-panel="sidebar"]')).toBeVisible()
     
-    // Verify sidebar is present
-    await expect(page.locator('.focus-sidebar')).toBeVisible()
+    // Verify git graph is present in Focus mode
+    await expect(page.locator('.canvas-column[data-panel="git-graph"]')).toBeVisible()
     
-    // Verify main panel is present
-    await expect(page.locator('.focus-main')).toBeVisible()
-    
-    // Verify sidebar sections are present
+    // Verify sidebar sections are present (5 sections: PRs, Branches, Remotes, Worktrees, Stashes)
     const sidebarSections = page.locator('.sidebar-section')
     await expect(sidebarSections).toHaveCount(5)
   })
@@ -192,13 +219,14 @@ test.describe('Ledger App - Main View', () => {
     
     // First switch to Focus Mode
     await page.locator('button.view-toggle-btn[title="Focus Mode"]').click()
-    await expect(page.locator('.focus-mode-layout')).toBeVisible()
+    await expect(page.locator('.canvas-column[data-panel="sidebar"]')).toBeVisible()
     
     // Click the toggle button to switch back to Radar Mode
     const radarButton = page.locator('button.view-toggle-btn[title="Radar Mode"]')
     await radarButton.click()
     
-    // Verify five-column layout is visible again
-    await expect(page.locator('.ledger-content.five-columns')).toBeVisible()
+    // Verify Radar canvas is active (has pr-list column, no sidebar)
+    await expect(page.locator('.canvas-column[data-panel="pr-list"]')).toBeVisible()
+    await expect(page.locator('.canvas-column[data-panel="sidebar"]')).not.toBeVisible()
   })
 })

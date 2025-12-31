@@ -2730,6 +2730,59 @@ export interface StashEntry {
   message: string
   branch: string
   date: string
+  /** True if stash changes already exist on the original branch */
+  redundant?: boolean
+}
+
+/**
+ * Check if a stash is redundant (its changes already exist on the original branch)
+ * 
+ * Compares each file in the stash against the current state of that file on
+ * the branch the stash was created from. If all files match, the stash is redundant.
+ */
+async function isStashRedundant(stashIndex: number, branch: string): Promise<boolean> {
+  if (!git || !branch) return false
+
+  try {
+    // Get list of files changed in the stash
+    const filesOutput = await git.raw(['stash', 'show', '--name-only', `stash@{${stashIndex}}`])
+    if (!filesOutput.trim()) return true // Empty stash = superseded
+
+    const files = filesOutput.trim().split('\n')
+
+    // Compare each file's content between stash and current branch
+    for (const file of files) {
+      try {
+        // Get file content from stash
+        const stashContent = await git.raw(['show', `stash@{${stashIndex}}:${file}`])
+        
+        // Get file content from branch (try local first, then remote)
+        let branchContent: string
+        try {
+          branchContent = await git.raw(['show', `${branch}:${file}`])
+        } catch {
+          // Branch might not exist locally, try origin
+          try {
+            branchContent = await git.raw(['show', `origin/${branch}:${file}`])
+          } catch {
+            // File doesn't exist on branch = stash has changes
+            return false
+          }
+        }
+
+        if (stashContent !== branchContent) {
+          return false // File differs, stash has changes
+        }
+      } catch {
+        // File in stash doesn't exist or can't be read = stash has changes
+        return false
+      }
+    }
+
+    return true // All files match, stash is superseded
+  } catch {
+    return false // On error, assume stash has changes
+  }
 }
 
 // Get list of stashes
@@ -2763,6 +2816,13 @@ export async function getStashes(): Promise<StashEntry[]> {
         date,
       })
     }
+
+    // Check redundant status for each stash (in parallel for speed)
+    await Promise.all(
+      stashes.map(async (stash) => {
+        stash.redundant = await isStashRedundant(stash.index, stash.branch)
+      })
+    )
 
     return stashes
   } catch {

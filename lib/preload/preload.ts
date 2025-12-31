@@ -97,11 +97,12 @@ const electronAPI = {
   mergePR: (prNumber: number, mergeMethod?: 'merge' | 'squash' | 'rebase') => ipcRenderer.invoke('merge-pr', prNumber, mergeMethod),
   // Theme operations
   getThemeMode: () => ipcRenderer.invoke('get-theme-mode'),
-  setThemeMode: (mode: 'light' | 'dark' | 'system' | 'custom') => ipcRenderer.invoke('set-theme-mode', mode),
+  getSelectedThemeId: () => ipcRenderer.invoke('get-selected-theme-id'),
+  setThemeMode: (mode: 'light' | 'dark' | 'system' | 'custom', themeId?: string) => ipcRenderer.invoke('set-theme-mode', mode, themeId),
   getSystemTheme: () => ipcRenderer.invoke('get-system-theme'),
   getCustomTheme: () => ipcRenderer.invoke('get-custom-theme'),
   loadVSCodeTheme: () => ipcRenderer.invoke('load-vscode-theme'),
-  loadBuiltInTheme: (themeFileName: string) => ipcRenderer.invoke('load-built-in-theme', themeFileName),
+  loadBuiltInTheme: (themeFileName: string, themeId?: string) => ipcRenderer.invoke('load-built-in-theme', themeFileName, themeId),
   clearCustomTheme: () => ipcRenderer.invoke('clear-custom-theme'),
   // Canvas operations
   getCanvases: () => ipcRenderer.invoke('get-canvases'),

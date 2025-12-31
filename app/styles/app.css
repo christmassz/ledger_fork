@@ -797,6 +797,12 @@ body,
   color: var(--warning-text);
 }
 
+.badge-redundant {
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-style: italic;
+}
+
 .badge-draft {
   background: var(--bg-tertiary);
   color: var(--text-secondary);
@@ -1012,6 +1018,15 @@ body,
 /* Stash Styles */
 .stash-item {
   padding: 10px 12px;
+}
+
+.stash-item.redundant {
+  opacity: 0.6;
+}
+
+.stash-item.redundant .item-name {
+  text-decoration: line-through;
+  text-decoration-color: var(--text-muted);
 }
 
 .stash-item .item-name {

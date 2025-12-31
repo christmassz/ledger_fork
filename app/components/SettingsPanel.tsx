@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { loadBuiltInTheme, loadVSCodeTheme, type ThemeMode } from '../theme'
+import { loadBuiltInTheme, loadVSCodeTheme, getSelectedThemeId, type ThemeMode } from '../theme'
 
 // Built-in theme definitions with preview colors
 const BUILT_IN_THEMES = [
@@ -140,14 +140,14 @@ interface SettingsPanelProps {
   onBack: () => void
 }
 
-export const SettingsPanel = ({ themeMode, onThemeChange, onBack }: SettingsPanelProps) => {
-  const [selectedTheme, setSelectedTheme] = useState<string>(themeMode)
+export const SettingsPanel = ({ themeMode: _themeMode, onThemeChange, onBack }: SettingsPanelProps) => {
+  const [selectedTheme, setSelectedTheme] = useState<string>('system')
   const [isSaving, setIsSaving] = useState(false)
 
-  // Sync selectedTheme with themeMode when it changes externally
+  // Load the selected theme ID on mount
   useEffect(() => {
-    setSelectedTheme(themeMode)
-  }, [themeMode])
+    getSelectedThemeId().then(setSelectedTheme)
+  }, [])
 
   const handleThemeSelect = async (themeId: string) => {
     if (isSaving) return
@@ -160,10 +160,10 @@ export const SettingsPanel = ({ themeMode, onThemeChange, onBack }: SettingsPane
       setSelectedTheme(themeId)
 
       if (theme.path) {
-        // Load built-in theme file
-        await loadBuiltInTheme(theme.path)
+        // Load built-in theme file, passing the theme ID for persistence
+        await loadBuiltInTheme(theme.path, themeId)
       } else {
-        // Use base light/dark theme
+        // Use base light/dark/system theme
         await onThemeChange(themeId as ThemeMode)
       }
     } finally {

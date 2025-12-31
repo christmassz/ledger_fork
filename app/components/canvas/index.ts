@@ -7,8 +7,9 @@
  * - EditorSlot: Special column that renders global editor state
  *
  * Built-in presets:
- * - Radar: 5 list columns for dashboard view
- * - Focus: list + viz + editor for working view
+ * - Radar: 5 list columns + hidden editor for dashboard view
+ * - Focus: sidebar + git-graph + editor for working view
+ * - Graph: git-graph only for full-width history
  */
 
 // Context and state management
@@ -40,3 +41,7 @@ export type {
 // Navigation hook
 export { useCanvasNavigation } from './useCanvasNavigation'
 export type { UseCanvasNavigationOptions, CanvasNavigationResult } from './useCanvasNavigation'
+
+// Persistence hook
+export { useCanvasPersistence } from './useCanvasPersistence'
+export type { UseCanvasPersistenceOptions } from './useCanvasPersistence'

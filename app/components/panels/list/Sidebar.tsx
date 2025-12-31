@@ -210,7 +210,7 @@ export function Sidebar({
                   onContextMenu={(e) => onContextMenuBranch?.(e, branch)}
                 >
                   <span className="item-title">{branch.name}</span>
-                  {branch.isCurrent && <span className="badge badge-current">•</span>}
+                  {branch.current && <span className="badge badge-current">•</span>}
                 </li>
               ))}
               {filteredLocalBranches.length === 0 && (

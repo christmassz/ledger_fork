@@ -9,7 +9,7 @@
  */
 
 import { useState, useMemo } from 'react'
-import type { Worktree } from '../../../types/electron'
+import type { Worktree, WorktreeSort } from '../../../types/electron'
 import type { Column } from '../../../types/app-types'
 import { ListPanelHeader } from './ListPanelHeader'
 
@@ -76,10 +76,11 @@ export function WorktreeList({
   onContextMenu,
   onCreateWorktree,
 }: WorktreeListProps) {
-  // Local filter state
+  // Local filter/sort state
   const [controlsOpen, setControlsOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [parentFilter, setParentFilter] = useState<string>('all')
+  const [sort, setSort] = useState<WorktreeSort>('last-modified')
 
   // Get available parent filters
   const parentFilters = useMemo(() => getWorktreeParents(worktrees, repoPath), [worktrees, repoPath])
@@ -102,7 +103,33 @@ export function WorktreeList({
     }
   }, [repoPath, worktrees])
 
-  // Filter worktrees
+  // Sort worktrees
+  const sortWorktrees = (wtList: Worktree[]): Worktree[] => {
+    const sorted = [...wtList]
+    switch (sort) {
+      case 'folder-name':
+        return sorted.sort((a, b) => {
+          const aName = a.path.split('/').pop() || ''
+          const bName = b.path.split('/').pop() || ''
+          return aName.localeCompare(bName)
+        })
+      case 'branch-name':
+        return sorted.sort((a, b) => {
+          const aName = a.branch || a.displayName || ''
+          const bName = b.branch || b.displayName || ''
+          return aName.localeCompare(bName)
+        })
+      case 'last-modified':
+      default:
+        return sorted.sort((a, b) => {
+          if (!a.lastModified) return 1
+          if (!b.lastModified) return -1
+          return new Date(b.lastModified).getTime() - new Date(a.lastModified).getTime()
+        })
+    }
+  }
+
+  // Filter and sort worktrees
   const filteredWorktrees = useMemo(() => {
     // Filter out the main repo worktree (shown as working folder)
     let filtered = worktrees.filter((wt) => wt.path !== repoPath)
@@ -127,7 +154,10 @@ export function WorktreeList({
       )
     }
 
-    // Prepend working folder if it matches filters
+    // Sort the filtered results
+    filtered = sortWorktrees(filtered)
+
+    // Prepend working folder if it matches filters (always at top)
     if (workingFolderWorktree) {
       const matchesParent = parentFilter === 'all' || parentFilter === 'main'
       const matchesSearch = !search.trim() ||
@@ -140,7 +170,7 @@ export function WorktreeList({
     }
 
     return filtered
-  }, [worktrees, repoPath, parentFilter, search, workingFolderWorktree])
+  }, [worktrees, repoPath, parentFilter, search, workingFolderWorktree, sort])
 
   const label = column?.label || 'Worktrees'
   const icon = column?.icon || '⧉'
@@ -184,6 +214,18 @@ export function WorktreeList({
                   {parent}
                 </option>
               ))}
+            </select>
+          </div>
+          <div className="control-row">
+            <label>Sort</label>
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as WorktreeSort)}
+              className="control-select"
+            >
+              <option value="last-modified">Last Modified</option>
+              <option value="folder-name">Folder Name</option>
+              <option value="branch-name">Branch Name</option>
             </select>
           </div>
           {onCreateWorktree && (

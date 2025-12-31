@@ -23,7 +23,7 @@ import type {
 } from './types/app-types'
 import './styles/app.css'
 import { useWindowContext } from './components/window'
-import { useCanvas, useCanvasNavigation, CanvasRenderer, type CanvasData, type CanvasSelection, type CanvasHandlers, type CanvasUIState } from './components/canvas'
+import { useCanvas, useCanvasNavigation, useCanvasPersistence, CanvasRenderer, type CanvasData, type CanvasSelection, type CanvasHandlers, type CanvasUIState } from './components/canvas'
 import {
   DiffPanel,
   StagingPanel,
@@ -61,38 +61,28 @@ export default function App() {
     setActiveCanvas, 
     state: canvasState,
     currentEditorEntry,
-    addColumn,
-    removeColumn,
     toggleColumnVisibility,
     isColumnVisible,
   } = useCanvas()
   
   // Initialize keyboard shortcuts for editor navigation
   useCanvasNavigation()
+  
+  // Initialize canvas persistence (auto-save custom canvases and active canvas)
+  useCanvasPersistence()
 
-  // Check if Radar canvas has an editor column
+  // Check if Radar canvas has a VISIBLE editor column
   const radarCanvas = canvasState.canvases.find(c => c.id === 'radar')
-  const radarHasEditor = radarCanvas?.columns.some(col => col.slotType === 'editor') ?? false
+  const radarEditorColumn = radarCanvas?.columns.find(col => col.slotType === 'editor')
+  const radarEditorVisible = radarEditorColumn?.visible !== false
 
-  // Toggle editor column in Radar canvas
+  // Toggle editor column visibility in Radar canvas
   const toggleRadarEditor = useCallback(() => {
-    if (radarHasEditor) {
-      // Remove editor column from radar
-      const editorCol = radarCanvas?.columns.find(col => col.slotType === 'editor')
-      if (editorCol) {
-        removeColumn('radar', editorCol.id)
-      }
-    } else {
-      // Add editor column to radar
-      addColumn('radar', {
-        id: 'radar-editor',
-        slotType: 'editor',
-        panel: 'empty',
-        width: 400,
-        minWidth: 300,
-      })
+    if (radarEditorColumn) {
+      // Toggle visibility of existing editor column
+      toggleColumnVisibility('radar', radarEditorColumn.id)
     }
-  }, [radarHasEditor, radarCanvas, removeColumn, addColumn])
+  }, [radarEditorColumn, toggleColumnVisibility])
 
   // Theme change handler for Settings panel
   const handleThemeChange = useCallback(async (mode: ThemeMode) => {
@@ -163,11 +153,11 @@ export default function App() {
           key="editor-toggle"
           className="panel-toggle-btn"
           onClick={toggleRadarEditor}
-          title={radarHasEditor ? 'Hide Detail Panel' : 'Show Detail Panel'}
+          title={radarEditorVisible ? 'Hide Detail Panel' : 'Show Detail Panel'}
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <rect x="0.5" y="0.5" width="15" height="15" rx="1.5" stroke="currentColor" strokeWidth="1" />
-            <rect x="5" y="1" width="6" height="14" fill={radarHasEditor ? 'currentColor' : 'none'} />
+            <rect x="5" y="1" width="6" height="14" fill={radarEditorVisible ? 'currentColor' : 'none'} />
           </svg>
         </button>
       )
@@ -217,7 +207,8 @@ export default function App() {
     }
 
     // Always add settings button - works from ANY canvas
-    const isSettingsActive = viewMode === 'focus' && mainPanelView === 'settings'
+    // Settings is active if mainPanelView is 'settings', regardless of current canvas
+    const isSettingsActive = mainPanelView === 'settings'
     actions.push(
       <button
         key="settings"
@@ -252,7 +243,7 @@ export default function App() {
     )
 
     setTitlebarActions(actions.length > 0 ? <>{actions}</> : null)
-  }, [repoPath, viewMode, mainPanelView, canvasState, radarHasEditor, toggleRadarEditor, setTitlebarActions, setActiveCanvas, isColumnVisible, toggleColumnVisibility])
+  }, [repoPath, viewMode, mainPanelView, canvasState, radarEditorVisible, toggleRadarEditor, setTitlebarActions, setActiveCanvas, isColumnVisible, toggleColumnVisibility])
 
   const selectRepo = async () => {
     if (switching) return
@@ -454,6 +445,14 @@ export default function App() {
       }
     },
     [setActiveCanvas, graphCommits, handleSelectCommit]
+  )
+
+  const handleRadarStashClick = useCallback(
+    (stash: StashEntry) => {
+      setActiveCanvas('focus')
+      handleSidebarFocus('stash', stash)
+    },
+    [setActiveCanvas, handleSidebarFocus]
   )
 
   const handleRadarUncommittedClick = useCallback(() => {
@@ -1230,8 +1229,8 @@ export default function App() {
     onContextMenuWorktree: (e, wt) => handleContextMenu(e, 'worktree', wt),
     onCreateWorktree: () => navigateToEditor('create-worktree'),
     // Stash handlers
-    onSelectStash: (stash) => handleSidebarFocus('stash', stash),
-    onDoubleClickStash: (stash) => handleSidebarFocus('stash', stash),
+    onSelectStash: (stash) => handleRadarItemClick('stash', stash),
+    onDoubleClickStash: handleRadarStashClick,
     onContextMenuStash: (e, stash) => handleContextMenu(e, 'stash', stash as unknown as Worktree),
     // Commit handlers
     onSelectCommit: handleSelectCommit,
@@ -1244,7 +1243,7 @@ export default function App() {
     renderEditorContent,
   }), [
     formatRelativeTime, formatDate, handleRadarItemClick, handleRadarPRClick, handleRadarBranchClick,
-    handleRadarWorktreeClick, handleContextMenu, handleSidebarFocus, handleSelectCommit, navigateToEditor,
+    handleRadarWorktreeClick, handleRadarStashClick, handleContextMenu, handleSelectCommit, navigateToEditor,
     renderEditorContent, setActiveCanvas
   ])
 

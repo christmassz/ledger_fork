@@ -46,6 +46,10 @@ export interface Worktree {
 export type BranchFilter = 'all' | 'local-only' | 'unmerged'
 export type BranchSort = 'name' | 'last-commit' | 'first-commit' | 'most-commits'
 
+export type WorktreeSort = 'folder-name' | 'last-modified' | 'branch-name'
+export type StashFilter = 'all' | 'has-changes' | 'redundant'
+export type StashSort = 'date' | 'message' | 'branch'
+
 export interface CheckoutResult {
   success: boolean
   message: string
@@ -166,6 +170,8 @@ export interface StashEntry {
   message: string
   branch: string
   date: string
+  /** True if stash changes already exist on the original branch */
+  redundant?: boolean
 }
 
 export interface StashFile {
@@ -404,7 +410,8 @@ export interface ElectronAPI {
   mergePR: (prNumber: number, mergeMethod?: 'merge' | 'squash' | 'rebase') => Promise<{ success: boolean; message: string }>
   // Theme operations
   getThemeMode: () => Promise<'light' | 'dark' | 'system' | 'custom'>
-  setThemeMode: (mode: 'light' | 'dark' | 'system' | 'custom') => Promise<{ success: boolean }>
+  getSelectedThemeId: () => Promise<string>
+  setThemeMode: (mode: 'light' | 'dark' | 'system' | 'custom', themeId?: string) => Promise<{ success: boolean }>
   getSystemTheme: () => Promise<'light' | 'dark'>
   getCustomTheme: () => Promise<{
     theme: {
@@ -424,7 +431,7 @@ export interface ElectronAPI {
     }
     cssVars: Record<string, string>
   } | null>
-  loadBuiltInTheme: (themeFileName: string) => Promise<{
+  loadBuiltInTheme: (themeFileName: string, themeId?: string) => Promise<{
     theme: {
       name: string
       path: string

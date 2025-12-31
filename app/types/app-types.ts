@@ -152,8 +152,4 @@ export interface CanvasState {
   canvases: Canvas[]
   activeCanvasId: string
   editorState: EditorState
-  
-  // App-level canvas settings
-  startingCanvasId?: string    // Canvas to show on app launch (default: first preset)
-  editorHomeCanvasId?: string  // Canvas to switch to when navigating to editor (default: first with editor slot)
 }

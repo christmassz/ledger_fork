@@ -44,9 +44,9 @@ app.tsx
 ## Canvas Presets
 
 ```typescript
-RADAR_CANVAS  // 5 list columns: stashes, prs, worktrees, branches, remotes
+RADAR_CANVAS  // 5 list columns + hidden editor: stashes, prs, worktrees, branches, remotes
 FOCUS_CANVAS  // sidebar + git-graph + editor
-GRAPH_CANVAS  // git-graph only
+GRAPH_CANVAS  // git-graph only (full width)
 ```
 
 ## Types
