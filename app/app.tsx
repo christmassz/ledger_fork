@@ -27,7 +27,7 @@ import type {
 } from './types/app-types'
 import './styles/app.css'
 import { useWindowContext } from './components/window'
-import { useCanvas, useCanvasNavigation } from './components/canvas'
+import { useCanvas, useCanvasNavigation, CanvasRenderer, type CanvasData, type CanvasSelection, type CanvasHandlers, type CanvasUIState } from './components/canvas'
 import { SettingsPanel } from './components/SettingsPanel'
 import { GitGraph } from './components/panels/viz'
 import {
@@ -102,8 +102,9 @@ export default function App() {
     }
   }, [radarHasEditor, radarCanvas, removeColumn, addColumn])
 
-  // View mode state
-  const [viewMode, setViewMode] = useState<ViewMode>('radar')
+  // View mode - derived from active canvas
+  // TODO: Remove once all view mode logic is migrated to canvas system
+  const viewMode = canvasState.activeCanvasId as ViewMode
   const [mainPanelView, setMainPanelView] = useState<MainPanelView>('history')
 
   // Focus mode state
@@ -335,7 +336,7 @@ export default function App() {
         onClick={() => {
           if (viewMode === 'radar') {
             // Switch to Focus mode with Settings panel
-            setViewMode('focus')
+            setActiveCanvas('focus')
             setMainPanelView('settings')
             setMainVisible(true)
           } else {
@@ -595,58 +596,58 @@ export default function App() {
   // Radar card double-click handlers - switch to Focus mode with item selected
   const handleRadarPRClick = useCallback(
     (pr: PullRequest) => {
-      setViewMode('focus')
+      setActiveCanvas('focus')
       setSidebarSections((prev) => ({ ...prev, prs: true }))
       handleSidebarFocus('pr', pr)
     },
-    [handleSidebarFocus]
+    [setActiveCanvas, handleSidebarFocus]
   )
 
   const handleRadarWorktreeClick = useCallback(
     (wt: Worktree) => {
-      setViewMode('focus')
+      setActiveCanvas('focus')
       setSidebarSections((prev) => ({ ...prev, worktrees: true }))
       handleSidebarFocus('worktree', wt)
     },
-    [handleSidebarFocus]
+    [setActiveCanvas, handleSidebarFocus]
   )
 
   const handleRadarBranchClick = useCallback(
     (branch: Branch) => {
-      setViewMode('focus')
+      setActiveCanvas('focus')
       setSidebarSections((prev) => ({ ...prev, branches: true }))
       handleSidebarFocus('branch', branch)
     },
-    [handleSidebarFocus]
+    [setActiveCanvas, handleSidebarFocus]
   )
 
   const handleRadarRemoteBranchClick = useCallback(
     (branch: Branch) => {
-      setViewMode('focus')
+      setActiveCanvas('focus')
       setSidebarSections((prev) => ({ ...prev, remotes: true }))
       handleSidebarFocus('remote', branch)
     },
-    [handleSidebarFocus]
+    [setActiveCanvas, handleSidebarFocus]
   )
 
   const handleRadarCommitClick = useCallback(
     (commit: Commit) => {
-      setViewMode('focus')
+      setActiveCanvas('focus')
       // Find the matching GraphCommit by hash and select it
       const graphCommit = graphCommits.find((gc) => gc.hash === commit.hash)
       if (graphCommit) {
         handleSelectCommit(graphCommit)
       }
     },
-    [graphCommits, handleSelectCommit]
+    [setActiveCanvas, graphCommits, handleSelectCommit]
   )
 
   const handleRadarUncommittedClick = useCallback(() => {
     if (!workingStatus) return
-    setViewMode('focus')
+    setActiveCanvas('focus')
     setSidebarSections((prev) => ({ ...prev, branches: true }))
     handleSidebarFocus('uncommitted', workingStatus)
-  }, [workingStatus, handleSidebarFocus])
+  }, [setActiveCanvas, workingStatus, handleSidebarFocus])
 
   // Context menu handlers
   const handleContextMenu = (
@@ -1688,6 +1689,68 @@ export default function App() {
 
   const menuItems = getMenuItems()
 
+  // ========================================
+  // Canvas Data & Props
+  // ========================================
+
+  const canvasData: CanvasData = useMemo(() => ({
+    repoPath,
+    prs: pullRequests,
+    prError,
+    branches,
+    currentBranch,
+    worktrees,
+    stashes,
+    commits: graphCommits,
+    workingStatus,
+    commitDiff,
+    loadingDiff,
+  }), [repoPath, pullRequests, prError, branches, currentBranch, worktrees, stashes, graphCommits, workingStatus, commitDiff, loadingDiff])
+
+  const canvasSelection: CanvasSelection = useMemo(() => ({
+    selectedPR: sidebarFocus?.type === 'pr' ? (sidebarFocus.data as PullRequest) : null,
+    selectedBranch: sidebarFocus?.type === 'branch' || sidebarFocus?.type === 'remote' ? (sidebarFocus.data as Branch) : null,
+    selectedWorktree: sidebarFocus?.type === 'worktree' ? (sidebarFocus.data as Worktree) : null,
+    selectedStash: sidebarFocus?.type === 'stash' ? (sidebarFocus.data as StashEntry) : null,
+    selectedCommit,
+  }), [sidebarFocus, selectedCommit])
+
+  const canvasHandlers: CanvasHandlers = useMemo(() => ({
+    formatRelativeTime,
+    formatDate,
+    // PR handlers
+    onSelectPR: (pr) => handleRadarItemClick('pr', pr),
+    onDoubleClickPR: handleRadarPRClick,
+    onContextMenuPR: (e, pr) => handleContextMenu(e, 'pr', pr),
+    // Branch handlers
+    onSelectBranch: (branch) => handleRadarItemClick(branch.isRemote ? 'remote' : 'branch', branch),
+    onDoubleClickBranch: handleRadarBranchClick,
+    onContextMenuLocalBranch: (e, branch) => handleContextMenu(e, 'branch', branch),
+    onContextMenuRemoteBranch: (e, branch) => handleContextMenu(e, 'remote', branch),
+    onCreateBranch: () => setShowNewBranchModal(true),
+    // Worktree handlers
+    onSelectWorktree: (wt) => handleRadarItemClick('worktree', wt),
+    onDoubleClickWorktree: handleRadarWorktreeClick,
+    onContextMenuWorktree: (e, wt) => handleContextMenu(e, 'worktree', wt),
+    onCreateWorktree: () => navigateToEditor('create-worktree'),
+    // Stash handlers
+    onSelectStash: (stash) => handleSidebarFocus('stash', stash),
+    onDoubleClickStash: (stash) => handleSidebarFocus('stash', stash),
+    onContextMenuStash: (e, stash) => handleContextMenu(e, 'stash', stash as unknown as Worktree),
+    // Commit handlers
+    onSelectCommit: handleSelectCommit,
+    // Editor content (for now, delegate to existing render logic)
+    renderEditorContent: undefined,
+  }), [
+    formatRelativeTime, formatDate, handleRadarItemClick, handleRadarPRClick, handleRadarBranchClick,
+    handleRadarWorktreeClick, handleContextMenu, handleSidebarFocus, handleSelectCommit, navigateToEditor
+  ])
+
+  const canvasUIState: CanvasUIState = useMemo(() => ({
+    switching,
+    deleting,
+  }), [switching, deleting])
+
   return (
     <div className="ledger-app">
       {/* Context Menu */}
@@ -1803,7 +1866,7 @@ export default function App() {
             <div className="view-toggle">
               <button
                 className={`view-toggle-btn ${viewMode === 'radar' ? 'active' : ''}`}
-                onClick={() => setViewMode('radar')}
+                onClick={() => setActiveCanvas('radar')}
                 title="Radar Mode"
               >
                 <span className="view-icon">⊞</span>
@@ -1811,11 +1874,19 @@ export default function App() {
               </button>
               <button
                 className={`view-toggle-btn ${viewMode === 'focus' ? 'active' : ''}`}
-                onClick={() => setViewMode('focus')}
+                onClick={() => setActiveCanvas('focus')}
                 title="Focus Mode"
               >
                 <span className="view-icon">☰</span>
                 <span className="view-label">Focus</span>
+              </button>
+              <button
+                className={`view-toggle-btn ${viewMode === 'graph' ? 'active' : ''}`}
+                onClick={() => setActiveCanvas('graph')}
+                title="Graph View"
+              >
+                <span className="view-icon">◉</span>
+                <span className="view-label">Graph</span>
               </button>
             </div>
           )}
@@ -1895,7 +1966,19 @@ export default function App() {
         </div>
       )}
 
-      {/* Main Content */}
+      {/* Main Content - Canvas Renderer for new canvas presets */}
+      {repoPath && !error && viewMode !== 'radar' && viewMode !== 'focus' && (
+        <main className="ledger-content canvas-mode">
+          <CanvasRenderer
+            data={canvasData}
+            selection={canvasSelection}
+            handlers={canvasHandlers}
+            uiState={canvasUIState}
+          />
+        </main>
+      )}
+
+      {/* Main Content - Radar Mode (legacy, to be migrated) */}
       {repoPath && !error && viewMode === 'radar' && (
         <main className="ledger-content five-columns">
           {/* Stashes Column */}

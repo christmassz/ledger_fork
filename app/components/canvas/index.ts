@@ -30,7 +30,17 @@ export type { EditorSlotProps } from './EditorSlot'
 export { CanvasSwitcher } from './CanvasSwitcher'
 export type { CanvasSwitcherProps } from './CanvasSwitcher'
 
-// Panel rendering
+// Unified canvas renderer
+export { CanvasRenderer } from './CanvasRenderer'
+export type {
+  CanvasRendererProps,
+  CanvasData,
+  CanvasSelection,
+  CanvasHandlers,
+  CanvasUIState,
+} from './CanvasRenderer'
+
+// Panel rendering (lower-level, for custom integrations)
 export { renderListPanel, renderVizPanel, renderEditorPanel } from './PanelRenderer'
 export type { ListPanelData, VizPanelData, EditorPanelData } from './PanelRenderer'
 

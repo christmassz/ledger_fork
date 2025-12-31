@@ -376,6 +376,13 @@ body,
   grid-template-columns: repeat(5, 1fr);
 }
 
+/* Canvas mode - uses flex layout managed by Canvas component */
+.ledger-content.canvas-mode {
+  display: flex;
+  grid-template-columns: none;
+  gap: 0;
+}
+
 /* Columns */
 .column {
   display: flex;

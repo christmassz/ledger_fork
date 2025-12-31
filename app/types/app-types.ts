@@ -15,7 +15,7 @@ import type {
 // View modes for the app layout
 // NOTE: ViewMode is deprecated - use activeCanvasId from CanvasContext instead
 // Kept for backwards compatibility during migration
-export type ViewMode = 'radar' | 'focus'
+export type ViewMode = 'radar' | 'focus' | 'graph'
 export type MainPanelView = 'history' | 'settings'
 
 // Status messages shown as toasts
