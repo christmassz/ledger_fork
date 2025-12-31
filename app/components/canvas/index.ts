@@ -27,9 +27,6 @@ export type { ResizeHandleProps } from './ResizeHandle'
 export { EditorSlot } from './EditorSlot'
 export type { EditorSlotProps } from './EditorSlot'
 
-export { CanvasSwitcher } from './CanvasSwitcher'
-export type { CanvasSwitcherProps } from './CanvasSwitcher'
-
 // Unified canvas renderer
 export { CanvasRenderer } from './CanvasRenderer'
 export type {
@@ -43,7 +40,3 @@ export type {
 // Navigation hook
 export { useCanvasNavigation } from './useCanvasNavigation'
 export type { UseCanvasNavigationOptions, CanvasNavigationResult } from './useCanvasNavigation'
-
-// Persistence hook
-export { useCanvasPersistence } from './useCanvasPersistence'
-export type { UseCanvasPersistenceOptions } from './useCanvasPersistence'

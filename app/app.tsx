@@ -2,14 +2,10 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import type {
   Branch,
   Worktree,
-  BranchFilter,
-  BranchSort,
   CheckoutResult,
   PullRequest,
   Commit,
   WorkingStatus,
-  PRFilter,
-  PRSort,
   GraphCommit,
   CommitDiff,
   StashEntry,
@@ -28,8 +24,6 @@ import type {
 import './styles/app.css'
 import { useWindowContext } from './components/window'
 import { useCanvas, useCanvasNavigation, CanvasRenderer, type CanvasData, type CanvasSelection, type CanvasHandlers, type CanvasUIState } from './components/canvas'
-import { SettingsPanel } from './components/SettingsPanel'
-import { GitGraph } from './components/panels/viz'
 import {
   DiffPanel,
   StagingPanel,
@@ -57,26 +51,21 @@ export default function App() {
   const [newBranchName, setNewBranchName] = useState('')
   const [creatingBranch, setCreatingBranch] = useState(false)
   const [githubUrl, setGithubUrl] = useState<string | null>(null)
-  const [themeMode, setThemeMode] = useState<ThemeMode>('light')
+  const [_themeMode, setThemeMode] = useState<ThemeMode>('light')
   const { setTitle, setTitlebarActions } = useWindowContext()
 
   // Canvas navigation for global editor state
   const { 
     navigateToEditor, 
     setActiveCanvas, 
-    hasEditorSlot,
     state: canvasState,
     currentEditorEntry,
     addColumn,
     removeColumn,
-    activeCanvas,
   } = useCanvas()
-  const { 
-    goBack, 
-    goForward, 
-    canGoBack, 
-    canGoForward 
-  } = useCanvasNavigation()
+  
+  // Initialize keyboard shortcuts for editor navigation
+  useCanvasNavigation()
 
   // Check if Radar canvas has an editor column
   const radarCanvas = canvasState.canvases.find(c => c.id === 'radar')
@@ -114,55 +103,16 @@ export default function App() {
   const [loadingDiff, setLoadingDiff] = useState(false)
   const [sidebarFocus, setSidebarFocus] = useState<SidebarFocus | null>(null)
   // History/Commits panel filters (shared between Radar and Focus modes)
-  const [historyFilterOpen, setHistoryFilterOpen] = useState(false) // Focus mode filter panel
-  const [radarCommitsFilterOpen, setRadarCommitsFilterOpen] = useState(false) // Radar mode filter panel
-  const [showCheckpoints, setShowCheckpoints] = useState(false) // Hide Conductor checkpoints by default
-  const [showGraphLines, setShowGraphLines] = useState(true) // Show git graph visualization (Focus mode only)
-  const [onlyBranchHeads, setOnlyBranchHeads] = useState(false) // Show only commits that are branch HEADs
-  const [onlyUnmergedBranches, setOnlyUnmergedBranches] = useState(false) // Show only commits from unmerged branches
+  // Graph display options
+  const [showCheckpoints] = useState(false) // Hide Conductor checkpoints by default
 
-  // Sidebar collapsed state
-  const [sidebarSections, setSidebarSections] = useState({
-    branches: true,
-    remotes: false,
-    worktrees: true,
-    stashes: false,
-    prs: true,
-  })
 
-  // Filter and sort state (legacy - list panels now manage their own state)
-  const [localFilter, setLocalFilter] = useState<BranchFilter>('all')
-  const [localSort, setLocalSort] = useState<BranchSort>('name')
-  const [remoteFilter, setRemoteFilter] = useState<BranchFilter>('all')
-  const [remoteSort, setRemoteSort] = useState<BranchSort>('name')
-  const [prFilter, setPrFilter] = useState<PRFilter>('open-not-draft')
-  const [prSort, setPrSort] = useState<PRSort>('updated')
 
-  // Search state for Radar mode columns
-  const [prSearch, setPrSearch] = useState('')
-  const [localBranchSearch, setLocalBranchSearch] = useState('')
-  const [remoteBranchSearch, setRemoteBranchSearch] = useState('')
-  const [worktreeSearch, setWorktreeSearch] = useState('')
-  const [stashSearch, setStashSearch] = useState('')
-
-  // Worktree filter state
-  const [worktreeParentFilter, setWorktreeParentFilter] = useState<string>('all')
-
-  // Focus view panel state (resizable + collapsible)
-  const [sidebarWidth, setSidebarWidth] = useState(220)
-  const [detailWidth, setDetailWidth] = useState(400)
-  const [graphWidth, setGraphWidth] = useState<number | null>(null) // null = auto-size
+  // Panel visibility (for titlebar toggle buttons)
   const [sidebarVisible, setSidebarVisible] = useState(true)
   const [mainVisible, setMainVisible] = useState(true)
   const [detailVisible, setDetailVisible] = useState(true)
-  const [isResizingSidebar, setIsResizingSidebar] = useState(false)
-  const [isResizingDetail, setIsResizingDetail] = useState(false)
-  const [isResizingGraph, setIsResizingGraph] = useState(false)
   
-  // Sidebar keyboard navigation
-  const [sidebarFocusedIndex, setSidebarFocusedIndex] = useState(-1)
-  const sidebarRef = useRef<HTMLElement>(null)
-
   const menuRef = useRef<HTMLDivElement>(null)
 
   // Close context menu when clicking outside
@@ -195,48 +145,6 @@ export default function App() {
     }
     return undefined
   }, [status])
-
-  // Handle panel resizing
-  const graphResizeStartX = useRef(0)
-  const graphResizeStartWidth = useRef(0)
-  
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (isResizingSidebar) {
-        const newWidth = Math.max(100, e.clientX)
-        setSidebarWidth(newWidth)
-      }
-      if (isResizingDetail) {
-        const newWidth = Math.max(200, window.innerWidth - e.clientX)
-        setDetailWidth(newWidth)
-      }
-      if (isResizingGraph) {
-        const delta = e.clientX - graphResizeStartX.current
-        const newWidth = Math.max(60, graphResizeStartWidth.current + delta)
-        setGraphWidth(newWidth)
-      }
-    }
-
-    const handleMouseUp = () => {
-      setIsResizingSidebar(false)
-      setIsResizingDetail(false)
-      setIsResizingGraph(false)
-    }
-
-    if (isResizingSidebar || isResizingDetail || isResizingGraph) {
-      document.addEventListener('mousemove', handleMouseMove)
-      document.addEventListener('mouseup', handleMouseUp)
-      document.body.style.cursor = 'col-resize'
-      document.body.style.userSelect = 'none'
-    }
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove)
-      document.removeEventListener('mouseup', handleMouseUp)
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
-    }
-  }, [isResizingSidebar, isResizingDetail, isResizingGraph])
 
   // Titlebar actions for panel toggles and settings button
   useEffect(() => {
@@ -496,7 +404,6 @@ export default function App() {
   const handleRadarPRClick = useCallback(
     (pr: PullRequest) => {
       setActiveCanvas('focus')
-      setSidebarSections((prev) => ({ ...prev, prs: true }))
       handleSidebarFocus('pr', pr)
     },
     [setActiveCanvas, handleSidebarFocus]
@@ -505,7 +412,6 @@ export default function App() {
   const handleRadarWorktreeClick = useCallback(
     (wt: Worktree) => {
       setActiveCanvas('focus')
-      setSidebarSections((prev) => ({ ...prev, worktrees: true }))
       handleSidebarFocus('worktree', wt)
     },
     [setActiveCanvas, handleSidebarFocus]
@@ -514,7 +420,6 @@ export default function App() {
   const handleRadarBranchClick = useCallback(
     (branch: Branch) => {
       setActiveCanvas('focus')
-      setSidebarSections((prev) => ({ ...prev, branches: true }))
       handleSidebarFocus('branch', branch)
     },
     [setActiveCanvas, handleSidebarFocus]
@@ -523,7 +428,6 @@ export default function App() {
   const handleRadarRemoteBranchClick = useCallback(
     (branch: Branch) => {
       setActiveCanvas('focus')
-      setSidebarSections((prev) => ({ ...prev, remotes: true }))
       handleSidebarFocus('remote', branch)
     },
     [setActiveCanvas, handleSidebarFocus]
@@ -532,7 +436,6 @@ export default function App() {
   const handleRadarCommitClick = useCallback(
     (commit: Commit) => {
       setActiveCanvas('focus')
-      // Find the matching GraphCommit by hash and select it
       const graphCommit = graphCommits.find((gc) => gc.hash === commit.hash)
       if (graphCommit) {
         handleSelectCommit(graphCommit)
@@ -544,7 +447,6 @@ export default function App() {
   const handleRadarUncommittedClick = useCallback(() => {
     if (!workingStatus) return
     setActiveCanvas('focus')
-    setSidebarSections((prev) => ({ ...prev, branches: true }))
     handleSidebarFocus('uncommitted', workingStatus)
   }, [setActiveCanvas, workingStatus, handleSidebarFocus])
 
@@ -1048,10 +950,6 @@ export default function App() {
     [currentBranch, switching]
   )
 
-  const handlePRDoubleClick = useCallback(async (pr: PullRequest) => {
-    handlePRViewRemote(pr)
-  }, [])
-
   const handleCommitDoubleClick = useCallback(
     async (commit: Commit) => {
       if (switching) return
@@ -1101,365 +999,6 @@ export default function App() {
     initializeTheme().catch(console.error)
     getCurrentThemeMode().then(setThemeMode).catch(console.error)
   }, [])
-
-  // Theme change handler
-  const handleThemeChange = useCallback(
-    async (newMode: ThemeMode) => {
-      try {
-        if (newMode === 'custom') {
-          const theme = await loadVSCodeTheme()
-          if (theme) {
-            setThemeMode('custom')
-          }
-        } else {
-          await applyThemeMode(newMode)
-          setThemeMode(newMode)
-        }
-      } catch (error) {
-        console.error('Failed to change theme:', error)
-        setStatus({ type: 'error', message: 'Failed to change theme' })
-      }
-    },
-    []
-  )
-
-  // Filter and sort functions
-  const filterBranches = (branchList: Branch[], filter: BranchFilter): Branch[] => {
-    switch (filter) {
-      case 'local-only':
-        return branchList.filter((b) => b.isLocalOnly)
-      case 'unmerged':
-        // Always include master/main even if merged (they're never really "merged away")
-        return branchList.filter((b) => {
-          const baseName = b.name.replace('remotes/', '').replace(/^origin\//, '')
-          const isMainBranch = baseName === 'main' || baseName === 'master'
-          return !b.isMerged || isMainBranch
-        })
-      default:
-        return branchList
-    }
-  }
-
-  const sortBranches = (branchList: Branch[], sort: BranchSort): Branch[] => {
-    const sorted = [...branchList]
-    switch (sort) {
-      case 'last-commit':
-        return sorted.sort((a, b) => {
-          if (!a.lastCommitDate) return 1
-          if (!b.lastCommitDate) return -1
-          return new Date(b.lastCommitDate).getTime() - new Date(a.lastCommitDate).getTime()
-        })
-      case 'first-commit':
-        return sorted.sort((a, b) => {
-          if (!a.firstCommitDate) return 1
-          if (!b.firstCommitDate) return -1
-          return new Date(a.firstCommitDate).getTime() - new Date(b.firstCommitDate).getTime()
-        })
-      case 'most-commits':
-        return sorted.sort((a, b) => (b.commitCount || 0) - (a.commitCount || 0))
-      case 'name':
-      default:
-        return sorted.sort((a, b) => a.name.localeCompare(b.name))
-    }
-  }
-
-  const localBranches = useMemo(() => {
-    const local = branches.filter((b) => !b.isRemote)
-    let filtered = filterBranches(local, localFilter)
-    // Apply search filter
-    if (localBranchSearch.trim()) {
-      const search = localBranchSearch.toLowerCase().trim()
-      filtered = filtered.filter((b) => b.name.toLowerCase().includes(search))
-    }
-    return sortBranches(filtered, localSort)
-  }, [branches, localFilter, localSort, localBranchSearch])
-
-  const remoteBranches = useMemo(() => {
-    const remote = branches.filter((b) => b.isRemote)
-    let filtered = filterBranches(remote, remoteFilter)
-    // Apply search filter
-    if (remoteBranchSearch.trim()) {
-      const search = remoteBranchSearch.toLowerCase().trim()
-      filtered = filtered.filter((b) => b.name.toLowerCase().includes(search))
-    }
-    return sortBranches(filtered, remoteSort)
-  }, [branches, remoteFilter, remoteSort, remoteBranchSearch])
-
-  // Create the "Working Folder" pseudo-worktree representing the main repo folder
-  // This helps users understand they're already using worktrees conceptually
-  const workingFolderWorktree: Worktree | null = useMemo(() => {
-    if (!repoPath) return null
-
-    // Get repo name from path (last segment)
-    const repoName = repoPath.split('/').pop() || 'Repository'
-
-    return {
-      path: repoPath,
-      head: '', // Will show current commit
-      branch: currentBranch || null,
-      bare: false,
-      agent: 'working-folder' as const,
-      agentIndex: 1,
-      contextHint: repoName,
-      displayName: `Working Folder`,
-      changedFileCount: workingStatus?.files.length ?? 0,
-      additions: workingStatus?.additions ?? 0,
-      deletions: workingStatus?.deletions ?? 0,
-      lastModified: new Date().toISOString(),
-      activityStatus: 'active' as const, // Working folder is always "active"
-      agentTaskHint: null, // No agent task for working folder
-    }
-  }, [repoPath, currentBranch, workingStatus])
-
-  // Extract unique parent folders from worktrees
-  const worktreeParents = useMemo(() => {
-    const parents = new Set<string>()
-    // Always include 'main' since working folder is always there
-    if (repoPath) parents.add('main')
-
-    for (const wt of worktrees) {
-      // Extract parent folder from path (e.g., ~/.cursor/worktrees/xxx -> .cursor)
-      const pathParts = wt.path.split('/')
-      // Find known agent folders like .cursor, .claude, conductor, etc.
-      for (let i = 0; i < pathParts.length; i++) {
-        const part = pathParts[i]
-        // Check for dot folders (.cursor, .claude, etc.)
-        if (
-          part.startsWith('.') &&
-          ['cursor', 'claude', 'gemini', 'junie'].some((a) => part.toLowerCase().includes(a))
-        ) {
-          parents.add(part)
-          break
-        }
-        // Check for Conductor workspaces (~/conductor/workspaces/)
-        if (part === 'conductor' && pathParts[i + 1] === 'workspaces') {
-          parents.add('conductor')
-          break
-        }
-      }
-      // Also check for worktrees in the main repo path
-      if (repoPath && wt.path.startsWith(repoPath)) {
-        parents.add('main')
-      }
-    }
-    return Array.from(parents).sort()
-  }, [worktrees, repoPath])
-
-  // Filter worktrees by parent and search
-  const filteredWorktrees = useMemo(() => {
-    // Filter out the main repo worktree since we show it as "Working Folder" pseudo-entry
-    let filtered = worktrees.filter((wt) => wt.path !== repoPath)
-
-    // Apply parent filter
-    if (worktreeParentFilter !== 'all') {
-      filtered = filtered.filter((wt) => {
-        if (worktreeParentFilter === 'main') {
-          return repoPath && wt.path.startsWith(repoPath)
-        }
-        return wt.path.includes(`/${worktreeParentFilter}/`)
-      })
-    }
-
-    // Apply search filter
-    if (worktreeSearch.trim()) {
-      const search = worktreeSearch.toLowerCase().trim()
-      filtered = filtered.filter(
-        (wt) => wt.displayName.toLowerCase().includes(search) || (wt.branch && wt.branch.toLowerCase().includes(search))
-      )
-    }
-
-    // Prepend the working folder pseudo-worktree
-    // It should appear first and match the 'main' filter
-    if (workingFolderWorktree) {
-      const matchesParentFilter = worktreeParentFilter === 'all' || worktreeParentFilter === 'main'
-      const matchesSearch =
-        !worktreeSearch.trim() ||
-        workingFolderWorktree.displayName.toLowerCase().includes(worktreeSearch.toLowerCase().trim()) ||
-        (workingFolderWorktree.branch &&
-          workingFolderWorktree.branch.toLowerCase().includes(worktreeSearch.toLowerCase().trim()))
-
-      if (matchesParentFilter && matchesSearch) {
-        filtered = [workingFolderWorktree, ...filtered]
-      }
-    }
-
-    return filtered
-  }, [worktrees, worktreeParentFilter, repoPath, worktreeSearch, workingFolderWorktree])
-
-  // Filter stashes
-  const filteredStashes = useMemo(() => {
-    if (!stashSearch.trim()) return stashes
-
-    const search = stashSearch.toLowerCase().trim()
-    return stashes.filter(
-      (stash) =>
-        stash.message.toLowerCase().includes(search) ||
-        (stash.branch && stash.branch.toLowerCase().includes(search))
-    )
-  }, [stashes, stashSearch])
-
-  // Filter and sort PRs
-  const filteredPRs = useMemo(() => {
-    let filtered = [...pullRequests]
-
-    // Apply filter
-    switch (prFilter) {
-      case 'open-not-draft':
-        filtered = filtered.filter((pr) => !pr.isDraft)
-        break
-      case 'open-draft':
-        filtered = filtered.filter((pr) => pr.isDraft)
-        break
-      case 'all':
-      default:
-        break
-    }
-
-    // Apply search filter
-    if (prSearch.trim()) {
-      const search = prSearch.toLowerCase().trim()
-      filtered = filtered.filter(
-        (pr) =>
-          pr.title.toLowerCase().includes(search) ||
-          pr.branch.toLowerCase().includes(search) ||
-          pr.author.toLowerCase().includes(search)
-      )
-    }
-
-    // Apply sort
-    switch (prSort) {
-      case 'comments':
-        filtered.sort((a, b) => b.comments - a.comments)
-        break
-      case 'first-commit':
-        filtered.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-        break
-      case 'last-commit':
-        filtered.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-        break
-      case 'updated':
-      default:
-        filtered.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-        break
-    }
-
-    return filtered
-  }, [pullRequests, prFilter, prSort, prSearch])
-
-  // Build flat list of sidebar items for keyboard navigation
-  const sidebarItems = useMemo(() => {
-    const items: Array<{ type: SidebarFocusType; data: PullRequest | Branch | Worktree | StashEntry | WorkingStatus; action?: () => void }> = []
-    
-    // PRs
-    if (sidebarSections.prs && !prError) {
-      filteredPRs.forEach((pr) => items.push({ type: 'pr', data: pr, action: () => handlePRDoubleClick(pr) }))
-    }
-    
-    // Uncommitted changes
-    if (sidebarSections.branches && workingStatus?.hasChanges) {
-      items.push({ type: 'uncommitted', data: workingStatus })
-    }
-    
-    // Branches
-    if (sidebarSections.branches) {
-      localBranches.forEach((branch) => items.push({ type: 'branch', data: branch, action: () => handleBranchDoubleClick(branch) }))
-    }
-    
-    // Remotes
-    if (sidebarSections.remotes) {
-      remoteBranches.forEach((branch) => items.push({ type: 'remote', data: branch, action: () => handleRemoteBranchDoubleClick(branch) }))
-    }
-    
-    // Worktrees (including working folder pseudo-worktree)
-    if (sidebarSections.worktrees) {
-      // Working folder first
-      const workingFolder = filteredWorktrees.find((wt) => wt.agent === 'working-folder')
-      if (workingFolder) {
-        items.push({ type: 'worktree', data: workingFolder })
-      }
-      // Then other worktrees
-      filteredWorktrees
-        .filter((wt) => wt.agent !== 'working-folder' && wt.path !== repoPath)
-        .forEach((wt) => items.push({ type: 'worktree', data: wt, action: () => handleWorktreeDoubleClick(wt) }))
-    }
-    
-    // Stashes
-    if (sidebarSections.stashes) {
-      stashes.forEach((stash) => items.push({ type: 'stash', data: stash }))
-    }
-    
-    return items
-  }, [sidebarSections, filteredPRs, prError, workingStatus, localBranches, remoteBranches, filteredWorktrees, repoPath, stashes])
-
-  // Sidebar keyboard navigation handler
-  const handleSidebarKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (sidebarItems.length === 0) return
-
-    switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault()
-        setSidebarFocusedIndex((prev) => {
-          const next = prev + 1
-          if (next >= sidebarItems.length) return sidebarItems.length - 1
-          const item = sidebarItems[next]
-          handleSidebarFocus(item.type, item.data)
-          return next
-        })
-        break
-      case 'ArrowUp':
-        e.preventDefault()
-        setSidebarFocusedIndex((prev) => {
-          const next = prev - 1
-          if (next < 0) return 0
-          const item = sidebarItems[next]
-          handleSidebarFocus(item.type, item.data)
-          return next
-        })
-        break
-      case 'Enter':
-        e.preventDefault()
-        if (sidebarFocusedIndex >= 0 && sidebarFocusedIndex < sidebarItems.length) {
-          const item = sidebarItems[sidebarFocusedIndex]
-          if (item.action) {
-            item.action()
-          }
-        }
-        break
-      case 'Home':
-        e.preventDefault()
-        if (sidebarItems.length > 0) {
-          setSidebarFocusedIndex(0)
-          handleSidebarFocus(sidebarItems[0].type, sidebarItems[0].data)
-        }
-        break
-      case 'End':
-        e.preventDefault()
-        if (sidebarItems.length > 0) {
-          const lastIdx = sidebarItems.length - 1
-          setSidebarFocusedIndex(lastIdx)
-          handleSidebarFocus(sidebarItems[lastIdx].type, sidebarItems[lastIdx].data)
-        }
-        break
-    }
-  }, [sidebarItems, sidebarFocusedIndex, handleSidebarFocus])
-
-  // Sync sidebar focused index with sidebar focus state
-  useEffect(() => {
-    if (!sidebarFocus) {
-      setSidebarFocusedIndex(-1)
-      return
-    }
-    const idx = sidebarItems.findIndex((item) => {
-      if (item.type !== sidebarFocus.type) return false
-      if (item.type === 'pr') return (item.data as PullRequest).number === (sidebarFocus.data as PullRequest).number
-      if (item.type === 'branch' || item.type === 'remote') return (item.data as Branch).name === (sidebarFocus.data as Branch).name
-      if (item.type === 'worktree') return (item.data as Worktree).path === (sidebarFocus.data as Worktree).path
-      if (item.type === 'stash') return (item.data as StashEntry).index === (sidebarFocus.data as StashEntry).index
-      if (item.type === 'uncommitted') return true
-      return false
-    })
-    if (idx !== -1) setSidebarFocusedIndex(idx)
-  }, [sidebarFocus, sidebarItems])
 
   // Sync local state with canvas editor state (for back/forward navigation)
   // This runs when currentEditorEntry changes (via goBack/goForward)
@@ -1511,46 +1050,6 @@ export default function App() {
   }, [canvasState.editorState.historyIndex])
 
   // Filter graph commits based on history panel filters
-  const filteredGraphCommits = useMemo(() => {
-    let filtered = graphCommits
-
-    // Filter to only branch heads (commits with refs that are branches)
-    if (onlyBranchHeads) {
-      filtered = filtered.filter((commit) => {
-        // Keep commits that have branch refs (not just tags)
-        return commit.refs.some((ref) => {
-          const cleanRef = ref.replace('HEAD -> ', '')
-          // It's a branch if it's not a tag and doesn't look like a tag (v1.0.0 etc)
-          return !cleanRef.startsWith('tag:') && !cleanRef.match(/^v?\d+\.\d+/)
-        })
-      })
-    }
-
-    // Filter to only unmerged branches
-    if (onlyUnmergedBranches) {
-      // Get list of unmerged branch names from the branches data
-      const unmergedBranchNames = new Set(
-        branches.filter((b) => !b.isMerged).map((b) => b.name.replace('remotes/origin/', '').replace('origin/', ''))
-      )
-      // Also add the branch without origin/ prefix
-      branches
-        .filter((b) => !b.isMerged)
-        .forEach((b) => {
-          unmergedBranchNames.add(b.name)
-        })
-
-      filtered = filtered.filter((commit) => {
-        // Keep commits that are on unmerged branches (via refs)
-        return commit.refs.some((ref) => {
-          const cleanRef = ref.replace('HEAD -> ', '').replace('origin/', '')
-          return unmergedBranchNames.has(cleanRef)
-        })
-      })
-    }
-
-    return filtered
-  }, [graphCommits, onlyBranchHeads, onlyUnmergedBranches, branches])
-
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return ''
     const date = new Date(dateStr)
@@ -1571,19 +1070,6 @@ export default function App() {
     if (diffDays < 7) return `${diffDays}d ago`
     if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`
     return `${Math.floor(diffDays / 30)}mo ago`
-  }
-
-  const getReviewBadge = (decision: string | null) => {
-    switch (decision) {
-      case 'APPROVED':
-        return <span className="badge badge-approved">Approved</span>
-      case 'CHANGES_REQUESTED':
-        return <span className="badge badge-changes">Changes</span>
-      case 'REVIEW_REQUIRED':
-        return <span className="badge badge-review">Review</span>
-      default:
-        return null
-    }
   }
 
   const menuItems = getMenuItems()
