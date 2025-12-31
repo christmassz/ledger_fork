@@ -112,6 +112,7 @@ export interface CanvasHandlers {
   
   // Commit/graph handlers
   onSelectCommit: (commit: GraphCommit) => void
+  onDoubleClickCommit?: (commit: GraphCommit) => void
   
   // Editor panel rendering (for custom editor content)
   renderEditorContent?: () => ReactNode
@@ -291,6 +292,7 @@ export function CanvasRenderer({
                   commits={data.commits}
                   selectedCommit={selection.selectedCommit}
                   onSelectCommit={handlers.onSelectCommit}
+                  onDoubleClickCommit={handlers.onDoubleClickCommit}
                   formatRelativeTime={handlers.formatRelativeTime}
                 />
               </div>

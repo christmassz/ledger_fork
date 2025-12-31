@@ -1826,12 +1826,17 @@ export default function App() {
     onContextMenuStash: (e, stash) => handleContextMenu(e, 'stash', stash as unknown as Worktree),
     // Commit handlers
     onSelectCommit: handleSelectCommit,
+    onDoubleClickCommit: (commit) => {
+      // Switch to Focus (editor home) and select commit
+      setActiveCanvas('focus')
+      handleSelectCommit(commit)
+    },
     // Editor content - renders actual panels
     renderEditorContent,
   }), [
     formatRelativeTime, formatDate, handleRadarItemClick, handleRadarPRClick, handleRadarBranchClick,
     handleRadarWorktreeClick, handleContextMenu, handleSidebarFocus, handleSelectCommit, navigateToEditor,
-    renderEditorContent
+    renderEditorContent, setActiveCanvas
   ])
 
   const canvasUIState: CanvasUIState = useMemo(() => ({

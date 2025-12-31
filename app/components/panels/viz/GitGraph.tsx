@@ -12,6 +12,7 @@ export interface GitGraphProps {
   commits: GraphCommit[]
   selectedCommit: GraphCommit | null
   onSelectCommit: (commit: GraphCommit) => void
+  onDoubleClickCommit?: (commit: GraphCommit) => void // Open in editor
   formatRelativeTime: (date: string) => string
   showGraph?: boolean // Show graph lines/nodes, when false it's a flat list
   graphWidth?: number | null // Manual width override, null = auto-size
@@ -36,6 +37,7 @@ export function GitGraph({
   commits,
   selectedCommit,
   onSelectCommit,
+  onDoubleClickCommit,
   formatRelativeTime,
   showGraph = true,
   graphWidth: manualGraphWidth,
@@ -206,6 +208,7 @@ export function GitGraph({
             className={`graph-commit-row ${selectedCommit?.hash === commit.hash ? 'selected' : ''}`}
             style={{ height: ROW_HEIGHT }}
             onClick={() => onSelectCommit(commit)}
+            onDoubleClick={() => onDoubleClickCommit?.(commit)}
           >
             <div className="graph-commit-refs">
               {commit.refs.map((ref, i) => {
