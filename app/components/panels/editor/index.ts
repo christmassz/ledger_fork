@@ -8,14 +8,14 @@
 export { DiffPanel } from './DiffPanel'
 export type { DiffPanelProps } from './DiffPanel'
 
-export { StagingPanel } from './StagingPanel'
-export type { StagingPanelProps } from './StagingPanel'
+export { CommitCreatePanel } from './CommitCreatePanel'
+export type { CommitCreatePanelProps } from './CommitCreatePanel'
 
 export { BranchDetailPanel } from './BranchDetailPanel'
 export type { BranchDetailPanelProps } from './BranchDetailPanel'
 
-export { PRReviewPanel } from './PRReviewPanel'
-export type { PRReviewPanelProps } from './PRReviewPanel'
+export { PRDetailPanel } from './PRDetailPanel'
+export type { PRDetailPanelProps } from './PRDetailPanel'
 
 export { WorktreeDetailPanel } from './WorktreeDetailPanel'
 export type { WorktreeDetailPanelProps } from './WorktreeDetailPanel'
@@ -23,8 +23,8 @@ export type { WorktreeDetailPanelProps } from './WorktreeDetailPanel'
 export { StashDetailPanel } from './StashDetailPanel'
 export type { StashDetailPanelProps } from './StashDetailPanel'
 
-export { CreateWorktreePanel } from './CreateWorktreePanel'
-export type { CreateWorktreePanelProps } from './CreateWorktreePanel'
+export { WorktreeCreatePanel } from './WorktreeCreatePanel'
+export type { WorktreeCreatePanelProps } from './WorktreeCreatePanel'
 
 export { EditorRouter, SidebarDetailPanel } from './EditorRouter'
 export type { EditorRouterProps, SidebarDetailPanelProps } from './EditorRouter'

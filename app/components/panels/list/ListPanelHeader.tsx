@@ -3,9 +3,12 @@
  * 
  * Features:
  * - Icon + label + count badge
+ * - Optional badge (e.g., branch name)
  * - Clickable to toggle controls
  * - Chevron indicator for open/closed state
  */
+
+import type { ReactNode } from 'react'
 
 interface ListPanelHeaderProps {
   label: string
@@ -13,6 +16,8 @@ interface ListPanelHeaderProps {
   count: number
   controlsOpen: boolean
   onToggleControls: () => void
+  /** Optional badge element (e.g., current branch name) */
+  badge?: ReactNode
 }
 
 export function ListPanelHeader({
@@ -21,6 +26,7 @@ export function ListPanelHeader({
   count,
   controlsOpen,
   onToggleControls,
+  badge,
 }: ListPanelHeaderProps) {
   return (
     <div
@@ -31,6 +37,7 @@ export function ListPanelHeader({
         <h2>
           {icon && <span className="column-icon">{icon}</span>}
           {label}
+          {badge}
         </h2>
         <span className={`header-chevron ${controlsOpen ? 'open' : ''}`}>▾</span>
       </div>

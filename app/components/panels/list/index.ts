@@ -22,6 +22,9 @@ export type { WorktreeListProps } from './WorktreeList'
 export { StashList } from './StashList'
 export type { StashListProps } from './StashList'
 
+export { CommitList } from './CommitList'
+export type { CommitListProps } from './CommitList'
+
 export { Sidebar } from './Sidebar'
 export type { SidebarProps } from './Sidebar'
 

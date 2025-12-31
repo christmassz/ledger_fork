@@ -26,8 +26,8 @@ import { useWindowContext } from './components/window'
 import { useCanvas, useCanvasNavigation, useCanvasPersistence, CanvasRenderer, type CanvasData, type CanvasSelection, type CanvasHandlers, type CanvasUIState } from './components/canvas'
 import {
   DiffPanel,
-  StagingPanel,
-  PRReviewPanel,
+  CommitCreatePanel,
+  PRDetailPanel,
   SidebarDetailPanel,
 } from './components/panels/editor'
 import { SettingsPanel } from './components/SettingsPanel'
@@ -1109,6 +1109,7 @@ export default function App() {
     selectedWorktree: sidebarFocus?.type === 'worktree' ? (sidebarFocus.data as Worktree) : null,
     selectedStash: sidebarFocus?.type === 'stash' ? (sidebarFocus.data as StashEntry) : null,
     selectedCommit,
+    uncommittedSelected: sidebarFocus?.type === 'uncommitted',
   }), [sidebarFocus, selectedCommit])
 
   // Render editor panel content based on current selection
@@ -1127,7 +1128,7 @@ export default function App() {
     // Staging panel for uncommitted changes
     if (sidebarFocus?.type === 'uncommitted' && workingStatus) {
       return (
-        <StagingPanel
+        <CommitCreatePanel
           workingStatus={workingStatus}
           currentBranch={currentBranch}
           onRefresh={refresh}
@@ -1136,10 +1137,10 @@ export default function App() {
       )
     }
     
-    // PR Review panel
+    // PR Detail panel
     if (sidebarFocus?.type === 'pr') {
       return (
-        <PRReviewPanel
+        <PRDetailPanel
           pr={sidebarFocus.data as PullRequest}
           formatRelativeTime={formatRelativeTime}
           onCheckout={handlePRCheckout}
@@ -1240,12 +1241,21 @@ export default function App() {
       setActiveCanvas('focus')
       handleSelectCommit(commit)
     },
+    onContextMenuCommit: (e, commit) => handleContextMenu(e, 'commit', commit),
+    // Uncommitted changes handlers
+    onSelectUncommitted: () => {
+      if (workingStatus) {
+        handleRadarItemClick('uncommitted', workingStatus)
+      }
+    },
+    onDoubleClickUncommitted: handleRadarUncommittedClick,
+    onContextMenuUncommitted: (e, status) => handleContextMenu(e, 'uncommitted', status),
     // Editor content - renders actual panels
     renderEditorContent,
   }), [
     formatRelativeTime, formatDate, handleRadarItemClick, handleRadarPRClick, handleRadarBranchClick,
     handleRadarWorktreeClick, handleRadarStashClick, handleContextMenu, handleSelectCommit, navigateToEditor,
-    renderEditorContent, setActiveCanvas
+    renderEditorContent, setActiveCanvas, workingStatus, handleRadarUncommittedClick
   ])
 
   const canvasUIState: CanvasUIState = useMemo(() => ({

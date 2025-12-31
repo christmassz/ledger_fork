@@ -27,7 +27,7 @@ import { Canvas } from './Canvas'
 import { EditorSlot } from './EditorSlot'
 
 // Import panels
-import { PRList, BranchList, WorktreeList, StashList, Sidebar } from '../panels/list'
+import { PRList, BranchList, WorktreeList, StashList, CommitList, Sidebar } from '../panels/list'
 import { GitGraph } from '../panels/viz'
 
 // ========================================
@@ -77,6 +77,7 @@ export interface CanvasSelection {
   selectedWorktree: Worktree | null
   selectedStash: StashEntry | null
   selectedCommit: GraphCommit | null
+  uncommittedSelected?: boolean
 }
 
 /**
@@ -113,6 +114,12 @@ export interface CanvasHandlers {
   // Commit/graph handlers
   onSelectCommit: (commit: GraphCommit) => void
   onDoubleClickCommit?: (commit: GraphCommit) => void
+  onContextMenuCommit?: (e: React.MouseEvent, commit: GraphCommit) => void
+  
+  // Uncommitted changes handlers
+  onSelectUncommitted?: () => void
+  onDoubleClickUncommitted?: () => void
+  onContextMenuUncommitted?: (e: React.MouseEvent, status: WorkingStatus) => void
   
   // Editor panel rendering (for custom editor content)
   renderEditorContent?: () => ReactNode
@@ -227,11 +234,23 @@ export function CanvasRenderer({
           )
 
         case 'commit-list':
-          // Commits are shown in the git graph viz panel
           return (
-            <div className="empty-column">
-              <span>Commits shown in graph</span>
-            </div>
+            <CommitList
+              column={column}
+              commits={data.commits}
+              currentBranch={data.currentBranch}
+              workingStatus={data.workingStatus}
+              selectedCommit={selection.selectedCommit}
+              uncommittedSelected={selection.uncommittedSelected}
+              formatRelativeTime={handlers.formatRelativeTime}
+              onSelectCommit={handlers.onSelectCommit}
+              onDoubleClickCommit={handlers.onDoubleClickCommit}
+              onContextMenuCommit={handlers.onContextMenuCommit}
+              onSelectUncommitted={handlers.onSelectUncommitted}
+              onDoubleClickUncommitted={handlers.onDoubleClickUncommitted}
+              onContextMenuUncommitted={handlers.onContextMenuUncommitted}
+              switching={uiState.switching}
+            />
           )
 
         case 'sidebar':

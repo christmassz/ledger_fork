@@ -1,5 +1,5 @@
 /**
- * PRReviewPanel - Full PR review interface with conversation, files, and commits tabs
+ * PRDetailPanel - Full PR review interface with conversation, files, and commits tabs
  *
  * Shows PR details, allows commenting, merging, and viewing file diffs.
  */
@@ -7,7 +7,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import type { PullRequest, PRDetail, PRReviewComment } from '../../../types/electron'
 
-export interface PRReviewPanelProps {
+export interface PRDetailPanelProps {
   pr: PullRequest
   formatRelativeTime: (date: string) => string
   onCheckout?: (pr: PullRequest) => void
@@ -54,7 +54,7 @@ function renderTextWithLinks(text: string): React.ReactNode {
   })
 }
 
-export function PRReviewPanel({ pr, formatRelativeTime, onCheckout, onPRMerged, switching }: PRReviewPanelProps) {
+export function PRDetailPanel({ pr, formatRelativeTime, onCheckout, onPRMerged, switching }: PRDetailPanelProps) {
   const [activeTab, setActiveTab] = useState<PRTab>('conversation')
   const [prDetail, setPrDetail] = useState<PRDetail | null>(null)
   const [reviewComments, setReviewComments] = useState<PRReviewComment[]>([])
@@ -487,3 +487,4 @@ export function PRReviewPanel({ pr, formatRelativeTime, onCheckout, onPRMerged, 
     </div>
   )
 }
+

@@ -8,22 +8,22 @@
 // Re-export all editor panels
 export {
   DiffPanel,
-  StagingPanel,
+  CommitCreatePanel,
   BranchDetailPanel,
-  PRReviewPanel,
+  PRDetailPanel,
   WorktreeDetailPanel,
   StashDetailPanel,
-  CreateWorktreePanel,
+  WorktreeCreatePanel,
 } from './editor'
 
 export type {
   DiffPanelProps,
-  StagingPanelProps,
+  CommitCreatePanelProps,
   BranchDetailPanelProps,
-  PRReviewPanelProps,
+  PRDetailPanelProps,
   WorktreeDetailPanelProps,
   StashDetailPanelProps,
-  CreateWorktreePanelProps,
+  WorktreeCreatePanelProps,
 } from './editor'
 
 // Re-export viz panels

@@ -13,7 +13,7 @@ import type { StatusMessage, SidebarFocus } from '../../../types/app-types'
 import { BranchDetailPanel } from './BranchDetailPanel'
 import { WorktreeDetailPanel } from './WorktreeDetailPanel'
 import { StashDetailPanel } from './StashDetailPanel'
-import { CreateWorktreePanel } from './CreateWorktreePanel'
+import { WorktreeCreatePanel } from './WorktreeCreatePanel'
 
 export interface EditorRouterProps {
   focus: SidebarFocus
@@ -59,7 +59,7 @@ export function EditorRouter({
 }: EditorRouterProps) {
   switch (focus.type) {
     case 'pr': {
-      // Handled by PRReviewPanel in parent - PR needs special handling
+      // Handled by PRDetailPanel in parent - PR needs special handling
       // because it's shown inline in the radar view
       return null
     }
@@ -152,7 +152,7 @@ export function EditorRouter({
 
     case 'create-worktree': {
       return (
-        <CreateWorktreePanel
+        <WorktreeCreatePanel
           branches={branches || []}
           repoPath={repoPath || ''}
           onStatusChange={onStatusChange}
@@ -193,7 +193,7 @@ export function EditorRouter({
 
     case 'uncommitted': {
       // Render the full staging panel
-      // This is handled by parent component which renders StagingPanel directly
+      // This is handled by parent component which renders CommitCreatePanel directly
       return null
     }
 

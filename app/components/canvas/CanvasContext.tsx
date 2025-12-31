@@ -29,11 +29,12 @@ export const RADAR_CANVAS: Canvas = {
   icon: '⊞',
   isPreset: true,
   columns: [
-    { id: 'radar-stashes', slotType: 'list', panel: 'stash-list', width: 'flex', minWidth: 150, label: 'Stashes', icon: '⊡', collapsible: true },
     { id: 'radar-prs', slotType: 'list', panel: 'pr-list', width: 'flex', minWidth: 150, label: 'Pull Requests', icon: '⊕', collapsible: true },
     { id: 'radar-worktrees', slotType: 'list', panel: 'worktree-list', width: 'flex', minWidth: 150, label: 'Worktrees', icon: '⊙', collapsible: true },
+    { id: 'radar-commits', slotType: 'list', panel: 'commit-list', width: 'flex', minWidth: 150, label: 'Commits', icon: '◉', collapsible: true },
     { id: 'radar-branches', slotType: 'list', panel: 'branch-list', width: 'flex', minWidth: 150, label: 'Branches', icon: '⎇', collapsible: true },
     { id: 'radar-remotes', slotType: 'list', panel: 'remote-list', width: 'flex', minWidth: 150, label: 'Remotes', icon: '◈', collapsible: true },
+    { id: 'radar-stashes', slotType: 'list', panel: 'stash-list', width: 'flex', minWidth: 150, label: 'Stashes', icon: '⊡', collapsible: true },
     { id: 'radar-editor', slotType: 'editor', panel: 'empty', width: 400, minWidth: 300, label: 'Editor', icon: '◇', collapsible: true, visible: false },
   ],
 }

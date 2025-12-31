@@ -1,5 +1,5 @@
 /**
- * StagingPanel - Git staging area with commit functionality
+ * CommitCreatePanel - Git staging area with commit functionality
  *
  * Shows staged/unstaged files, diff preview, and commit form with options
  * for creating new branches and PRs.
@@ -9,7 +9,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import type { WorkingStatus, UncommittedFile, StagingFileDiff } from '../../../types/electron'
 import type { StatusMessage } from '../../../types/app-types'
 
-export interface StagingPanelProps {
+export interface CommitCreatePanelProps {
   workingStatus: WorkingStatus
   currentBranch: string
   onRefresh: () => Promise<void>
@@ -33,7 +33,7 @@ function generateBranchNameFromMessage(message: string): string {
     .slice(0, 50)
 }
 
-export function StagingPanel({ workingStatus, currentBranch, onRefresh, onStatusChange }: StagingPanelProps) {
+export function CommitCreatePanel({ workingStatus, currentBranch, onRefresh, onStatusChange }: CommitCreatePanelProps) {
   const [selectedFile, setSelectedFile] = useState<UncommittedFile | null>(null)
   const [fileDiff, setFileDiff] = useState<StagingFileDiff | null>(null)
   const [loadingDiff, setLoadingDiff] = useState(false)
@@ -804,3 +804,4 @@ export function StagingPanel({ workingStatus, currentBranch, onRefresh, onStatus
     </div>
   )
 }
+

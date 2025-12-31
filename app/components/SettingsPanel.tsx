@@ -4,7 +4,6 @@ import { useCanvas } from './canvas/CanvasContext'
 import type { SlotType, PanelType, Column } from '../types/app-types'
 
 // Panel options grouped by slot type
-// Note: commit-list exists in types but isn't implemented as a panel yet
 const PANEL_OPTIONS: Record<SlotType, { value: PanelType; label: string }[]> = {
   list: [
     { value: 'pr-list', label: 'Pull Requests' },
@@ -12,6 +11,7 @@ const PANEL_OPTIONS: Record<SlotType, { value: PanelType; label: string }[]> = {
     { value: 'remote-list', label: 'Remotes' },
     { value: 'worktree-list', label: 'Worktrees' },
     { value: 'stash-list', label: 'Stashes' },
+    { value: 'commit-list', label: 'Commits' },
     { value: 'sidebar', label: 'Sidebar (All)' },
   ],
   editor: [

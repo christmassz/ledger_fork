@@ -1,5 +1,5 @@
 /**
- * CreateWorktreePanel - Form for creating new worktrees
+ * WorktreeCreatePanel - Form for creating new worktrees
  *
  * Allows creating worktrees with new or existing branches.
  * Offers location presets: .worktrees/ (Ledger convention), sibling folder, or custom.
@@ -9,7 +9,7 @@ import { useState, useEffect, useMemo } from 'react'
 import type { Branch } from '../../../types/electron'
 import type { StatusMessage } from '../../../types/app-types'
 
-export interface CreateWorktreePanelProps {
+export interface WorktreeCreatePanelProps {
   branches: Branch[]
   repoPath: string
   onStatusChange?: (status: StatusMessage | null) => void
@@ -20,14 +20,14 @@ export interface CreateWorktreePanelProps {
 
 type LocationPreset = 'ledger' | 'sibling' | 'custom'
 
-export function CreateWorktreePanel({
+export function WorktreeCreatePanel({
   branches,
   repoPath,
   onStatusChange,
   onRefresh,
   onClearFocus,
   onWorktreeCreated,
-}: CreateWorktreePanelProps) {
+}: WorktreeCreatePanelProps) {
   const [branchMode, setBranchMode] = useState<'new' | 'existing'>('new')
   const [newBranchName, setNewBranchName] = useState('')
   const [selectedBranch, setSelectedBranch] = useState('')
@@ -292,3 +292,4 @@ export function CreateWorktreePanel({
     </div>
   )
 }
+
