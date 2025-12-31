@@ -49,18 +49,11 @@ export function EditorSlot({ column, renderPanel }: EditorSlotProps) {
         </div>
       </div>
 
-      {/* Panel Content */}
+      {/* Panel Content - always call renderPanel, let parent decide what to show */}
       <div className="editor-slot-content">
-        {currentEditorEntry ? (
-          renderPanel(currentEditorEntry.panel, currentEditorEntry.data)
-        ) : (
-          <div className="editor-slot-empty">
-            <div className="editor-slot-empty-icon">◇</div>
-            <p>Select an item to view details</p>
-            <p className="editor-slot-empty-hint">
-              Click on a PR, branch, or worktree
-            </p>
-          </div>
+        {renderPanel(
+          currentEditorEntry?.panel ?? 'empty',
+          currentEditorEntry?.data
         )}
       </div>
     </div>

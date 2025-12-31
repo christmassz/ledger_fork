@@ -213,21 +213,20 @@ export default function App() {
       )
     }
 
-    // Always add settings button
+    // Always add settings button - works from ANY canvas
     const isSettingsActive = viewMode === 'focus' && mainPanelView === 'settings'
     actions.push(
       <button
         key="settings"
         className={`panel-toggle-btn ${isSettingsActive ? 'active' : ''}`}
         onClick={() => {
-          if (viewMode === 'radar') {
-            // Switch to Focus mode with Settings panel
+          if (isSettingsActive) {
+            // Already showing settings in Focus - toggle back to history
+            setMainPanelView('history')
+          } else {
+            // From any canvas: go to Focus (home) and show Settings
             setActiveCanvas('focus')
             setMainPanelView('settings')
-            setMainVisible(true)
-          } else {
-            // Toggle between history and settings in Focus mode
-            setMainPanelView(mainPanelView === 'settings' ? 'history' : 'settings')
             setMainVisible(true)
           }
         }}
