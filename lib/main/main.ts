@@ -73,6 +73,8 @@ import {
   getPRFileDiff,
   commentOnPR,
   mergePR,
+  // Repo operations
+  getSiblingRepos,
 } from './git-service'
 import {
   getLastRepoPath,
@@ -313,6 +315,55 @@ app.whenReady().then(() => {
       }
     }
   )
+
+  ipcMain.handle(
+    'get-contributor-stats',
+    async (_, topN?: number, bucketSize?: 'day' | 'week' | 'month') => {
+      try {
+        const { getContributorStats } = await import('./git-service')
+        return await getContributorStats(topN, bucketSize)
+      } catch (_error) {
+        return { contributors: [], startDate: '', endDate: '', bucketSize: bucketSize || 'week' }
+      }
+    }
+  )
+
+  // Mailmap management
+  ipcMain.handle('get-mailmap', async () => {
+    try {
+      const { getMailmap } = await import('./git-service')
+      return await getMailmap()
+    } catch (_error) {
+      return []
+    }
+  })
+
+  ipcMain.handle('get-author-identities', async () => {
+    try {
+      const { getAuthorIdentities } = await import('./git-service')
+      return await getAuthorIdentities()
+    } catch (_error) {
+      return []
+    }
+  })
+
+  ipcMain.handle('suggest-mailmap-entries', async () => {
+    try {
+      const { suggestMailmapEntries } = await import('./git-service')
+      return await suggestMailmapEntries()
+    } catch (_error) {
+      return []
+    }
+  })
+
+  ipcMain.handle('add-mailmap-entries', async (_, entries) => {
+    try {
+      const { addMailmapEntries } = await import('./git-service')
+      return await addMailmapEntries(entries)
+    } catch (_error) {
+      return { success: false, message: 'Failed to add mailmap entries' }
+    }
+  })
 
   ipcMain.handle('get-commit-diff', async (_, commitHash: string) => {
     try {
@@ -724,6 +775,16 @@ app.whenReady().then(() => {
   ipcMain.handle('update-canvas', (_event, canvasId: string, updates: unknown) => {
     updateCanvas(canvasId, updates as any)
     return { success: true }
+  })
+
+  // Repo operations
+  ipcMain.handle('get-sibling-repos', async () => {
+    try {
+      return await getSiblingRepos()
+    } catch (error) {
+      console.error('Error getting sibling repos:', error)
+      return []
+    }
   })
 
   // Set app user model id for windows

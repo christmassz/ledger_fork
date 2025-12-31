@@ -10,6 +10,7 @@ import type {
   Commit,
   WorkingStatus,
   StashEntry,
+  RepoInfo,
 } from './electron'
 
 // Canvas identifiers (matches canvas IDs in CanvasContext)
@@ -40,11 +41,11 @@ export interface MenuItem {
 }
 
 // Sidebar focus state (what's selected in Focus mode)
-export type SidebarFocusType = 'pr' | 'branch' | 'remote' | 'worktree' | 'stash' | 'uncommitted' | 'create-worktree'
+export type SidebarFocusType = 'pr' | 'branch' | 'remote' | 'worktree' | 'stash' | 'uncommitted' | 'create-worktree' | 'mailmap' | 'repo'
 
 export interface SidebarFocus {
   type: SidebarFocusType
-  data: PullRequest | Branch | Worktree | StashEntry | WorkingStatus | null
+  data: PullRequest | Branch | Worktree | StashEntry | WorkingStatus | RepoInfo | null
 }
 
 // ========================================
@@ -66,6 +67,7 @@ export type ListPanelType =
   | 'worktree-list'
   | 'stash-list'
   | 'commit-list'
+  | 'repo-list'
   | 'sidebar'
 
 export type EditorPanelType =
@@ -75,10 +77,12 @@ export type EditorPanelType =
   | 'worktree-detail'
   | 'commit-detail'
   | 'stash-detail'
+  | 'repo-detail'
   | 'create-branch'
   | 'create-worktree'
   | 'staging'
   | 'settings'
+  | 'mailmap-detail'
   | 'empty'
 
 export type VizPanelType = 'git-graph' | 'timeline'

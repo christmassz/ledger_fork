@@ -8,12 +8,14 @@
  * in the Canvas architecture.
  */
 
-import type { Branch, Worktree, StashEntry } from '../../../types/electron'
+import type { Branch, Worktree, StashEntry, RepoInfo } from '../../../types/electron'
 import type { StatusMessage, SidebarFocus } from '../../../types/app-types'
 import { BranchDetailPanel } from './BranchDetailPanel'
 import { WorktreeDetailPanel } from './WorktreeDetailPanel'
 import { StashDetailPanel } from './StashDetailPanel'
 import { WorktreeCreatePanel } from './WorktreeCreatePanel'
+import { MailmapDetailsPanel } from './MailmapDetailsPanel'
+import { RepoDetailPanel } from './RepoDetailPanel'
 
 export interface EditorRouterProps {
   focus: SidebarFocus
@@ -35,6 +37,8 @@ export interface EditorRouterProps {
   repoPath?: string | null
   worktrees?: Worktree[]
   onFocusWorktree?: (worktree: Worktree) => void
+  onOpenRepo?: (repo: RepoInfo) => void
+  onOpenMailmap?: () => void
 }
 
 export function EditorRouter({
@@ -56,6 +60,8 @@ export function EditorRouter({
   branches,
   repoPath,
   onFocusWorktree,
+  onOpenRepo,
+  onOpenMailmap,
 }: EditorRouterProps) {
   switch (focus.type) {
     case 'pr': {
@@ -195,6 +201,26 @@ export function EditorRouter({
       // Render the full staging panel
       // This is handled by parent component which renders CommitCreatePanel directly
       return null
+    }
+
+    case 'mailmap': {
+      return (
+        <MailmapDetailsPanel
+          onStatusChange={onStatusChange}
+        />
+      )
+    }
+
+    case 'repo': {
+      const repo = focus.data as RepoInfo
+      return (
+        <RepoDetailPanel
+          repo={repo}
+          onStatusChange={onStatusChange}
+          onOpenRepo={onOpenRepo}
+          onOpenMailmap={onOpenMailmap}
+        />
+      )
     }
 
     default:

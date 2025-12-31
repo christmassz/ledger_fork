@@ -28,3 +28,9 @@ export type { WorktreeCreatePanelProps } from './WorktreeCreatePanel'
 
 export { EditorRouter, SidebarDetailPanel } from './EditorRouter'
 export type { EditorRouterProps, SidebarDetailPanelProps } from './EditorRouter'
+
+export { MailmapDetailsPanel } from './MailmapDetailsPanel'
+export type { MailmapDetailsPanelProps } from './MailmapDetailsPanel'
+
+export { RepoDetailPanel } from './RepoDetailPanel'
+export type { RepoDetailPanelProps } from './RepoDetailPanel'

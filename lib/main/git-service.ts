@@ -2182,6 +2182,459 @@ export async function getCommitGraphHistory(
   }
 }
 
+// Contributor statistics for ridgeline chart
+export interface ContributorTimeSeries {
+  author: string
+  email: string
+  totalCommits: number
+  // Array of commit counts per time bucket
+  timeSeries: { date: string; count: number }[]
+}
+
+export interface ContributorStats {
+  contributors: ContributorTimeSeries[]
+  startDate: string
+  endDate: string
+  bucketSize: 'day' | 'week' | 'month'
+}
+
+// ========================================
+// Mailmap Management - Opinionated Git
+// ========================================
+
+export interface AuthorIdentity {
+  name: string
+  email: string
+  commitCount: number
+}
+
+export interface MailmapSuggestion {
+  canonicalName: string
+  canonicalEmail: string
+  aliases: AuthorIdentity[]
+  confidence: 'high' | 'medium' | 'low'
+}
+
+export interface MailmapEntry {
+  canonicalName: string
+  canonicalEmail: string
+  aliasName?: string
+  aliasEmail: string
+}
+
+// Read current .mailmap file
+export async function getMailmap(): Promise<MailmapEntry[]> {
+  if (!repoPath) return []
+  
+  const mailmapPath = path.join(repoPath, '.mailmap')
+  try {
+    const content = await fs.promises.readFile(mailmapPath, 'utf-8')
+    const entries: MailmapEntry[] = []
+    
+    for (const line of content.split('\n')) {
+      const trimmed = line.trim()
+      if (!trimmed || trimmed.startsWith('#')) continue
+      
+      // Parse .mailmap format:
+      // Canonical Name <canonical@email> Alias Name <alias@email>
+      // Canonical Name <canonical@email> <alias@email>
+      const match = trimmed.match(/^(.+?)\s*<([^>]+)>(?:\s+(.+?)\s*)?<([^>]+)>$/)
+      if (match) {
+        entries.push({
+          canonicalName: match[1].trim(),
+          canonicalEmail: match[2].trim(),
+          aliasName: match[3]?.trim(),
+          aliasEmail: match[4].trim(),
+        })
+      }
+    }
+    
+    return entries
+  } catch {
+    return [] // No .mailmap file
+  }
+}
+
+// Get all unique author identities from the repo
+export async function getAuthorIdentities(): Promise<AuthorIdentity[]> {
+  if (!git) throw new Error('No repository selected')
+  
+  try {
+    // Get raw identities (without mailmap) to see what needs mapping
+    const output = await git.raw([
+      'shortlog', '-sne', '--all'
+    ])
+    
+    const identities: AuthorIdentity[] = []
+    for (const line of output.trim().split('\n')) {
+      const match = line.match(/^\s*(\d+)\s+(.+?)\s+<([^>]+)>$/)
+      if (match) {
+        identities.push({
+          name: match[2].trim(),
+          email: match[3].trim(),
+          commitCount: parseInt(match[1], 10),
+        })
+      }
+    }
+    
+    return identities.sort((a, b) => b.commitCount - a.commitCount)
+  } catch {
+    return []
+  }
+}
+
+// Suggest mailmap entries by detecting potential duplicates
+export async function suggestMailmapEntries(): Promise<MailmapSuggestion[]> {
+  const identities = await getAuthorIdentities()
+  const suggestions: MailmapSuggestion[] = []
+  const used = new Set<string>()
+  
+  // Helper to normalize for comparison
+  const normalize = (s: string) => s.toLowerCase().replace(/[._-]/g, '').replace(/\s+/g, '')
+  
+  for (let i = 0; i < identities.length; i++) {
+    const primary = identities[i]
+    if (used.has(primary.email)) continue
+    
+    const aliases: AuthorIdentity[] = []
+    let confidence: 'high' | 'medium' | 'low' = 'low'
+    
+    for (let j = i + 1; j < identities.length; j++) {
+      const candidate = identities[j]
+      if (used.has(candidate.email)) continue
+      
+      const nameMatch = normalize(primary.name) === normalize(candidate.name)
+      const emailPrefixMatch = normalize(primary.email.split('@')[0]) === normalize(candidate.email.split('@')[0])
+      const partialNameMatch = normalize(primary.name).includes(normalize(candidate.name)) ||
+                               normalize(candidate.name).includes(normalize(primary.name))
+      
+      // Exact name match = high confidence
+      if (nameMatch) {
+        aliases.push(candidate)
+        used.add(candidate.email)
+        confidence = 'high'
+      }
+      // Email prefix matches = high confidence  
+      else if (emailPrefixMatch && primary.email.split('@')[0].length >= 3) {
+        aliases.push(candidate)
+        used.add(candidate.email)
+        confidence = confidence === 'low' ? 'medium' : confidence
+      }
+      // Partial name overlap = medium confidence
+      else if (partialNameMatch && normalize(candidate.name).length >= 3) {
+        aliases.push(candidate)
+        used.add(candidate.email)
+        confidence = confidence === 'low' ? 'medium' : confidence
+      }
+    }
+    
+    if (aliases.length > 0) {
+      suggestions.push({
+        canonicalName: primary.name,
+        canonicalEmail: primary.email,
+        aliases,
+        confidence,
+      })
+    }
+    
+    used.add(primary.email)
+  }
+  
+  return suggestions.sort((a, b) => {
+    // Sort by confidence, then by total commits
+    const confOrder = { high: 0, medium: 1, low: 2 }
+    if (confOrder[a.confidence] !== confOrder[b.confidence]) {
+      return confOrder[a.confidence] - confOrder[b.confidence]
+    }
+    const aTotal = a.aliases.reduce((sum, x) => sum + x.commitCount, 0)
+    const bTotal = b.aliases.reduce((sum, x) => sum + x.commitCount, 0)
+    return bTotal - aTotal
+  })
+}
+
+// Add entries to .mailmap file
+export async function addMailmapEntries(entries: MailmapEntry[]): Promise<{ success: boolean; message: string }> {
+  if (!repoPath) return { success: false, message: 'No repository selected' }
+  
+  const mailmapPath = path.join(repoPath, '.mailmap')
+  
+  try {
+    // Read existing content
+    let content = ''
+    try {
+      content = await fs.promises.readFile(mailmapPath, 'utf-8')
+      if (!content.endsWith('\n')) content += '\n'
+    } catch {
+      // File doesn't exist, start fresh with header
+      content = '# .mailmap - Author identity mapping\n# Format: Canonical Name <canonical@email> Alias Name <alias@email>\n\n'
+    }
+    
+    // Add new entries
+    for (const entry of entries) {
+      const line = entry.aliasName
+        ? `${entry.canonicalName} <${entry.canonicalEmail}> ${entry.aliasName} <${entry.aliasEmail}>`
+        : `${entry.canonicalName} <${entry.canonicalEmail}> <${entry.aliasEmail}>`
+      content += line + '\n'
+    }
+    
+    await fs.promises.writeFile(mailmapPath, content, 'utf-8')
+    return { success: true, message: `Added ${entries.length} entries to .mailmap` }
+  } catch (error) {
+    return { success: false, message: `Failed to update .mailmap: ${error}` }
+  }
+}
+
+// Normalize and cluster author identities
+// Groups commits by the same person using email domain, name similarity, and common patterns
+function clusterAuthors(
+  commits: { author: string; email: string; date: Date }[]
+): Map<string, { canonicalName: string; canonicalEmail: string; dates: Date[] }> {
+  // First pass: group by normalized email (ignoring + suffixes and case)
+  const emailGroups = new Map<string, { names: Map<string, number>; emails: Set<string>; dates: Date[] }>()
+  
+  for (const { author, email, date } of commits) {
+    // Normalize email: lowercase, remove + suffix (user+tag@domain -> user@domain)
+    const normalizedEmail = email.toLowerCase().replace(/\+[^@]*@/, '@')
+    
+    // Extract email prefix for matching (before @)
+    const emailPrefix = normalizedEmail.split('@')[0].replace(/[._-]/g, '').toLowerCase()
+    
+    // Try to find existing group by email or email prefix
+    let groupKey: string | null = null
+    
+    // Check exact email match first
+    if (emailGroups.has(normalizedEmail)) {
+      groupKey = normalizedEmail
+    } else {
+      // Check if email prefix matches an existing group's prefix
+      for (const [key, group] of emailGroups) {
+        const existingPrefix = key.split('@')[0].replace(/[._-]/g, '').toLowerCase()
+        if (emailPrefix === existingPrefix && emailPrefix.length >= 3) {
+          groupKey = key
+          break
+        }
+      }
+    }
+    
+    if (!groupKey) {
+      groupKey = normalizedEmail
+      emailGroups.set(groupKey, { names: new Map(), emails: new Set(), dates: [] })
+    }
+    
+    const group = emailGroups.get(groupKey)!
+    group.emails.add(email)
+    group.dates.push(date)
+    group.names.set(author, (group.names.get(author) || 0) + 1)
+  }
+  
+  // Second pass: merge groups with similar names (handles different emails, same person)
+  const mergedGroups = new Map<string, typeof emailGroups extends Map<string, infer V> ? V : never>()
+  
+  const normalizeNameForComparison = (name: string): string => {
+    return name
+      .toLowerCase()
+      .replace(/[._-]/g, ' ')  // jp-guiang -> jp guiang
+      .replace(/\s+/g, ' ')    // normalize spaces
+      .trim()
+  }
+  
+  for (const [key, group] of emailGroups) {
+    // Get most common name from this group
+    let mostCommonName = ''
+    let maxCount = 0
+    for (const [name, count] of group.names) {
+      if (count > maxCount) {
+        maxCount = count
+        mostCommonName = name
+      }
+    }
+    
+    const normalizedName = normalizeNameForComparison(mostCommonName)
+    
+    // Check if this name matches an existing merged group
+    let merged = false
+    for (const [mergedKey, mergedGroup] of mergedGroups) {
+      let mergedMostCommonName = ''
+      let mergedMaxCount = 0
+      for (const [name, count] of mergedGroup.names) {
+        if (count > mergedMaxCount) {
+          mergedMaxCount = count
+          mergedMostCommonName = name
+        }
+      }
+      
+      const mergedNormalizedName = normalizeNameForComparison(mergedMostCommonName)
+      
+      // Check name similarity
+      if (normalizedName === mergedNormalizedName || 
+          normalizedName.includes(mergedNormalizedName) ||
+          mergedNormalizedName.includes(normalizedName)) {
+        // Merge into existing group
+        for (const [name, count] of group.names) {
+          mergedGroup.names.set(name, (mergedGroup.names.get(name) || 0) + count)
+        }
+        for (const email of group.emails) {
+          mergedGroup.emails.add(email)
+        }
+        mergedGroup.dates.push(...group.dates)
+        merged = true
+        break
+      }
+    }
+    
+    if (!merged) {
+      mergedGroups.set(key, group)
+    }
+  }
+  
+  // Final pass: create canonical result
+  const result = new Map<string, { canonicalName: string; canonicalEmail: string; dates: Date[] }>()
+  
+  for (const [key, group] of mergedGroups) {
+    // Pick canonical name: prefer title case, most common
+    let canonicalName = ''
+    let maxCount = 0
+    for (const [name, count] of group.names) {
+      // Prefer proper cased names over all-lowercase
+      const isProperCase = name !== name.toLowerCase()
+      const effectiveCount = isProperCase ? count * 1.5 : count
+      if (effectiveCount > maxCount) {
+        maxCount = effectiveCount
+        canonicalName = name
+      }
+    }
+    
+    // Pick canonical email: prefer non-noreply, most common domain
+    const emails = Array.from(group.emails)
+    const canonicalEmail = emails.find(e => !e.includes('noreply')) || emails[0]
+    
+    result.set(key, {
+      canonicalName,
+      canonicalEmail,
+      dates: group.dates,
+    })
+  }
+  
+  return result
+}
+
+// Get commit statistics by contributor over time for ridgeline chart
+export async function getContributorStats(
+  topN: number = 10,
+  bucketSize: 'day' | 'week' | 'month' = 'week'
+): Promise<ContributorStats> {
+  if (!git) throw new Error('No repository selected')
+
+  try {
+    // Get all commits with author and date info
+    // Use --use-mailmap to respect .mailmap file for identity normalization
+    const format = '%aN|%aE|%ci'  // %aN/%aE = mailmap-aware name/email
+    const output = await git.raw([
+      'log',
+      '--use-mailmap',
+      `--format=${format}`,
+      '--all',
+    ])
+
+    const lines = output.trim().split('\n').filter(Boolean)
+    
+    // Parse commits
+    const rawCommits: { author: string; email: string; date: Date }[] = []
+    let minDate = new Date()
+    let maxDate = new Date(0)
+
+    for (const line of lines) {
+      const [author, email, dateStr] = line.split('|')
+      const date = new Date(dateStr)
+      
+      if (date < minDate) minDate = date
+      if (date > maxDate) maxDate = date
+      
+      rawCommits.push({ author, email, date })
+    }
+    
+    // Cluster authors to deduplicate identities
+    const authorCommits = clusterAuthors(rawCommits)
+
+    // Sort authors by total commits and take top N
+    const sortedAuthors = Array.from(authorCommits.entries())
+      .map(([_key, data]) => ({
+        author: data.canonicalName,
+        email: data.canonicalEmail,
+        totalCommits: data.dates.length,
+        dates: data.dates,
+      }))
+      .sort((a, b) => b.totalCommits - a.totalCommits)
+      .slice(0, topN)
+
+    // Create time buckets
+    const buckets: Date[] = []
+    const current = new Date(minDate)
+    
+    // Align to bucket boundaries
+    if (bucketSize === 'week') {
+      current.setDate(current.getDate() - current.getDay()) // Start of week
+    } else if (bucketSize === 'month') {
+      current.setDate(1) // Start of month
+    }
+    current.setHours(0, 0, 0, 0)
+
+    while (current <= maxDate) {
+      buckets.push(new Date(current))
+      if (bucketSize === 'day') {
+        current.setDate(current.getDate() + 1)
+      } else if (bucketSize === 'week') {
+        current.setDate(current.getDate() + 7)
+      } else {
+        current.setMonth(current.getMonth() + 1)
+      }
+    }
+
+    // Helper to find bucket for a date
+    const getBucketIndex = (date: Date): number => {
+      for (let i = buckets.length - 1; i >= 0; i--) {
+        if (date >= buckets[i]) return i
+      }
+      return 0
+    }
+
+    // Build time series for each contributor
+    const contributors: ContributorTimeSeries[] = sortedAuthors.map(({ author, email, totalCommits, dates }) => {
+      // Count commits per bucket
+      const bucketCounts = new Array(buckets.length).fill(0)
+      for (const date of dates) {
+        const idx = getBucketIndex(date)
+        bucketCounts[idx]++
+      }
+
+      return {
+        author, // Already canonical from clustering
+        email,
+        totalCommits,
+        timeSeries: buckets.map((bucket, i) => ({
+          date: bucket.toISOString().split('T')[0],
+          count: bucketCounts[i],
+        })),
+      }
+    })
+
+    return {
+      contributors,
+      startDate: minDate.toISOString().split('T')[0],
+      endDate: maxDate.toISOString().split('T')[0],
+      bucketSize,
+    }
+  } catch (error) {
+    console.error('Error getting contributor stats:', error)
+    return {
+      contributors: [],
+      startDate: '',
+      endDate: '',
+      bucketSize,
+    }
+  }
+}
+
 // Diff file info
 export interface DiffFile {
   path: string
@@ -3816,5 +4269,56 @@ export async function commitChanges(
     return { success: true, message: `Committed: ${message}` }
   } catch (error) {
     return { success: false, message: (error as Error).message }
+  }
+}
+
+// Repo info for sibling repos list
+export interface RepoInfo {
+  path: string
+  name: string
+  isCurrent: boolean
+}
+
+/**
+ * Get sibling repositories from the parent directory of the current repo.
+ * Filters out worktrees (which have a .git file instead of directory).
+ */
+export async function getSiblingRepos(): Promise<RepoInfo[]> {
+  if (!repoPath) return []
+
+  const parentDir = path.dirname(repoPath)
+  const repos: RepoInfo[] = []
+
+  try {
+    const entries = await fs.promises.readdir(parentDir, { withFileTypes: true })
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue
+
+      const entryPath = path.join(parentDir, entry.name)
+      const gitPath = path.join(entryPath, '.git')
+
+      try {
+        const gitStat = await fs.promises.stat(gitPath)
+        // Only include if .git is a directory (real repo, not a worktree)
+        if (gitStat.isDirectory()) {
+          repos.push({
+            path: entryPath,
+            name: entry.name,
+            isCurrent: entryPath === repoPath,
+          })
+        }
+      } catch {
+        // No .git or can't access - skip
+      }
+    }
+
+    // Sort alphabetically by name
+    repos.sort((a, b) => a.name.localeCompare(b.name))
+
+    return repos
+  } catch (error) {
+    console.error('Error scanning sibling repos:', error)
+    return []
   }
 }

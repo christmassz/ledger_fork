@@ -5,8 +5,8 @@
  * Provides a compact overview with search filtering.
  */
 
-import { useState, useMemo, useCallback } from 'react'
-import type { PullRequest, Branch, Worktree, StashEntry } from '../../../types/electron'
+import { useState, useMemo, useCallback, useEffect } from 'react'
+import type { PullRequest, Branch, Worktree, StashEntry, RepoInfo } from '../../../types/electron'
 import type { Column } from '../../../types/app-types'
 
 export interface SidebarProps {
@@ -16,11 +16,13 @@ export interface SidebarProps {
   branches: Branch[]
   worktrees: Worktree[]
   stashes: StashEntry[]
+  repoPath?: string | null
   // Selection
   selectedPR?: PullRequest | null
   selectedBranch?: Branch | null
   selectedWorktree?: Worktree | null
   selectedStash?: StashEntry | null
+  selectedRepo?: RepoInfo | null
   // Handlers
   onSelectPR?: (pr: PullRequest) => void
   onDoubleClickPR?: (pr: PullRequest) => void
@@ -34,6 +36,8 @@ export interface SidebarProps {
   onSelectStash?: (stash: StashEntry) => void
   onDoubleClickStash?: (stash: StashEntry) => void
   onContextMenuStash?: (e: React.MouseEvent, stash: StashEntry) => void
+  onSelectRepo?: (repo: RepoInfo) => void
+  onDoubleClickRepo?: (repo: RepoInfo) => void
   // Utilities
   formatRelativeTime?: (date: string) => string
 }
@@ -44,6 +48,7 @@ interface SectionState {
   remotes: boolean
   worktrees: boolean
   stashes: boolean
+  repos: boolean
 }
 
 export function Sidebar({
@@ -52,10 +57,12 @@ export function Sidebar({
   branches,
   worktrees,
   stashes,
+  repoPath,
   selectedPR,
   selectedBranch,
   selectedWorktree,
   selectedStash,
+  selectedRepo,
   onSelectPR,
   onDoubleClickPR,
   onContextMenuPR,
@@ -68,6 +75,8 @@ export function Sidebar({
   onSelectStash,
   onDoubleClickStash,
   onContextMenuStash,
+  onSelectRepo,
+  onDoubleClickRepo,
   formatRelativeTime,
 }: SidebarProps) {
   // Section expanded state
@@ -77,7 +86,23 @@ export function Sidebar({
     remotes: false,
     worktrees: true,
     stashes: false,
+    repos: false,
   })
+
+  // Sibling repos state
+  const [repos, setRepos] = useState<RepoInfo[]>([])
+
+  // Load sibling repos when repoPath changes
+  useEffect(() => {
+    if (!repoPath) {
+      setRepos([])
+      return
+    }
+    window.electronAPI
+      .getSiblingRepos()
+      .then(setRepos)
+      .catch(() => setRepos([]))
+  }, [repoPath])
 
   // Search state
   const [search, setSearch] = useState('')
@@ -124,6 +149,12 @@ export function Sidebar({
     const s = search.toLowerCase()
     return stashes.filter((st) => st.message.toLowerCase().includes(s))
   }, [stashes, search])
+
+  const filteredRepos = useMemo(() => {
+    if (!search.trim()) return repos
+    const s = search.toLowerCase()
+    return repos.filter((r) => r.name.toLowerCase().includes(s))
+  }, [repos, search])
 
   // Toggle section
   const toggleSection = useCallback((section: keyof SectionState) => {
@@ -312,6 +343,37 @@ export function Sidebar({
               ))}
               {filteredStashes.length === 0 && (
                 <li className="sidebar-empty">No stashes</li>
+              )}
+            </ul>
+          )}
+        </div>
+
+        {/* Repos Section */}
+        <div className="sidebar-section">
+          <button
+            className={`sidebar-section-header ${sections.repos ? 'open' : ''}`}
+            onClick={() => toggleSection('repos')}
+          >
+            <span className="section-icon">⌂</span>
+            <span className="section-label">Repositories</span>
+            <span className="section-count">{filteredRepos.length}</span>
+            <span className="section-chevron">{sections.repos ? '▾' : '▸'}</span>
+          </button>
+          {sections.repos && (
+            <ul className="sidebar-items">
+              {filteredRepos.map((repo) => (
+                <li
+                  key={repo.path}
+                  className={`sidebar-item ${selectedRepo?.path === repo.path ? 'selected' : ''}`}
+                  onClick={() => onSelectRepo?.(repo)}
+                  onDoubleClick={() => onDoubleClickRepo?.(repo)}
+                >
+                  <span className="item-title">{repo.name}</span>
+                  {repo.isCurrent && <span className="badge badge-current">•</span>}
+                </li>
+              ))}
+              {filteredRepos.length === 0 && (
+                <li className="sidebar-empty">No sibling repos</li>
               )}
             </ul>
           )}

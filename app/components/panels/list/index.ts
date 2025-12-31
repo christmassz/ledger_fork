@@ -28,3 +28,6 @@ export type { CommitListProps } from './CommitList'
 export { Sidebar } from './Sidebar'
 export type { SidebarProps } from './Sidebar'
 
+export { RepoList } from './RepoList'
+export type { RepoListProps } from './RepoList'
+

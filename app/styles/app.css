@@ -3179,6 +3179,501 @@ body,
   white-space: nowrap;
 }
 
+/* ========================================
+   Contributor Chart - Joy Division Style
+   ======================================== */
+
+.contributor-chart-container {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.contributor-chart-container.inverted {
+  background: #0a0a0a;
+}
+
+.contributor-chart-container.loading,
+.contributor-chart-container.error,
+.contributor-chart-container.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 300px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.contributor-chart-container.inverted.loading,
+.contributor-chart-container.inverted.error,
+.contributor-chart-container.inverted.empty {
+  color: #666;
+}
+
+.contributor-chart-container .loading-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.contributor-chart-container.inverted .loading-spinner {
+  border-color: #333;
+  border-top-color: #fff;
+}
+
+.contributor-chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.contributor-chart-container.inverted .contributor-chart-header {
+  border-bottom-color: #222;
+}
+
+.contributor-chart-header h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.contributor-chart-container.inverted .contributor-chart-header h3 {
+  color: #fff;
+}
+
+.contributor-chart-header .chart-meta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.contributor-chart-container.inverted .contributor-chart-header .chart-meta {
+  color: #666;
+}
+
+.contributor-chart-header .bucket-size {
+  text-transform: capitalize;
+  padding: 2px 8px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+}
+
+.contributor-chart-container.inverted .contributor-chart-header .bucket-size {
+  background: #1a1a1a;
+  color: #888;
+}
+
+.contributor-chart-svg {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Ridgeline styling */
+.ridge-group {
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.ridge-group .ridge-line {
+  transition: stroke-width 0.15s ease, opacity 0.15s ease;
+}
+
+.ridge-group.hovered .ridge-line {
+  filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.5));
+}
+
+.contributor-chart-container:not(.inverted) .ridge-group.hovered .ridge-line {
+  filter: drop-shadow(0 0 6px var(--accent-glow));
+}
+
+/* Author labels */
+.author-label {
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.author-label.hovered {
+  font-weight: 600;
+}
+
+/* Tooltip */
+.chart-tooltip {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 16px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  font-size: 12px;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.contributor-chart-container.inverted .chart-tooltip {
+  background: #1a1a1a;
+  border-color: #333;
+  color: #ccc;
+}
+
+.chart-tooltip strong {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.contributor-chart-container.inverted .chart-tooltip strong {
+  color: #fff;
+}
+
+.chart-tooltip span {
+  color: var(--text-secondary);
+}
+
+.contributor-chart-container.inverted .chart-tooltip span {
+  color: #999;
+}
+
+/* Manage Users Button */
+.manage-users-button {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-md);
+  color: #999;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  backdrop-filter: blur(8px);
+}
+
+.manage-users-button:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #fff;
+}
+
+.contributor-chart-container:not(.inverted) .manage-users-button {
+  background: var(--bg-secondary);
+  border-color: var(--border);
+  color: var(--text-secondary);
+}
+
+.contributor-chart-container:not(.inverted) .manage-users-button:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.manage-users-icon {
+  font-size: 14px;
+}
+
+/* ========================================
+   Mailmap Details Panel
+   ======================================== */
+
+.mailmap-detail-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.mailmap-description {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 8px 0 16px;
+  line-height: 1.5;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.mailmap-description code {
+  background: var(--bg-tertiary);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 11px;
+}
+
+.mailmap-close {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 20px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mailmap-close:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.mailmap-section {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.mailmap-section:last-of-type {
+  flex: 1;
+  overflow-y: auto;
+  border-bottom: none;
+}
+
+.mailmap-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.mailmap-section-header h4 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-secondary);
+}
+
+.mailmap-section-count {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+/* Identity Cards */
+.mailmap-identity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mailmap-identity-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  cursor: grab;
+  transition: all 0.15s ease;
+}
+
+.mailmap-identity-card:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--border);
+}
+
+.mailmap-identity-card.dragging {
+  opacity: 0.5;
+  cursor: grabbing;
+}
+
+.mailmap-identity-card.drop-target {
+  background: var(--accent-glow);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.mailmap-identity-card.canonical {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+  cursor: default;
+}
+
+.identity-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dim) 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.identity-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.identity-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.identity-email {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.identity-commits {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.identity-remove {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 16px;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.15s ease;
+}
+
+.mailmap-identity-card:hover .identity-remove {
+  opacity: 1;
+}
+
+.identity-remove:hover {
+  background: var(--error-bg);
+  color: var(--error);
+}
+
+/* Merged Groups */
+.mailmap-merged-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.mailmap-merged-group {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.merged-canonical {
+  padding: 8px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.merged-canonical .mailmap-identity-card {
+  margin: 0;
+}
+
+.merged-aliases {
+  padding: 12px;
+}
+
+.merged-aliases-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.merged-alias {
+  margin-bottom: 6px;
+}
+
+.merged-alias:last-child {
+  margin-bottom: 0;
+}
+
+.merged-alias .mailmap-identity-card {
+  background: var(--bg-secondary);
+}
+
+/* Empty State */
+.mailmap-empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* Footer Actions */
+.mailmap-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.mailmap-actions-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.mailmap-existing {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mailmap-existing::before {
+  content: '✓';
+  color: var(--success);
+}
+
+.mailmap-actions-buttons {
+  display: flex;
+  gap: 8px;
+}
+
 /* Detail Panel */
 .focus-detail {
   background: var(--bg-primary);

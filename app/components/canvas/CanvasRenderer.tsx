@@ -21,14 +21,15 @@ import type {
   GraphCommit,
   WorkingStatus,
   CommitDiff,
+  RepoInfo,
 } from '../../types/electron'
 import { useCanvas } from './CanvasContext'
 import { Canvas } from './Canvas'
 import { EditorSlot } from './EditorSlot'
 
 // Import panels
-import { PRList, BranchList, WorktreeList, StashList, CommitList, Sidebar } from '../panels/list'
-import { GitGraph } from '../panels/viz'
+import { PRList, BranchList, WorktreeList, StashList, CommitList, Sidebar, RepoList } from '../panels/list'
+import { GitGraph, ContributorChart } from '../panels/viz'
 
 // ========================================
 // Data Interface
@@ -77,6 +78,7 @@ export interface CanvasSelection {
   selectedWorktree: Worktree | null
   selectedStash: StashEntry | null
   selectedCommit: GraphCommit | null
+  selectedRepo: RepoInfo | null
   uncommittedSelected?: boolean
 }
 
@@ -111,6 +113,10 @@ export interface CanvasHandlers {
   onDoubleClickStash: (stash: StashEntry) => void
   onContextMenuStash?: (e: React.MouseEvent, stash: StashEntry) => void
   
+  // Repo handlers
+  onSelectRepo?: (repo: RepoInfo) => void
+  onDoubleClickRepo?: (repo: RepoInfo) => void
+  
   // Commit/graph handlers
   onSelectCommit: (commit: GraphCommit) => void
   onDoubleClickCommit?: (commit: GraphCommit) => void
@@ -123,6 +129,9 @@ export interface CanvasHandlers {
   
   // Editor panel rendering (for custom editor content)
   renderEditorContent?: () => ReactNode
+  
+  // Special panel triggers
+  onOpenMailmap?: () => void
 }
 
 /**
@@ -261,10 +270,12 @@ export function CanvasRenderer({
               branches={data.branches}
               worktrees={data.worktrees}
               stashes={data.stashes}
+              repoPath={data.repoPath}
               selectedPR={selection.selectedPR}
               selectedBranch={selection.selectedBranch}
               selectedWorktree={selection.selectedWorktree}
               selectedStash={selection.selectedStash}
+              selectedRepo={selection.selectedRepo}
               onSelectPR={handlers.onSelectPR}
               onDoubleClickPR={handlers.onDoubleClickPR}
               onContextMenuPR={handlers.onContextMenuPR}
@@ -276,7 +287,20 @@ export function CanvasRenderer({
               onContextMenuWorktree={handlers.onContextMenuWorktree}
               onSelectStash={handlers.onSelectStash}
               onDoubleClickStash={handlers.onDoubleClickStash}
+              onSelectRepo={handlers.onSelectRepo}
+              onDoubleClickRepo={handlers.onDoubleClickRepo}
               formatRelativeTime={handlers.formatRelativeTime}
+            />
+          )
+
+        case 'repo-list':
+          return (
+            <RepoList
+              column={column}
+              repoPath={data.repoPath}
+              selectedRepo={selection.selectedRepo}
+              onSelect={handlers.onSelectRepo}
+              onDoubleClick={handlers.onDoubleClickRepo}
             />
           )
 
@@ -315,6 +339,19 @@ export function CanvasRenderer({
                   formatRelativeTime={handlers.formatRelativeTime}
                 />
               </div>
+            </div>
+          )
+
+        case 'timeline':
+          return (
+            <div className="viz-panel timeline-panel">
+              <ContributorChart
+                topN={10}
+                bucketSize="week"
+                height={500}
+                invertedTheme={true}
+                onManageUsers={handlers.onOpenMailmap}
+              />
             </div>
           )
 

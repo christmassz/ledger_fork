@@ -108,6 +108,42 @@ export interface GraphCommit {
   deletions?: number
 }
 
+// Contributor statistics for ridgeline chart
+export interface ContributorTimeSeries {
+  author: string
+  email: string
+  totalCommits: number
+  timeSeries: { date: string; count: number }[]
+}
+
+export interface ContributorStats {
+  contributors: ContributorTimeSeries[]
+  startDate: string
+  endDate: string
+  bucketSize: 'day' | 'week' | 'month'
+}
+
+// Mailmap types for author identity management
+export interface AuthorIdentity {
+  name: string
+  email: string
+  commitCount: number
+}
+
+export interface MailmapSuggestion {
+  canonicalName: string
+  canonicalEmail: string
+  aliases: AuthorIdentity[]
+  confidence: 'high' | 'medium' | 'low'
+}
+
+export interface MailmapEntry {
+  canonicalName: string
+  canonicalEmail: string
+  aliasName?: string
+  aliasEmail: string
+}
+
 // Diff types for commit detail view
 export interface DiffFile {
   path: string
@@ -301,6 +337,12 @@ export interface CreateWorktreeOptions {
   folderPath: string
 }
 
+export interface RepoInfo {
+  path: string
+  name: string
+  isCurrent: boolean
+}
+
 export interface ElectronAPI {
   selectRepo: () => Promise<string | null>
   getRepoPath: () => Promise<string | null>
@@ -343,6 +385,12 @@ export interface ElectronAPI {
   resetToCommit: (commitHash: string, mode: 'soft' | 'mixed' | 'hard') => Promise<CheckoutResult>
   // Focus mode APIs
   getCommitGraphHistory: (limit?: number, skipStats?: boolean, showCheckpoints?: boolean) => Promise<GraphCommit[]>
+  getContributorStats: (topN?: number, bucketSize?: 'day' | 'week' | 'month') => Promise<ContributorStats>
+  // Mailmap management
+  getMailmap: () => Promise<MailmapEntry[]>
+  getAuthorIdentities: () => Promise<AuthorIdentity[]>
+  suggestMailmapEntries: () => Promise<MailmapSuggestion[]>
+  addMailmapEntries: (entries: MailmapEntry[]) => Promise<{ success: boolean; message: string }>
   getCommitDiff: (commitHash: string) => Promise<CommitDiff | null>
   getBranchDiff: (branchName: string, diffType?: BranchDiffType) => Promise<BranchDiff | null>
   getStashes: () => Promise<StashEntry[]>
@@ -449,6 +497,8 @@ export interface ElectronAPI {
   addCanvas: (canvas: CanvasConfig) => Promise<{ success: boolean }>
   removeCanvas: (canvasId: string) => Promise<{ success: boolean }>
   updateCanvas: (canvasId: string, updates: Partial<CanvasConfig>) => Promise<{ success: boolean }>
+  // Repo operations
+  getSiblingRepos: () => Promise<RepoInfo[]>
 }
 
 // Canvas configuration types for persistence

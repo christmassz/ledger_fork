@@ -9,6 +9,7 @@ import type {
   GraphCommit,
   CommitDiff,
   StashEntry,
+  RepoInfo,
 } from './types/electron'
 import type {
   ViewMode,
@@ -377,6 +378,7 @@ export default function App() {
       case 'stash': return 'stash-detail'
       case 'uncommitted': return 'staging'
       case 'create-worktree': return 'create-worktree'
+      case 'mailmap': return 'mailmap-detail'
       default: return 'empty'
     }
   }, [])
@@ -395,7 +397,7 @@ export default function App() {
 
   // Radar single-click handlers - soft select item (always works, drives editor when visible)
   const handleRadarItemClick = useCallback(
-    (type: SidebarFocusType, data: PullRequest | Branch | Worktree | StashEntry | WorkingStatus) => {
+    (type: SidebarFocusType, data: PullRequest | Branch | Worktree | StashEntry | WorkingStatus | RepoInfo) => {
       // Always select the item - makes UI feel interactive and coherent
       // When editor is visible, this also shows the item in the editor
       handleSidebarFocus(type, data)
@@ -1034,6 +1036,7 @@ export default function App() {
       'staging': 'uncommitted',
       'create-worktree': 'create-worktree',
       'commit-detail': 'commit',
+      'mailmap-detail': 'mailmap',
     }
     
     const focusType = panelToSidebarType[panel]
@@ -1108,6 +1111,7 @@ export default function App() {
     selectedBranch: sidebarFocus?.type === 'branch' || sidebarFocus?.type === 'remote' ? (sidebarFocus.data as Branch) : null,
     selectedWorktree: sidebarFocus?.type === 'worktree' ? (sidebarFocus.data as Worktree) : null,
     selectedStash: sidebarFocus?.type === 'stash' ? (sidebarFocus.data as StashEntry) : null,
+    selectedRepo: sidebarFocus?.type === 'repo' ? (sidebarFocus.data as RepoInfo) : null,
     selectedCommit,
     uncommittedSelected: sidebarFocus?.type === 'uncommitted',
   }), [sidebarFocus, selectedCommit])
@@ -1173,6 +1177,20 @@ export default function App() {
           repoPath={repoPath}
           worktrees={worktrees}
           onFocusWorktree={(wt) => setSidebarFocus({ type: 'worktree', data: wt })}
+          onOpenRepo={async (repo) => {
+            if (repo.isCurrent) return
+            setStatus({ type: 'info', message: `Opening ${repo.name}...` })
+            try {
+              setRepoPath(repo.path)
+              await refresh()
+              setStatus({ type: 'success', message: `Opened ${repo.name}` })
+            } catch (err) {
+              setStatus({ type: 'error', message: (err as Error).message })
+            }
+          }}
+          onOpenMailmap={() => {
+            setSidebarFocus({ type: 'mailmap', data: null })
+          }}
         />
       )
     }
@@ -1234,6 +1252,20 @@ export default function App() {
     onSelectStash: (stash) => handleRadarItemClick('stash', stash),
     onDoubleClickStash: handleRadarStashClick,
     onContextMenuStash: (e, stash) => handleContextMenu(e, 'stash', stash as unknown as Worktree),
+    // Repo handlers
+    onSelectRepo: (repo) => handleRadarItemClick('repo', repo),
+    onDoubleClickRepo: async (repo) => {
+      if (repo.isCurrent) return
+      // Switch to this repo
+      setStatus({ type: 'info', message: `Opening ${repo.name}...` })
+      try {
+        setRepoPath(repo.path)
+        await refresh()
+        setStatus({ type: 'success', message: `Opened ${repo.name}` })
+      } catch (err) {
+        setStatus({ type: 'error', message: (err as Error).message })
+      }
+    },
     // Commit handlers
     onSelectCommit: handleSelectCommit,
     onDoubleClickCommit: (commit) => {
@@ -1252,10 +1284,16 @@ export default function App() {
     onContextMenuUncommitted: (e, status) => handleContextMenu(e, 'uncommitted', status),
     // Editor content - renders actual panels
     renderEditorContent,
+    // Special panel triggers
+    onOpenMailmap: () => {
+      setActiveCanvas('focus')
+      setSidebarFocus({ type: 'mailmap', data: null })
+      navigateToEditor('mailmap-detail', null)
+    },
   }), [
     formatRelativeTime, formatDate, handleRadarItemClick, handleRadarPRClick, handleRadarBranchClick,
     handleRadarWorktreeClick, handleRadarStashClick, handleContextMenu, handleSelectCommit, navigateToEditor,
-    renderEditorContent, setActiveCanvas, workingStatus, handleRadarUncommittedClick
+    renderEditorContent, setActiveCanvas, workingStatus, handleRadarUncommittedClick, setStatus, refresh
   ])
 
   const canvasUIState: CanvasUIState = useMemo(() => ({

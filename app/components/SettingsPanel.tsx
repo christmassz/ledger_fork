@@ -12,6 +12,7 @@ const PANEL_OPTIONS: Record<SlotType, { value: PanelType; label: string }[]> = {
     { value: 'worktree-list', label: 'Worktrees' },
     { value: 'stash-list', label: 'Stashes' },
     { value: 'commit-list', label: 'Commits' },
+    { value: 'repo-list', label: 'Repositories' },
     { value: 'sidebar', label: 'Sidebar (All)' },
   ],
   editor: [
