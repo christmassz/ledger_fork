@@ -142,6 +142,7 @@ export default function App() {
   const [isResizingDetail, setIsResizingDetail] = useState(false)
   const [draggingColumn, setDraggingColumn] = useState<string | null>(null)
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null)
+  const [activePluginNavItem, setActivePluginNavItem] = useState<string | undefined>(undefined)
 
   const { setTitle, setTitlebarActions } = useWindowContext()
   const menuRef = useRef<HTMLDivElement>(null)
@@ -327,6 +328,20 @@ export default function App() {
     const plugin = pluginManager.get(activeAppId)
     return plugin?.type === 'app' ? (plugin as AppPlugin) : null
   }, [activeAppId])
+
+  // Reset plugin nav item when switching apps, set to first nav item
+  useEffect(() => {
+    if (activeAppPlugin?.navigation?.length) {
+      setActivePluginNavItem(activeAppPlugin.navigation[0].id)
+    } else {
+      setActivePluginNavItem(undefined)
+    }
+  }, [activeAppPlugin])
+
+  // Handler for plugin navigation
+  const handlePluginNavigate = useCallback((itemId: string) => {
+    setActivePluginNavItem(itemId)
+  }, [])
 
   // Column drag and drop handlers for Radar view
   const handleColumnDragStart = useCallback((e: React.DragEvent, columnId: string) => {
@@ -1670,7 +1685,11 @@ export default function App() {
       {/* Plugin App Content - shown when a plugin app is active */}
       {repoPath && activeAppPlugin && (
         <main className="ledger-content plugin-app-view">
-          <PluginAppContainer plugin={activeAppPlugin} />
+          <PluginAppContainer
+            plugin={activeAppPlugin}
+            activeNavItem={activePluginNavItem}
+            onNavigate={handlePluginNavigate}
+          />
         </main>
       )}
 
