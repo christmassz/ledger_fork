@@ -88,7 +88,12 @@ export type {
 
 export { pluginManager } from './plugin-manager'
 export { pluginLoader, pluginRegistry, type InstalledPlugin, type PluginSource } from './plugin-loader'
-export { createPluginContext, type PluginContextDependencies } from './plugin-context'
+export {
+  createPluginContext,
+  createPluginStorage,
+  createPersistentPluginStorage,
+  type PluginContextDependencies,
+} from './plugin-context'
 export {
   hasPermission,
   hasAllPermissions,
@@ -128,6 +133,10 @@ export {
   afterPush,
   beforePull,
   afterPull,
+  // Repository lifecycle
+  repoOpened,
+  repoClosed,
+  repoRefreshed,
   // AI analysis
   analyzeCommit,
   analyzeBranch,

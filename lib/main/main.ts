@@ -4,6 +4,15 @@ import fixPath from 'fix-path'
 import { createAppWindow } from './app'
 import { registerResourcesProtocol } from './protocols'
 
+// Database
+import {
+  connect as connectDatabase,
+  close as closeDatabase,
+  runCacheCleanup,
+  cleanupExpiredPluginData,
+  closeAllCustomDatabases,
+} from '@/lib/data'
+
 // Import Conveyor handler registration functions
 import { registerAppHandlers } from '@/lib/conveyor/handlers/app-handler'
 import { registerWindowHandlers } from '@/lib/conveyor/handlers/window-handler'
@@ -25,6 +34,22 @@ fixPath()
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
+  // Initialize database (runs migrations automatically)
+  try {
+    connectDatabase()
+    // Clean up expired entries on startup
+    const cacheCleanup = runCacheCleanup()
+    const pluginCleanup = cleanupExpiredPluginData()
+    if (cacheCleanup > 0 || pluginCleanup > 0) {
+      console.log(
+        `[Database] Cleaned ${cacheCleanup} cache entries, ${pluginCleanup} plugin data entries`
+      )
+    }
+  } catch (error) {
+    console.error('[Database] Failed to initialize:', error)
+    // Continue without database - app can still function with reduced features
+  }
+
   // Register all IPC handlers via Conveyor
   registerAppHandlers(app)
   registerRepoHandlers()
@@ -72,6 +97,12 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+// Clean up database on quit
+app.on('will-quit', () => {
+  closeAllCustomDatabases()
+  closeDatabase()
 })
 
 // In this file, you can include the rest of your app's specific main process

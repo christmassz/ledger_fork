@@ -81,6 +81,31 @@ export async function afterPull(branch: string): Promise<void> {
 }
 
 // ============================================================================
+// Repository Lifecycle Hooks
+// ============================================================================
+
+/**
+ * Call when a repository is opened
+ */
+export async function repoOpened(path: string): Promise<void> {
+  await pluginManager.callHook('repo:opened', path)
+}
+
+/**
+ * Call when a repository is closed (before switching to another)
+ */
+export async function repoClosed(path: string): Promise<void> {
+  await pluginManager.callHook('repo:closed', path)
+}
+
+/**
+ * Call after repository data is refreshed
+ */
+export async function repoRefreshed(): Promise<void> {
+  await pluginManager.callHook('repo:refreshed')
+}
+
+// ============================================================================
 // AI Analysis Hooks
 // ============================================================================
 

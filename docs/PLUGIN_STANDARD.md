@@ -444,7 +444,7 @@ interface PluginContext {
     error(...args: any[]): void
   }
 
-  // Isolated storage
+  // Isolated storage (localStorage by default)
   storage: {
     get<T>(key: string): Promise<T | null>
     set<T>(key: string, value: T): Promise<void>
@@ -457,12 +457,18 @@ interface PluginContext {
   // Git API (requires permissions)
   api: {
     getRepoPath(): string | null
-    getCurrentBranch(): string
-    getBranches(): Branch[]
-    getCommits(limit?: number): Commit[]
-    getWorkingStatus(): StagingStatus
+    getCurrentBranch(): Promise<string>
+    getBranches(): Promise<Branch[]>
+    getWorktrees(): Promise<Worktree[]>       // Agent worktrees
+    getPullRequests(): Promise<PullRequest[]> // GitHub PRs
+    getCommits(limit?: number): Promise<Commit[]>
+    getWorkingStatus(): Promise<StagingStatus>
     git(args: string[]): Promise<string>  // Requires git:write
-    showNotification(options: NotificationOptions): void
+    showNotification(message: string, type?: 'info' | 'success' | 'warning' | 'error'): void
+    openPanel(pluginId: string, data?: unknown): void
+    closePanel(pluginId: string): void
+    navigateToApp(pluginId: string): void
+    refresh(): Promise<void>  // Refresh all repository data
   }
 
   // Lifecycle
@@ -470,6 +476,25 @@ interface PluginContext {
     onDispose(callback: () => void): void
   }
 }
+```
+
+### Storage Options
+
+Plugins have two storage options:
+
+**1. localStorage (default)** - Fast, volatile
+```typescript
+// Default storage - cleared on app restart
+context.storage.set('key', value)
+```
+
+**2. SQLite (persistent)** - Survives restarts
+```typescript
+import { createPersistentPluginStorage } from '@ledger/plugin-api'
+
+// Persistent storage - survives restarts
+const storage = createPersistentPluginStorage(pluginId)
+await storage.set('key', value)
 ```
 
 ### Hooks
@@ -492,7 +517,8 @@ hooks: {
 
   // Repo events
   'repo:opened': (path: string) => Promise<void>
-  'repo:closed': () => Promise<void>
+  'repo:closed': (path: string) => Promise<void>
+  'repo:refreshed': () => Promise<void>  // Called after data refresh
 }
 ```
 

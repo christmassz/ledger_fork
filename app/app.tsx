@@ -47,7 +47,9 @@ import {
   PluginPanelContainer,
   PluginComponentProvider,
   PluginWidgetSlot,
+  pluginComponentRegistry,
 } from './components/plugins'
+import { registerExampleComponents } from './components/plugins/example-components'
 import {
   pluginManager,
   pluginLoader,
@@ -58,6 +60,9 @@ import {
   afterPush,
   beforePull,
   afterPull,
+  repoOpened,
+  repoClosed,
+  repoRefreshed,
 } from '@/lib/plugins'
 import type { AppPlugin } from '@/lib/plugins/plugin-types'
 
@@ -284,12 +289,28 @@ export default function App() {
 
   // Initialize plugin system
   useEffect(() => {
-    // Register example plugins
-    examplePlugins.forEach((plugin) => {
-      if (!pluginManager.get(plugin.id)) {
-        pluginManager.register(plugin)
+    // Register example plugin React components
+    registerExampleComponents(pluginComponentRegistry)
+
+    // Register and activate example plugins
+    const initPlugins = async () => {
+      for (const plugin of examplePlugins) {
+        if (!pluginManager.get(plugin.id)) {
+          pluginManager.register(plugin)
+        }
       }
-    })
+
+      // Activate all registered example plugins
+      for (const plugin of examplePlugins) {
+        try {
+          await pluginManager.activate(plugin.id)
+        } catch (err) {
+          console.error(`[Plugin] Failed to activate ${plugin.id}:`, err)
+        }
+      }
+    }
+
+    initPlugins()
 
     // Load installed plugins from registry
     pluginLoader.loadInstalled().catch((err) => {
@@ -358,6 +379,11 @@ export default function App() {
     try {
       const path = await window.conveyor.repo.selectRepo()
       if (path) {
+        // Notify plugins that current repo is closing (if one was open)
+        if (repoPath) {
+          repoClosed(repoPath).catch((err) => console.error('[Plugin Hook] repoClosed error:', err))
+        }
+
         // Clear state before switching to prevent stale data mixing with new repo
         setWorktrees([])
         setBranches([])
@@ -367,6 +393,10 @@ export default function App() {
         setRepoPath(path)
         setStatus({ type: 'info', message: 'Loading repository...' })
         await refresh()
+
+        // Notify plugins that new repo is opened
+        repoOpened(path).catch((err) => console.error('[Plugin Hook] repoOpened error:', err))
+
         setStatus({ type: 'success', message: 'Repository loaded' })
       } else {
         // User cancelled dialog - clear status
@@ -434,6 +464,9 @@ export default function App() {
       setWorkingStatus(statusResult)
       setGraphCommits(graphResult)
       setStashes(stashResult)
+
+      // Notify plugins that repository data has been refreshed
+      repoRefreshed().catch((err) => console.error('[Plugin Hook] repoRefreshed error:', err))
 
       // Phase 2: Deferred metadata loading in background
       // This loads detailed branch metadata (commit counts, dates) after initial render
@@ -1069,6 +1102,8 @@ export default function App() {
         if (path) {
           setRepoPath(path)
           await refresh()
+          // Notify plugins that repo is opened
+          repoOpened(path).catch((err) => console.error('[Plugin Hook] repoOpened error:', err))
         }
       } catch (err) {
         console.error('Failed to load saved repository:', err)

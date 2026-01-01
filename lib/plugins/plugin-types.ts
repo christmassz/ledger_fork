@@ -429,6 +429,10 @@ export interface PluginAPI {
   getCurrentBranch(): Promise<string>
   /** Get branches */
   getBranches(): Promise<Branch[]>
+  /** Get worktrees (including agent detection) */
+  getWorktrees(): Promise<Worktree[]>
+  /** Get pull requests */
+  getPullRequests(): Promise<PullRequest[]>
   /** Get commits */
   getCommits(limit?: number): Promise<Commit[]>
   /** Get working status */

@@ -7,6 +7,10 @@
  * Architecture: Pure functional factory with dependency injection.
  * The factory takes store accessors and IPC functions as parameters,
  * avoiding tight coupling to specific implementations.
+ *
+ * Storage Options:
+ * - localStorage (default): Fast, in-memory, cleared on app restart
+ * - SQLite (persistent): Survives restarts, backed by database
  */
 
 import type { PluginContext, PluginStorage, PluginLogger, PluginAPI } from './plugin-types'
@@ -25,6 +29,8 @@ export interface PluginContextDependencies {
   getRepoPath: () => string | null
   getCurrentBranch: () => string
   getBranches: () => unknown[]
+  getWorktrees: () => unknown[]
+  getPullRequests: () => unknown[]
   getCommits: () => unknown[]
   getWorkingStatus: () => unknown | null
   setStatus: (status: { type: string; message: string }) => void
@@ -38,6 +44,8 @@ export interface PluginContextDependencies {
   // IPC functions (optional - for renderer process only)
   ipc?: {
     getBranches: () => Promise<unknown[]>
+    getWorktrees: () => Promise<unknown[]>
+    getPullRequests: () => Promise<unknown[]>
     getCommitHistory: () => Promise<unknown[]>
     getStagingStatus: () => Promise<unknown>
   }
@@ -137,6 +145,84 @@ export function createPluginStorage(pluginId: string): PluginStorage {
 }
 
 // ============================================================================
+// Persistent Storage Factory (SQLite-backed via IPC)
+// ============================================================================
+
+/**
+ * Create persistent SQLite-backed storage for a plugin.
+ * Data survives app restarts, unlike localStorage.
+ *
+ * Requires window.conveyor.plugin to be available (renderer process only).
+ * Falls back to localStorage if conveyor API is not available.
+ */
+export function createPersistentPluginStorage(pluginId: string): PluginStorage {
+  // Check if we have conveyor API access
+  const hasConveyor = typeof window !== 'undefined' && window.conveyor?.plugin
+
+  if (!hasConveyor) {
+    console.warn(`[Plugin:${pluginId}] No conveyor API available, falling back to localStorage`)
+    return createPluginStorage(pluginId)
+  }
+
+  const pluginApi = window.conveyor.plugin
+
+  return {
+    async get<T>(key: string): Promise<T | null> {
+      try {
+        const result = await pluginApi.getData<T>(pluginId, key)
+        if (result.success) {
+          return result.data ?? null
+        }
+        return null
+      } catch {
+        return null
+      }
+    },
+
+    async set<T>(key: string, value: T): Promise<void> {
+      try {
+        const result = await pluginApi.setData(pluginId, key, value)
+        if (!result.success) {
+          console.warn(`[Plugin:${pluginId}] Storage set failed: ${result.message}`)
+        }
+      } catch (error) {
+        console.error(`[Plugin:${pluginId}] Storage set error:`, error)
+      }
+    },
+
+    async delete(key: string): Promise<void> {
+      try {
+        await pluginApi.deleteData(pluginId, key)
+      } catch (error) {
+        console.error(`[Plugin:${pluginId}] Storage delete error:`, error)
+      }
+    },
+
+    async clear(): Promise<void> {
+      try {
+        await pluginApi.clearData(pluginId)
+      } catch (error) {
+        console.error(`[Plugin:${pluginId}] Storage clear error:`, error)
+      }
+    },
+
+    async keys(): Promise<string[]> {
+      try {
+        const result = await pluginApi.getKeys(pluginId)
+        return result.success ? result.keys : []
+      } catch {
+        return []
+      }
+    },
+
+    async has(key: string): Promise<boolean> {
+      const value = await this.get(key)
+      return value !== null
+    },
+  }
+}
+
+// ============================================================================
 // Logger Factory
 // ============================================================================
 
@@ -191,6 +277,14 @@ export function createPluginAPI(
     getBranches: async () => {
       if (!checkPermission('git:read')) return []
       return deps.getBranches()
+    },
+    getWorktrees: async () => {
+      if (!checkPermission('git:read')) return []
+      return deps.getWorktrees()
+    },
+    getPullRequests: async () => {
+      if (!checkPermission('git:read')) return []
+      return deps.getPullRequests()
     },
     getCommits: async () => {
       if (!checkPermission('git:read')) return []
@@ -296,6 +390,8 @@ function createStubAPI(): PluginAPI {
     getRepoPath: () => null,
     getCurrentBranch: async () => '',
     getBranches: async () => [],
+    getWorktrees: async () => [],
+    getPullRequests: async () => [],
     getCommits: async () => [],
     getWorkingStatus: async () => null,
     git: async () => '',

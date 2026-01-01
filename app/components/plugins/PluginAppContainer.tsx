@@ -239,6 +239,8 @@ function buildContextDependencies(): PluginContextDependencies {
     getRepoPath: () => useRepositoryStore.getState().repoPath,
     getCurrentBranch: () => useRepositoryStore.getState().currentBranch,
     getBranches: () => useRepositoryStore.getState().branches,
+    getWorktrees: () => useRepositoryStore.getState().worktrees,
+    getPullRequests: () => useRepositoryStore.getState().pullRequests,
     getCommits: () => useRepositoryStore.getState().commits,
     getWorkingStatus: () => useRepositoryStore.getState().workingStatus,
     setStatus: (status) => useRepositoryStore.getState().setStatus(status),
@@ -255,6 +257,19 @@ function buildContextDependencies(): PluginContextDependencies {
         const branches = await window.conveyor.branch.getBranches()
         useRepositoryStore.getState().setBranches(branches)
         return branches
+      },
+      getWorktrees: async () => {
+        const worktrees = await window.conveyor.worktree.getWorktrees()
+        useRepositoryStore.getState().setWorktrees(worktrees)
+        return worktrees
+      },
+      getPullRequests: async () => {
+        const result = await window.conveyor.pr.getPullRequests()
+        if (!result.error) {
+          useRepositoryStore.getState().setPullRequests(result.prs)
+          return result.prs
+        }
+        return []
       },
       getCommitHistory: async () => {
         const commits = await window.conveyor.commit.getCommitHistory()
