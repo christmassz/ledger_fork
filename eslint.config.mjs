@@ -17,6 +17,7 @@ export default [
       '.eslintrc',
       '.prettierrc',
       'test-results/**',
+      'scripts/**/*.js',
     ],
   },
   eslint.configs.recommended,

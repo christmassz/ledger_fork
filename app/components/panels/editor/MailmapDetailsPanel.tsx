@@ -172,7 +172,7 @@ export function MailmapDetailsPanel({
       const targetK = targetKey
       
       // Remove dragged from any existing merge (as canonical or alias)
-      let updated = prev.map(m => {
+      const updated = prev.map(m => {
         if (identityKey(m.canonical) === draggedK) {
           // Dragged was a canonical - dissolve this merge, aliases go back to available
           return null

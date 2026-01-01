@@ -209,9 +209,9 @@ test.describe('Ledger App - Main View', () => {
     // Verify git graph is present in Focus mode
     await expect(page.locator('.canvas-column[data-panel="git-graph"]')).toBeVisible()
     
-    // Verify sidebar sections are present (5 sections: PRs, Branches, Remotes, Worktrees, Stashes)
+    // Verify sidebar sections are present (6 sections: PRs, Branches, Remotes, Worktrees, Stashes, Repos)
     const sidebarSections = page.locator('.sidebar-section')
-    await expect(sidebarSections).toHaveCount(5)
+    await expect(sidebarSections).toHaveCount(6)
   })
 
   test('can switch back to Radar Mode', async () => {

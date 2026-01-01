@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import type { ContributorStats, ContributorTimeSeries } from '../../../types/electron'
+import type { ContributorStats } from '../../../types/electron'
 
 export interface ContributorChartProps {
   /** Number of top contributors to display */

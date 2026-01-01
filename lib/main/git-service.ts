@@ -2436,7 +2436,7 @@ function clusterAuthors(
       groupKey = normalizedEmail
     } else {
       // Check if email prefix matches an existing group's prefix
-      for (const [key, group] of emailGroups) {
+      for (const [key, _group] of emailGroups) {
         const existingPrefix = key.split('@')[0].replace(/[._-]/g, '').toLowerCase()
         if (emailPrefix === existingPrefix && emailPrefix.length >= 3) {
           groupKey = key
@@ -2482,7 +2482,7 @@ function clusterAuthors(
     
     // Check if this name matches an existing merged group
     let merged = false
-    for (const [mergedKey, mergedGroup] of mergedGroups) {
+    for (const [_mergedKey, mergedGroup] of mergedGroups) {
       let mergedMostCommonName = ''
       let mergedMaxCount = 0
       for (const [name, count] of mergedGroup.names) {
