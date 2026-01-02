@@ -267,13 +267,17 @@ function getContextDependencies(): PluginContextDependencies {
     getOpenPanels: () => usePluginStore.getState().openPanels,
     setActiveApp: (appId) => usePluginStore.getState().setActiveApp(appId),
 
-    // IPC functions for refresh
+    // IPC functions for fetching fresh data
+    // These update the store AND return the data for immediate use
     ipc: {
       getBranches: async () => {
         const result = await window.conveyor.branch.getBranches()
         // Result is { current, branches } - extract the branches array
         const branches = result.branches || []
         useRepositoryStore.getState().setBranches(branches)
+        if (result.current) {
+          useRepositoryStore.getState().setCurrentBranch(result.current)
+        }
         return branches
       },
       getWorktrees: async () => {
@@ -289,8 +293,8 @@ function getContextDependencies(): PluginContextDependencies {
         }
         return []
       },
-      getCommitHistory: async () => {
-        const commits = await window.conveyor.commit.getCommitHistory()
+      getCommitHistory: async (limit?: number) => {
+        const commits = await window.conveyor.commit.getCommitHistory(undefined, limit)
         useRepositoryStore.getState().setCommits(commits)
         return commits
       },
@@ -308,8 +312,20 @@ function getContextDependencies(): PluginContextDependencies {
 /**
  * Cache of plugin contexts by ID.
  * Since deps are cached, we can also cache the resulting contexts.
+ * Cache is cleared when plugins are deactivated to ensure fresh contexts.
  */
 const pluginContextCache = new Map<string, PluginContext>()
+
+// Subscribe to plugin deactivation events to clear cached contexts
+// This ensures plugins get fresh contexts when reactivated
+if (typeof window !== 'undefined') {
+  pluginManager.on('deactivated', (event) => {
+    pluginContextCache.delete(event.pluginId)
+  })
+  pluginManager.on('unregistered', (event) => {
+    pluginContextCache.delete(event.pluginId)
+  })
+}
 
 /**
  * Create a plugin context with full API access.
@@ -324,6 +340,22 @@ function createFullPluginContext(pluginId: string): PluginContext {
   context = createPluginContext(pluginId, deps)
   pluginContextCache.set(pluginId, context)
   return context
+}
+
+/**
+ * Clear a plugin's cached context.
+ * Call this when a plugin is deactivated to ensure it gets a fresh context on reactivation.
+ */
+export function clearPluginContextCache(pluginId: string): void {
+  pluginContextCache.delete(pluginId)
+}
+
+/**
+ * Clear all cached plugin contexts.
+ * Useful when switching repositories or during cleanup.
+ */
+export function clearAllPluginContextCaches(): void {
+  pluginContextCache.clear()
 }
 
 function PluginLoadingState() {

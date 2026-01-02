@@ -37,8 +37,8 @@ export const registerWorktreeHandlers = () => {
   handle('convert-worktree-to-branch', async (worktreePath: string) => {
     try {
       return await convertWorktreeToBranch(worktreePath)
-    } catch (_error) {
-      return null
+    } catch (error) {
+      return { success: false, message: serializeError(error) }
     }
   })
 

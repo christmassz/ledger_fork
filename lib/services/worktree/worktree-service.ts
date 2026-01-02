@@ -623,6 +623,17 @@ export async function createWorktree(
       return { success: false, message: 'Folder path is required' }
     }
 
+    // Security: Validate path doesn't contain traversal attempts
+    const resolvedPath = path.resolve(folderPath)
+    if (folderPath.includes('..') || resolvedPath !== path.normalize(folderPath)) {
+      return { success: false, message: 'Invalid folder path: path traversal not allowed' }
+    }
+
+    // Security: Ensure path is absolute to prevent relative path attacks
+    if (!path.isAbsolute(folderPath)) {
+      return { success: false, message: 'Folder path must be absolute' }
+    }
+
     // Check if folder already exists
     if (fs.existsSync(folderPath)) {
       return { success: false, message: `Folder already exists: ${folderPath}` }

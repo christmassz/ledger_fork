@@ -5,7 +5,7 @@
  * Renders appropriate inputs based on setting type.
  */
 
-import { useState, useMemo, useCallback, useEffect } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { Save, RotateCcw, AlertCircle, Check, Shield, ShieldOff, ShieldAlert } from 'lucide-react'
 import type { Plugin, PluginSetting, PluginPermission } from '@/lib/plugins/plugin-types'
 import { pluginSettingsStore } from '@/lib/plugins/plugin-settings-store'
@@ -49,6 +49,18 @@ export function PluginConfigEditor({ plugin, onClose }: PluginConfigEditorProps)
 
   const [values, setValues] = useState<Record<string, SettingValue>>(initialValues)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+
+  // Ref to track save status timeout for cleanup
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+      }
+    }
+  }, [])
 
   const hasChanges = useMemo(() => {
     return Object.values(values).some((v) => v.dirty)
@@ -101,7 +113,9 @@ export function PluginConfigEditor({ plugin, onClose }: PluginConfigEditorProps)
       })
 
       setSaveStatus('saved')
-      setTimeout(() => setSaveStatus('idle'), 2000)
+      // Clear any pending timeout and set new one (with cleanup tracking)
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
+      saveTimeoutRef.current = setTimeout(() => setSaveStatus('idle'), 2000)
     } catch (error) {
       console.error('[PluginConfig] Save failed:', error)
       setSaveStatus('error')

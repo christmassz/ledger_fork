@@ -275,13 +275,19 @@ export const registerRepoHandlers = () => {
     }
 
     // Use gh CLI to validate the repo exists and get info
+    // Uses safeExec to prevent command injection from owner/repo values
     try {
-      const result = execSync(
-        `gh api repos/${owner}/${repo} --jq '{default_branch: .default_branch, html_url: .html_url}'`,
-        { encoding: 'utf-8', timeout: 30000 }
+      const apiResult = await safeExec(
+        'gh',
+        ['api', `repos/${owner}/${repo}`, '--jq', '{default_branch: .default_branch, html_url: .html_url}'],
+        { timeout: 30000 }
       )
 
-      const repoInfo = JSON.parse(result.trim())
+      if (!apiResult.success) {
+        throw new Error(apiResult.stderr || 'Failed to fetch repository info')
+      }
+
+      const repoInfo = JSON.parse(apiResult.stdout.trim())
 
       // Create remote repository context
       const context = createRemoteRepositoryContext(owner, repo, repoInfo)
