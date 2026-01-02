@@ -335,7 +335,7 @@ export async function installPlugin(
 
       case 'npm': {
         // Install from npm
-        const result = await execAsync(`npm pack ${source.location} --pack-destination "${getPluginsDirectory()}"`)
+        await execAsync(`npm pack ${source.location} --pack-destination "${getPluginsDirectory()}"`)
         // Would need to unpack - simplified
         return { success: false, message: 'NPM installation not fully implemented' }
       }

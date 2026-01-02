@@ -1,16 +1,20 @@
-import { BrowserWindow, shell, app } from 'electron'
+import { BrowserWindow, shell, app, nativeImage } from 'electron'
 import { join } from 'path'
 import appIcon from '@/resources/build/icon.png?asset'
 import { registerWindowHandlers } from '@/lib/conveyor/handlers/window-handler'
 
 export function createAppWindow(): void {
+  // Set dock icon for macOS (works in dev mode)
+  if (process.platform === 'darwin') {
+    app.dock.setIcon(nativeImage.createFromPath(appIcon))
+  }
 
   // Create the main window.
   const mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
-    minWidth: 900,
-    minHeight: 600,
+    minWidth: 320,
+    minHeight: 400,
     show: false,
     backgroundColor: '#FFFFFF',
     icon: appIcon,

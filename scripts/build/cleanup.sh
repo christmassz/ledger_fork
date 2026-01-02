@@ -145,7 +145,7 @@ safe_delete() {
     local dir="$1"
     local description="$2"
 
-    # Safety check: ensure path is not empty
+    # Saety check: ensure path is not empty
     if [ -z "$dir" ]; then
         log_error "Cannot delete: path is empty"
         return 1

@@ -22,8 +22,23 @@ export default defineConfig({
     resolve: {
       alias: aliases,
     },
-    // Exclude ESM-only packages from externalization so they get bundled properly
-    plugins: [externalizeDepsPlugin({ exclude: ['fix-path', 'shell-path', 'strip-ansi'] })],
+    // Bundle all deps into main.js to avoid shipping node_modules in the asar
+    // Only electron and node built-ins remain external
+    plugins: [
+      externalizeDepsPlugin({
+        exclude: [
+          'fix-path',
+          'shell-path',
+          'strip-ansi',
+          'simple-git',
+          '@electron-toolkit/utils',
+          '@kwsites/file-exists',
+          '@kwsites/promise-deferred',
+          'debug',
+          'ms',
+        ],
+      }),
+    ],
   },
   preload: {
     build: {
@@ -36,7 +51,12 @@ export default defineConfig({
     resolve: {
       alias: aliases,
     },
-    plugins: [externalizeDepsPlugin()],
+    // Bundle preload deps as well
+    plugins: [
+      externalizeDepsPlugin({
+        exclude: ['@electron-toolkit/preload'],
+      }),
+    ],
   },
   renderer: {
     root: './app',

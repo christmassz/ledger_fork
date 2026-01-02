@@ -2,18 +2,42 @@ appId: com.peterjthomson.ledger
 productName: Ledger
 directories:
   buildResources: resources/build
+# Remove unused locale files after packaging (~40MB savings)
+afterPack: ./scripts/build/afterPack.js
 files:
+  # Include only the compiled output and essential resources
+  - out/**/*
+  - resources/build/**/*
+  - resources/themes/**/*
+  - package.json
+  # Explicitly exclude unused icons
+  - '!resources/icons{,/**/*}'
+  # Exclude everything else explicitly
   - '!**/.vscode/*'
-  - '!src/*'
+  - '!**/.cursor/*'
+  - '!**/.claude/*'
+  - '!app{,/**/*}'
+  - '!lib{,/**/*}'
+  - '!src{,/**/*}'
+  - '!wip{,/**/*}'
+  - '!dist{,/**/*}'
+  - '!docs{,/**/*}'
+  - '!tests{,/**/*}'
+  - '!test-results{,/**/*}'
+  - '!scripts{,/**/*}'
+  - '!node_modules{,/**/*}'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
-  - '!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
-  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
+  - '!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,.prettierrc,dev-app-update.yml}'
+  - '!{CHANGELOG.md,README.md,AGENTS.md,CLAUDE.md,CONTRIBUTING.md,LICENSE}'
+  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml,package-lock.json}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!{components.json,playwright.config.ts,eslint.config.mjs}'
 asarUnpack:
-  - resources/**
+  - resources/build/**
 extraResources:
   - from: resources/themes
     to: themes
+  # Note: resources/icons/ is intentionally excluded (unused)
 win:
   executableName: Ledger
 nsis:
@@ -43,7 +67,8 @@ mac:
   extendInfo:
     - NSDocumentsFolderUsageDescription: Ledger needs access to read git repositories.
     - NSDownloadsFolderUsageDescription: Ledger needs access to read git repositories.
-  notarize: true
+  # Skip flakey in-process notarization, use dedicated CLI tool to allow for better monitoring
+  notarize: false
 dmg:
   artifactName: ${productName}-${version}-${arch}.${ext}
   title: ${productName}
@@ -57,6 +82,7 @@ appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
 publish:
+  # Skip suto publishing to GitHub and upload manually once notarization is complete.
   provider: github
   owner: peterjthomson
   repo: ledger

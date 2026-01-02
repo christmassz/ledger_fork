@@ -69,7 +69,7 @@ export function PluginComponentProvider({ children }: PluginComponentProviderPro
     (id: string, type: PluginComponentType, component: ComponentRegistration['component']) => {
       registry.set(id, { type, component })
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
     []
   )
 
@@ -77,7 +77,7 @@ export function PluginComponentProvider({ children }: PluginComponentProviderPro
     (id: string) => {
       registry.delete(id)
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
     []
   )
 
@@ -85,7 +85,7 @@ export function PluginComponentProvider({ children }: PluginComponentProviderPro
     (id: string): ComponentRegistration | null => {
       return registry.get(id) ?? null
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
     []
   )
 
@@ -97,7 +97,7 @@ export function PluginComponentProvider({ children }: PluginComponentProviderPro
       }
       return null
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
     []
   )
 
@@ -109,7 +109,7 @@ export function PluginComponentProvider({ children }: PluginComponentProviderPro
       }
       return null
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
     []
   )
 
@@ -121,7 +121,7 @@ export function PluginComponentProvider({ children }: PluginComponentProviderPro
       }
       return null
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
     []
   )
 
@@ -136,7 +136,7 @@ export function PluginComponentProvider({ children }: PluginComponentProviderPro
       getPanelComponent,
       getWidgetComponent,
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
     []
   )
 

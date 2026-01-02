@@ -1,12 +1,15 @@
 {
   "name": "ledger",
-  "version": "0.1.1",
+  "version": "1.2.4",
   "description": "A modern git interface for macOS - view branches, worktrees, and pull requests",
   "main": "./out/main/main.js",
   "license": "MIT",
   "author": {
     "name": "Peter Thomson",
     "url": "https://github.com/peterjthomson"
+  },
+  "engines": {
+    "node": ">=20.19.0"
   },
   "scripts": {
     "dev": "cross-env ELECTRON_DISABLE_SANDBOX=1 electron-vite dev -w",
@@ -25,7 +28,7 @@
     "build:unpack": "run-s vite:build:app electron:build:dir",
     "build:win": "run-s vite:build:app electron:build:win",
     "build:mac": "run-s vite:build:app electron:build:mac && xattr -cr dist/mac-*/Ledger.app",
-    "build:mac:arm64": "run-s vite:build:app electron:build:mac:arm64 && xattr -cr dist/mac-arm64/Ledger.app",
+    "build:mac:arm64": "run-s vite:build:app electron:build:mac:arm64 && ./scripts/check-app-size.sh && xattr -cr dist/mac-arm64/Ledger.app",
     "build:mac:x64": "run-s vite:build:app electron:build:mac:x64 && xattr -cr dist/mac-x64/Ledger.app",
     "build:mac:universal": "run-s vite:build:app electron:build:mac:universal && xattr -cr dist/mac-universal/Ledger.app",
     "build:linux": "run-s vite:build:app electron:build:linux",
@@ -55,19 +58,19 @@
     "lucide-react": "^0.541.0",
     "simple-git": "^3.30.0",
     "tailwind-merge": "^3.3.1",
-    "zustand": "^5.0.2",
-    "uuid": "^11.1.0",
     "tw-animate-css": "^1.3.7",
-    "zod": "^4.1.3"
+    "uuid": "^11.1.0",
+    "zod": "^4.1.3",
+    "zustand": "^5.0.2"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config-prettier": "^3.0.0",
     "@electron-toolkit/tsconfig": "^1.0.1",
     "@eslint/js": "^9.34.0",
-    "@types/better-sqlite3": "^7.6.12",
     "@playwright/test": "^1.57.0",
     "@rushstack/eslint-patch": "^1.12.0",
     "@tailwindcss/vite": "^4.1.12",
+    "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^24.3.0",
     "@types/react": "^19.1.11",
     "@types/react-dom": "^19.1.8",

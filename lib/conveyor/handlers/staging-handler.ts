@@ -13,7 +13,7 @@ export const registerStagingHandlers = () => {
   handle('get-staging-status', async () => {
     try {
       return await getWorkingStatus()
-    } catch (error) {
+    } catch (_error) {
       return null
     }
   })

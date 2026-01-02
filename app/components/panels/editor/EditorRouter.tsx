@@ -8,12 +8,14 @@
  * in the Canvas architecture.
  */
 
-import type { Branch, Worktree, StashEntry } from '../../../types/electron'
+import type { Branch, Worktree, StashEntry, RepoInfo } from '../../../types/electron'
 import type { StatusMessage, SidebarFocus } from '../../../types/app-types'
 import { BranchDetailPanel } from './BranchDetailPanel'
 import { WorktreeDetailPanel } from './WorktreeDetailPanel'
 import { StashDetailPanel } from './StashDetailPanel'
-import { CreateWorktreePanel } from './CreateWorktreePanel'
+import { WorktreeCreatePanel } from './WorktreeCreatePanel'
+import { MailmapDetailsPanel } from './MailmapDetailsPanel'
+import { RepoDetailPanel } from './RepoDetailPanel'
 
 export interface EditorRouterProps {
   focus: SidebarFocus
@@ -21,16 +23,22 @@ export interface EditorRouterProps {
   formatDate: (date?: string) => string
   currentBranch: string
   switching?: boolean
+  deleting?: boolean
   onStatusChange?: (status: StatusMessage | null) => void
   onRefresh?: () => Promise<void>
   onClearFocus?: () => void
   onCheckoutBranch?: (branch: Branch) => void
   onCheckoutRemoteBranch?: (branch: Branch) => void
   onCheckoutWorktree?: (worktree: Worktree) => void
+  onDeleteBranch?: (branch: Branch) => void
+  onDeleteRemoteBranch?: (branch: Branch) => void
+  onOpenStaging?: () => void
   branches?: Branch[]
   repoPath?: string | null
   worktrees?: Worktree[]
   onFocusWorktree?: (worktree: Worktree) => void
+  onOpenRepo?: (repo: RepoInfo) => void
+  onOpenMailmap?: () => void
 }
 
 export function EditorRouter({
@@ -39,19 +47,25 @@ export function EditorRouter({
   formatDate,
   currentBranch,
   switching,
+  deleting,
   onStatusChange,
   onRefresh,
   onClearFocus,
   onCheckoutBranch,
   onCheckoutRemoteBranch,
   onCheckoutWorktree,
+  onDeleteBranch,
+  onDeleteRemoteBranch,
+  onOpenStaging,
   branches,
   repoPath,
   onFocusWorktree,
+  onOpenRepo,
+  onOpenMailmap,
 }: EditorRouterProps) {
   switch (focus.type) {
     case 'pr': {
-      // Handled by PRReviewPanel in parent - PR needs special handling
+      // Handled by PRDetailPanel in parent - PR needs special handling
       // because it's shown inline in the radar view
       return null
     }
@@ -64,7 +78,10 @@ export function EditorRouter({
           formatDate={formatDate}
           onStatusChange={onStatusChange}
           onCheckoutBranch={onCheckoutBranch}
+          onDeleteBranch={onDeleteBranch}
+          onOpenStaging={onOpenStaging}
           switching={switching}
+          deleting={deleting}
         />
       )
     }
@@ -72,6 +89,7 @@ export function EditorRouter({
     case 'remote': {
       const branch = focus.data as Branch
       const displayName = branch.name.replace('remotes/', '').replace(/^origin\//, '')
+      const isMainOrMaster = displayName === 'main' || displayName === 'master'
       return (
         <div className="sidebar-detail-panel">
           <div className="detail-type-badge">Remote Branch</div>
@@ -105,13 +123,18 @@ export function EditorRouter({
           {/* Actions */}
           <div className="detail-actions">
             {onCheckoutRemoteBranch && (
-              <button className="btn btn-primary" onClick={() => onCheckoutRemoteBranch(branch)} disabled={switching}>
+              <button className="btn btn-primary" onClick={() => onCheckoutRemoteBranch(branch)} disabled={switching || deleting}>
                 {switching ? 'Checking out...' : 'Checkout'}
               </button>
             )}
-            <button className="btn btn-secondary" onClick={() => window.conveyor.pr.openBranchInGitHub(branch.name)}>
+            <button className="btn btn-secondary" onClick={() => window.electronAPI.openBranchInGitHub(branch.name)} disabled={deleting}>
               View on GitHub
             </button>
+            {!isMainOrMaster && onDeleteRemoteBranch && (
+              <button className="btn btn-secondary btn-danger" onClick={() => onDeleteRemoteBranch(branch)} disabled={switching || deleting}>
+                {deleting ? 'Deleting...' : 'Delete Remote Branch'}
+              </button>
+            )}
           </div>
         </div>
       )
@@ -128,13 +151,14 @@ export function EditorRouter({
           onRefresh={onRefresh}
           onClearFocus={onClearFocus}
           onCheckoutWorktree={onCheckoutWorktree}
+          onOpenStaging={onOpenStaging}
         />
       )
     }
 
     case 'create-worktree': {
       return (
-        <CreateWorktreePanel
+        <WorktreeCreatePanel
           branches={branches || []}
           repoPath={repoPath || ''}
           onStatusChange={onStatusChange}
@@ -142,7 +166,7 @@ export function EditorRouter({
           onClearFocus={onClearFocus}
           onWorktreeCreated={onFocusWorktree ? (path) => {
             // Fetch fresh worktrees and find the new one
-            window.conveyor.worktree.getWorktrees().then((result) => {
+            window.electronAPI.getWorktrees().then((result) => {
               if (!('error' in result)) {
                 const newWorktree = result.find((wt) => wt.path === path)
                 if (newWorktree) {
@@ -164,6 +188,7 @@ export function EditorRouter({
       return (
         <StashDetailPanel
           stash={stash}
+          currentBranch={currentBranch}
           formatRelativeTime={formatRelativeTime}
           onStatusChange={onStatusChange}
           onRefresh={onRefresh}
@@ -174,8 +199,28 @@ export function EditorRouter({
 
     case 'uncommitted': {
       // Render the full staging panel
-      // This is handled by parent component which renders StagingPanel directly
+      // This is handled by parent component which renders CommitCreatePanel directly
       return null
+    }
+
+    case 'mailmap': {
+      return (
+        <MailmapDetailsPanel
+          onStatusChange={onStatusChange}
+        />
+      )
+    }
+
+    case 'repo': {
+      const repo = focus.data as RepoInfo
+      return (
+        <RepoDetailPanel
+          repo={repo}
+          onStatusChange={onStatusChange}
+          onOpenRepo={onOpenRepo}
+          onOpenMailmap={onOpenMailmap}
+        />
+      )
     }
 
     default:

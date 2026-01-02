@@ -101,7 +101,7 @@ show_help() {
     echo ""
     echo -e "${BOLD}Code Signing Options:${NC}"
     echo "  --cert=FILE       Path to .pfx certificate file"
-    echo "  --cert-pass=PASS  Certificate password (or use CSC_KEY_PASSWORD env var)"
+    echo "  --crt-pass=PASS  Certificate password (or use CSC_KEY_PASSWORD env var)"
     echo ""
     echo -e "${BOLD}Other Options:${NC}"
     echo "  --help, -h        Show this help message"

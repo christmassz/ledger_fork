@@ -22,8 +22,7 @@
 import { app } from 'electron'
 import path from 'path'
 import fs from 'fs'
-import Database from 'better-sqlite3'
-import type { Database as DatabaseType } from 'better-sqlite3'
+import Database, { type Database as DatabaseType } from 'better-sqlite3'
 import { getDb, isConnected } from './database'
 import type { PluginDataEntry } from './schema'
 

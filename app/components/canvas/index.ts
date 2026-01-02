@@ -1,0 +1,47 @@
+/**
+ * Canvas Components
+ *
+ * The Canvas architecture provides a flexible, customizable layout system:
+ * - Canvas: A named layout with an ordered array of columns
+ * - Column: A slot that renders a panel (list, editor, or viz)
+ * - EditorSlot: Special column that renders global editor state
+ *
+ * Built-in presets:
+ * - Radar: 5 list columns + hidden editor for dashboard view
+ * - Focus: sidebar + git-graph + editor for working view
+ * - Graph: git-graph only for full-width history
+ */
+
+// Context and state management
+export { CanvasProvider, useCanvas, RADAR_CANVAS, FOCUS_CANVAS, GRAPH_CANVAS, PRESET_CANVASES } from './CanvasContext'
+
+// Components
+export { Canvas } from './Canvas'
+export type { CanvasProps } from './Canvas'
+
+export { Column } from './Column'
+export type { ColumnProps } from './Column'
+
+export { ResizeHandle } from './ResizeHandle'
+export type { ResizeHandleProps } from './ResizeHandle'
+
+export { EditorSlot } from './EditorSlot'
+export type { EditorSlotProps } from './EditorSlot'
+
+// Canvas renderer
+export { CanvasRenderer } from './CanvasRenderer'
+export type {
+  CanvasRendererProps,
+  CanvasData,
+  CanvasSelection,
+  CanvasHandlers,
+  CanvasUIState,
+} from './CanvasRenderer'
+
+// Navigation hook
+export { useCanvasNavigation } from './useCanvasNavigation'
+export type { UseCanvasNavigationOptions, CanvasNavigationResult } from './useCanvasNavigation'
+
+// Persistence hook
+export { useCanvasPersistence } from './useCanvasPersistence'
+export type { UseCanvasPersistenceOptions } from './useCanvasPersistence'

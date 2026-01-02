@@ -9,8 +9,8 @@
 
 import { app } from 'electron'
 import path from 'path'
-import Database from 'better-sqlite3'
-import type { Database as DatabaseType } from 'better-sqlite3'
+import fs from 'fs'
+import Database, { type Database as DatabaseType } from 'better-sqlite3'
 import { runMigrations, getCurrentVersion } from './migrations'
 
 // ============================================================================
@@ -161,7 +161,6 @@ export function getFileSize(): number {
   if (!dbPath) return 0
 
   try {
-    const fs = require('fs')
     const stats = fs.statSync(dbPath)
     return stats.size
   } catch {
