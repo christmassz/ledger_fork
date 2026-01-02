@@ -36,7 +36,9 @@ export default defineConfig({
     resolve: {
       alias: aliases,
     },
-    plugins: [externalizeDepsPlugin()],
+    // Exclude @electron-toolkit/preload from externalization so it gets bundled                                                                                                                  
+    // This is required for ASAR packaging where node_modules aren't directly accessible                                                                                                          
+    plugins: [externalizeDepsPlugin({ exclude: ['@electron-toolkit/preload'] })], 
   },
   renderer: {
     root: './app',
