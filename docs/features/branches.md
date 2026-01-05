@@ -91,24 +91,42 @@ Fetches latest changes from remote:
 git fetch origin branch-name
 ```
 
+## Branch Detail Panel
+
+When you select a branch in Focus mode, the detail panel shows branch metadata and diff views.
+
+### Diff View Tabs
+
+| Tab | Description |
+|-----|-------------|
+| **PR Preview** | What the branch would contribute if merged (simulated merge) |
+| **Branch Diff** | Current difference between master HEAD and branch HEAD |
+| **Branch Changes** | All changes made since branch was forked from master |
+
+**PR Preview** is the default and most useful view — it answers "does this branch have anything unique to contribute?" by simulating a merge without actually merging. See [Opinionated Git](../opinionated-git.md#pr-preview-virtual-merge) for details.
+
+### Conflict Indicator
+
+If PR Preview detects merge conflicts, it shows:
+- ⚠️ badge with count of conflicting files
+- Tooltip with file names
+- Non-conflicting changes are still displayed
+
+### Actions
+
+| Action | Description |
+|--------|-------------|
+| **Checkout** | Switch to this branch (with auto-stash) |
+| **Push to Origin** | Push current branch to remote |
+| **Create Pull Request** | Open PR creation form |
+| **View on GitHub** | Open branch on GitHub |
+
 ## Data Model
 
-```typescript
-interface Branch {
-  name: string;           // "feature/auth"
-  current: boolean;       // true if HEAD
-  commit: string;         // "a1b2c3d..."
-  label: string;          // Display label
-  isRemote: boolean;      // Starts with "remotes/"
-  
-  // Extended metadata (computed)
-  lastCommitDate?: string;   // "2024-12-26T10:30:00Z"
-  firstCommitDate?: string;  // "2024-12-20T09:00:00Z"
-  commitCount?: number;      // 15
-  isLocalOnly?: boolean;     // Not on remote
-  isMerged?: boolean;        // Merged into main
-}
-```
+Canonical types live in `app/types/electron.d.ts` (renderer-facing API contract):
+
+- `Branch`
+- `BranchesResult`
 
 ## Git Commands Used
 
@@ -121,6 +139,9 @@ interface Branch {
 | Checkout local | `git checkout <branch>` |
 | Checkout remote | `git checkout -b <local> <remote>` |
 | Stash changes | `git stash push -m "message"` |
+| PR Preview (merge sim) | `git merge-tree --write-tree master branch` |
+| Branch Diff | `git diff master..branch` |
+| Branch Changes | `git diff master...branch` |
 
 ## UI Locations
 

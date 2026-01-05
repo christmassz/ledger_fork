@@ -9,6 +9,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { X, Settings2 } from 'lucide-react'
 import { usePluginStore } from '@/app/stores/plugin-store'
+import './repo-switcher.css'
 
 interface RepoInfo {
   id: string
@@ -50,7 +51,7 @@ export function RepoSwitcher({ currentPath, onRepoChange }: RepoSwitcherProps) {
   }, [loadRepos, currentPath])
 
   // Switch to a repo
-  const handleSwitch = useCallback(async (id: string, path: string) => {
+  const handleSwitch = useCallback(async (id: string, _path: string) => {
     if (switching) return
 
     const repo = repos.find(r => r.id === id)

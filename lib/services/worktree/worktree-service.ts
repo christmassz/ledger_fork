@@ -70,6 +70,17 @@ function detectAgent(worktreePath: string): WorktreeAgent {
     return 'claude'
   }
 
+  // Gemini CLI (gemini-wt) uses ~/.gemini/worktrees/{project}/
+  // Branches are typically named gemini-{timestamp} or custom names
+  if (worktreePath.includes('/.gemini/worktrees/') || worktreePath.includes('/gemini-worktrees/')) {
+    return 'gemini'
+  }
+
+  // Junie might use ~/.junie/worktrees/ or similar
+  if (worktreePath.includes('/.junie/worktrees/') || worktreePath.includes('/junie-worktrees/')) {
+    return 'junie'
+  }
+
   // Conductor - runs multiple Claude Code agents in parallel
   // Uses ~/conductor/workspaces/{repo-name}/{task-name}/ pattern
   if (worktreePath.includes('/conductor/workspaces/')) {
@@ -162,7 +173,7 @@ async function getWorktreeCommitMessage(worktreePath: string): Promise<string> {
 }
 
 /**
- * Get directory modification time
+ * Get directory modification time (used for sorting worktrees by creation order)
  */
 async function getDirectoryMtime(dirPath: string): Promise<string> {
   try {
@@ -174,17 +185,137 @@ async function getDirectoryMtime(dirPath: string): Promise<string> {
 }
 
 /**
- * Calculate activity status based on last modified time
+ * Get the most recent file modification time in a worktree
+ * Scans files recursively, respecting .gitignore patterns
+ * This detects activity even when agents make changes not yet tracked by git
  */
-function calculateActivityStatus(lastModified: string): WorktreeActivityStatus {
-  const now = Date.now()
-  const modified = new Date(lastModified).getTime()
-  const diffMinutes = (now - modified) / (1000 * 60)
+async function getLastFileModifiedTime(worktreePath: string): Promise<string> {
+  try {
+    // Use git ls-files to get tracked files, then check their mtimes
+    const trackedResult = await safeExec('git', ['ls-files'], { cwd: worktreePath })
+    const trackedFiles = trackedResult.success ? trackedResult.stdout.split('\n').filter(Boolean) : []
 
-  if (diffMinutes < 5) return 'active' // Modified in last 5 minutes
-  if (diffMinutes < 60) return 'recent' // Modified in last hour
-  if (diffMinutes < 24 * 60) return 'stale' // Modified in last 24 hours
-  return 'unknown' // Older than 24 hours
+    // Get untracked files (respects .gitignore)
+    const untrackedResult = await safeExec('git', ['ls-files', '--others', '--exclude-standard'], { cwd: worktreePath })
+    const untrackedFiles = untrackedResult.success ? untrackedResult.stdout.split('\n').filter(Boolean) : []
+
+    const allFiles = [...trackedFiles, ...untrackedFiles]
+
+    let latestMtime = 0
+
+    // Check file mtimes in batches for efficiency
+    const batchSize = 50
+    for (let i = 0; i < allFiles.length; i += batchSize) {
+      const batch = allFiles.slice(i, i + batchSize)
+      const mtimePromises = batch.map(async (file) => {
+        try {
+          const fullPath = path.join(worktreePath, file)
+          const stat = await statAsync(fullPath)
+          return stat.mtime.getTime()
+        } catch {
+          return 0
+        }
+      })
+      const mtimes = await Promise.all(mtimePromises)
+      const maxInBatch = Math.max(...mtimes, 0)
+      if (maxInBatch > latestMtime) {
+        latestMtime = maxInBatch
+      }
+    }
+
+    return latestMtime > 0 ? new Date(latestMtime).toISOString() : new Date().toISOString()
+  } catch {
+    // Fallback to directory mtime
+    return getDirectoryMtime(worktreePath)
+  }
+}
+
+/**
+ * Get the last git activity time for a worktree
+ * Returns the more recent of: last commit time, or last change to working directory
+ */
+async function getLastGitActivity(worktreePath: string): Promise<string> {
+  try {
+    // Get last commit time
+    let lastCommitTime = 0
+    const commitResult = await safeExec('git', ['log', '-1', '--format=%ct'], { cwd: worktreePath })
+    if (commitResult.success) {
+      const timestamp = parseInt(commitResult.stdout.trim(), 10)
+      if (!isNaN(timestamp)) {
+        lastCommitTime = timestamp * 1000 // Convert to milliseconds
+      }
+    }
+
+    // Check for uncommitted changes and their modification times
+    let lastChangeTime = 0
+    const diffResult = await safeExec('git', ['diff', '--name-only'], { cwd: worktreePath })
+    const stagedResult = await safeExec('git', ['diff', '--staged', '--name-only'], { cwd: worktreePath })
+    const untrackedResult = await safeExec('git', ['ls-files', '--others', '--exclude-standard'], { cwd: worktreePath })
+
+    const changedFiles = [
+      ...(diffResult.success ? diffResult.stdout.split('\n').filter(Boolean) : []),
+      ...(stagedResult.success ? stagedResult.stdout.split('\n').filter(Boolean) : []),
+      ...(untrackedResult.success ? untrackedResult.stdout.split('\n').filter(Boolean) : []),
+    ]
+
+    // Get the most recent mtime of changed files
+    for (const file of changedFiles.slice(0, 20)) { // Limit to 20 files for perf
+      try {
+        const fullPath = path.join(worktreePath, file)
+        const stat = await statAsync(fullPath)
+        if (stat.mtime.getTime() > lastChangeTime) {
+          lastChangeTime = stat.mtime.getTime()
+        }
+      } catch {
+        // File might have been deleted
+      }
+    }
+
+    // Return the more recent of commit time or change time
+    const latestActivity = Math.max(lastCommitTime, lastChangeTime)
+    return latestActivity > 0 ? new Date(latestActivity).toISOString() : new Date().toISOString()
+  } catch {
+    return new Date().toISOString()
+  }
+}
+
+/**
+ * Calculate activity status based on both file and git activity
+ * Uses the more recent of the two signals
+ */
+function calculateActivityStatus(
+  lastFileModified: string,
+  lastGitActivity: string
+): { status: WorktreeActivityStatus; source: 'file' | 'git' | 'both' } {
+  const now = Date.now()
+  const fileModified = new Date(lastFileModified).getTime()
+  const gitActivity = new Date(lastGitActivity).getTime()
+
+  // Use the more recent activity
+  const moreRecent = Math.max(fileModified, gitActivity)
+  const diffMinutes = (now - moreRecent) / (1000 * 60)
+
+  // Determine which source is more recent
+  let source: 'file' | 'git' | 'both' = 'both'
+  const timeDiff = Math.abs(fileModified - gitActivity)
+  const significantDiff = 60 * 1000 // 1 minute threshold
+  
+  if (timeDiff > significantDiff) {
+    source = fileModified > gitActivity ? 'file' : 'git'
+  }
+
+  let status: WorktreeActivityStatus
+  if (diffMinutes < 5) {
+    status = 'active' // Modified in last 5 minutes
+  } else if (diffMinutes < 60) {
+    status = 'recent' // Modified in last hour
+  } else if (diffMinutes < 24 * 60) {
+    status = 'stale' // Modified in last 24 hours
+  } else {
+    status = 'unknown' // Older than 24 hours
+  }
+
+  return { status, source }
 }
 
 /**
@@ -346,17 +477,19 @@ export async function getEnhancedWorktrees(ctx: RepositoryContext): Promise<Enha
     const agent = detectAgent(wt.path)
 
     // Gather all metadata in parallel
-    const [diffStats, commitMessage, lastModified, agentTaskHint] = await Promise.all([
+    const [diffStats, commitMessage, lastModified, lastFileModified, lastGitActivity, agentTaskHint] = await Promise.all([
       getWorktreeDiffStats(wt.path),
       getWorktreeCommitMessage(wt.path),
       getDirectoryMtime(wt.path),
+      getLastFileModifiedTime(wt.path),
+      getLastGitActivity(wt.path),
       agent === 'cursor' ? getCursorAgentTaskHint(wt.path) :
       agent === 'claude' ? getClaudeCodeAgentTaskHint(wt.path) :
       Promise.resolve(null),
     ])
 
     const contextHint = getContextHint(wt.branch, diffStats.changedFiles, commitMessage)
-    const activityStatus = calculateActivityStatus(lastModified)
+    const { status: activityStatus, source: activitySource } = calculateActivityStatus(lastFileModified, lastGitActivity)
 
     return {
       ...wt,
@@ -369,6 +502,9 @@ export async function getEnhancedWorktrees(ctx: RepositoryContext): Promise<Enha
       deletions: diffStats.deletions,
       lastModified,
       activityStatus,
+      lastFileModified,
+      lastGitActivity,
+      activitySource,
       agentTaskHint,
     }
   })

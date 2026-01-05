@@ -11,3 +11,5 @@ docs/wip
 # Build artifacts WIP folder (for in-progress notarization)
 wip/
 tickets/
+# Ledger worktrees convention - worktrees created by Ledger
+.worktrees/

@@ -51,6 +51,8 @@ export const StashFileSchema = z.object({
 export const WorktreeAgentSchema = z.enum(['cursor', 'claude', 'conductor', 'gemini', 'junie', 'unknown', 'working-folder'])
 export const WorktreeActivityStatusSchema = z.enum(['active', 'recent', 'stale', 'unknown'])
 
+export const ActivitySourceSchema = z.enum(['file', 'git', 'both'])
+
 export const WorktreeSchema = z.object({
   path: z.string(),
   head: z.string(),
@@ -63,8 +65,14 @@ export const WorktreeSchema = z.object({
   changedFileCount: z.number(),
   additions: z.number(),
   deletions: z.number(),
-  lastModified: z.string(),
+  lastModified: z.string(), // Directory mtime (used for sorting worktrees by creation order)
   activityStatus: WorktreeActivityStatusSchema,
+  /** Most recent file modification time in worktree (filesystem level) */
+  lastFileModified: z.string(),
+  /** Last git activity: commit time or working directory change time */
+  lastGitActivity: z.string(),
+  /** Source of activity status: 'file' | 'git' | 'both' */
+  activitySource: ActivitySourceSchema,
   agentTaskHint: z.string().nullable(),
 })
 

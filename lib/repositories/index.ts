@@ -19,6 +19,7 @@
  * ```
  */
 
-export { RepositoryContext, RepositoryMetadata, RepositoryProvider, createRepositoryContext, detectProvider, getDefaultBranch, getRemoteUrl } from './repository-context'
+export type { RepositoryContext, RepositoryMetadata, RepositoryProvider, RepositoryType, RemoteRepoInfo } from './repository-context'
+export { createRepositoryContext, createRemoteRepositoryContext, parseGitHubRepo, detectProvider, getDefaultBranch, getRemoteUrl } from './repository-context'
 
 export { RepositoryManager, getRepositoryManager } from './repository-manager'

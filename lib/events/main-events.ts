@@ -5,8 +5,7 @@
  */
 
 import { BrowserWindow } from 'electron'
-import type { LedgerEvent } from './event-types'
-import { LEDGER_EVENT_CHANNEL } from './event-types'
+import { LEDGER_EVENT_CHANNEL, type LedgerEvent } from './event-types'
 
 /**
  * Emit an event to all renderer windows

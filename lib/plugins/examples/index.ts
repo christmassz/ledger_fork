@@ -59,7 +59,7 @@ export { autoFetchServicePlugin } from './auto-fetch-service'
 /** Slack Notifications - Git events to Slack */
 export { slackNotificationsPlugin } from './slack-notifications-service'
 
-// Legacy
+/** Commit Analyzer - Analysis and suggestions for commits */
 export { commitAnalyzerPlugin } from './commit-analyzer-plugin'
 
 // ============================================================================

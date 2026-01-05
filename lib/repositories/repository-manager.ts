@@ -1,3 +1,4 @@
+import * as path from 'path'
 import { RepositoryContext, RepositoryType, createRepositoryContext } from './repository-context'
 
 /**
@@ -12,7 +13,7 @@ import { RepositoryContext, RepositoryType, createRepositoryContext } from './re
  * Key design decisions:
  * 1. Singleton pattern ensures one source of truth
  * 2. Map-based storage for O(1) lookups by ID or path
- * 3. Active repo concept for backward compatibility with existing handlers
+ * 3. Active repo concept for single-repo operations
  * 4. Event-like callbacks for UI updates (future: proper events)
  * 5. LRU eviction policy to prevent unbounded memory growth
  *
@@ -20,7 +21,7 @@ import { RepositoryContext, RepositoryType, createRepositoryContext } from './re
  * - Each context has a unique ID that never changes
  * - switchEpoch increments on every repo change for stale detection
  * - onChange callbacks fire AFTER state is consistent
- * - Legacy state is always kept in sync with active context
+ * - Global state is always kept in sync with active context
  * - Max 12 repositories to prevent memory issues (LRU eviction)
  */
 
@@ -42,8 +43,8 @@ export class RepositoryManager {
   // Callbacks for state changes (simple event system)
   private onChangeCallbacks: Set<() => void> = new Set()
 
-  // Callback to sync legacy global state (injected from git-service)
-  private legacySyncCallback: ((path: string | null) => void) | null = null
+  // Callback to sync global state (injected from git-service)
+  private globalStateSyncCallback: ((path: string | null) => void) | null = null
 
   private constructor() {
     // Private constructor enforces singleton
@@ -66,18 +67,18 @@ export class RepositoryManager {
   }
 
   /**
-   * Set a callback to sync legacy global state
-   * This ensures git-service's global `git` and `repoPath` stay in sync
+   * Set a callback to sync global state
+   * This ensures git-service's module-level `git` and `repoPath` stay in sync
    */
-  setLegacySyncCallback(callback: (path: string | null) => void): void {
-    this.legacySyncCallback = callback
+  setGlobalStateSyncCallback(callback: (path: string | null) => void): void {
+    this.globalStateSyncCallback = callback
   }
 
-  private syncLegacyState(): void {
-    if (this.legacySyncCallback) {
+  private syncGlobalState(): void {
+    if (this.globalStateSyncCallback) {
       const active = this.getActive()
       // Only sync local repos (remote repos have null path)
-      this.legacySyncCallback(active?.path ?? null)
+      this.globalStateSyncCallback(active?.path ?? null)
     }
   }
 
@@ -169,7 +170,7 @@ export class RepositoryManager {
    *
    * SAFETY: When switching active repos:
    * - Epoch is incremented to invalidate stale operations
-   * - Legacy state is synced
+   * - Global state is synced
    * - onChange fires after state is consistent
    *
    * @param repoPath - Absolute path to the git repository
@@ -177,8 +178,11 @@ export class RepositoryManager {
    * @returns The repository context
    */
   async open(repoPath: string, makeActive: boolean = true): Promise<RepositoryContext> {
+    // Normalize path to handle trailing slashes, symlinks, etc.
+    const normalizedPath = path.resolve(repoPath)
+    
     // Check if already open
-    const existingId = this.pathIndex.get(repoPath)
+    const existingId = this.pathIndex.get(normalizedPath)
     if (existingId) {
       const existing = this.contexts.get(existingId)!
       existing.lastAccessed = new Date()
@@ -187,7 +191,7 @@ export class RepositoryManager {
         // SAFETY: Increment epoch when switching repos
         this._switchEpoch++
         this.activeId = existingId
-        this.syncLegacyState()
+        this.syncGlobalState()
         this.notifyChange()
       }
 
@@ -198,7 +202,24 @@ export class RepositoryManager {
     this.evictLRUIfNeeded()
 
     // Create new context
-    const context = await createRepositoryContext(repoPath)
+    const context = await createRepositoryContext(normalizedPath)
+
+    // Check again after creation - git may have resolved to a different root
+    // (e.g., if user opened a subdirectory of a repo)
+    if (context.path) {
+      const existingByActualPath = this.pathIndex.get(context.path)
+      if (existingByActualPath) {
+        const existing = this.contexts.get(existingByActualPath)!
+        existing.lastAccessed = new Date()
+        if (makeActive && this.activeId !== existingByActualPath) {
+          this._switchEpoch++
+          this.activeId = existingByActualPath
+          this.syncGlobalState()
+          this.notifyChange()
+        }
+        return existing
+      }
+    }
 
     // Store in maps
     this.contexts.set(context.id, context)
@@ -210,7 +231,7 @@ export class RepositoryManager {
       // SAFETY: Increment epoch when switching repos
       this._switchEpoch++
       this.activeId = context.id
-      this.syncLegacyState()
+      this.syncGlobalState()
     }
 
     this.notifyChange()
@@ -235,8 +256,7 @@ export class RepositoryManager {
   /**
    * Get the currently active repository context
    *
-   * This is the primary method handlers will use - it replaces
-   * the old `if (!git) return null` guard pattern.
+   * Returns null if no repository is currently active.
    */
   getActive(): RepositoryContext | null {
     if (!this.activeId) return null
@@ -260,7 +280,7 @@ export class RepositoryManager {
   /**
    * Switch to a different repository
    *
-   * SAFETY: Increments epoch, syncs legacy state, notifies listeners
+   * SAFETY: Increments epoch, syncs global state, notifies listeners
    *
    * @param id - The repository ID to switch to
    * @returns true if switched, false if ID not found
@@ -276,7 +296,7 @@ export class RepositoryManager {
       this.activeId = id
       const context = this.contexts.get(id)!
       context.lastAccessed = new Date()
-      this.syncLegacyState()
+      this.syncGlobalState()
       this.notifyChange()
     }
 
@@ -288,7 +308,7 @@ export class RepositoryManager {
    *
    * Removes it from the manager. If it was active, clears active.
    *
-   * SAFETY: If closing the active repo, increments epoch and syncs legacy state
+   * SAFETY: If closing the active repo, increments epoch and syncs global state
    *
    * @param id - The repository ID to close
    * @returns true if closed, false if ID not found
@@ -331,7 +351,7 @@ export class RepositoryManager {
         this.activeId = null
       }
 
-      this.syncLegacyState()
+      this.syncGlobalState()
     }
 
     this.notifyChange()
@@ -412,7 +432,7 @@ export class RepositoryManager {
         if (makeActive && this.activeId !== existingId) {
           this._switchEpoch++
           this.activeId = existingId
-          this.syncLegacyState()
+          this.syncGlobalState()
           this.notifyChange()
         }
 
@@ -432,7 +452,7 @@ export class RepositoryManager {
     if (makeActive) {
       this._switchEpoch++
       this.activeId = context.id
-      this.syncLegacyState()
+      this.syncGlobalState()
     }
 
     this.notifyChange()

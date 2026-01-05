@@ -417,4 +417,4 @@ main() {
 }
 
 # Run main function with all command-line arguments
-main "$@"
+main "$@" 

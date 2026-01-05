@@ -73,6 +73,109 @@ Commit normally
 
 ---
 
+## PR Preview (Virtual Merge)
+
+**The Problem:** You have a branch and want to know "is this branch still useful?" Standard git diffs are confusing:
+
+- `git diff master..branch` — Shows everything different between them, including noise from master moving forward
+- `git diff master...branch` — Shows all changes made on the branch, but some may be obsolete or already superseded
+
+Neither answers the real question: **"What would this branch actually contribute if merged right now?"**
+
+**Ledger's Solution:** PR Preview simulates a merge and shows only the unique contribution.
+
+```
+User views branch detail panel
+    ↓
+"PR Preview" tab (default)
+    ↓
+git merge-tree --write-tree master branch
+    ↓
+Diff the merge result against master
+    ↓
+✓ Shows exactly what a PR would contribute
+  (Same as GitHub's PR diff view)
+```
+
+**Three Diff Views:**
+
+| View | Git Equivalent | Use Case |
+|------|---------------|----------|
+| **PR Preview** | `merge-tree` + diff | "Is this branch still useful?" |
+| **Branch Diff** | `master..branch` (two-dot) | Raw current state comparison |
+| **Branch Changes** | `master...branch` (three-dot) | Historical view of work done |
+
+**Conflict Detection:** If the branch has merge conflicts with master, PR Preview shows:
+- ⚠️ badge with conflict count
+- Tooltip listing conflicting files
+- Still shows the non-conflicting diffs
+
+**Why this matters:**
+- Stale branches that were forked ages ago often show huge diffs vs master
+- After master moves forward, it's hard to tell if the branch has unique value
+- PR Preview cuts through the noise to show exactly what matters
+
+**Implementation:** `getBranchMergePreview()` in `git-service.ts`
+
+---
+
+## Leapfrog Stash Apply
+
+**The Problem:** Git's `stash apply` only works on your current branch. If you stashed changes on branch A but you're now on branch B, you have to checkout A first - which risks conflicts with your current work.
+
+```
+error: Your local changes would be overwritten by checkout.
+Please commit your changes or stash them before you switch branches.
+```
+
+**Ledger's Solution:** Apply a stash directly to its original branch without switching, using worktrees:
+
+```
+You're on: feature/new-thing
+Stash was from: feature/old-thing
+
+Standard git:  checkout old → apply → checkout new (risky!)
+Ledger:        "Apply to feature/old-thing" (via worktree)
+```
+
+**How it works:**
+
+| Scenario | What Ledger Does |
+|----------|------------------|
+| Target branch has an **existing worktree** | Apply stash directly to that worktree. Changes remain uncommitted. |
+| Target branch has **no worktree** | Create temp worktree → apply stash → auto-commit → clean up |
+
+**The Flow:**
+
+```
+User clicks "Apply to feature/old-thing"
+    ↓
+Does feature/old-thing have a worktree?
+    ↓ Yes                              ↓ No
+Apply stash there               Create temp worktree at
+(uncommitted)                   .git/ledger-temp-worktrees/
+    ↓                                  ↓
+Done!                           Apply stash
+                                       ↓
+                                Auto-commit: "Apply stash: <message>"
+                                       ↓
+                                Remove temp worktree
+                                       ↓
+                                Done!
+```
+
+**Benefits:**
+- Never lose your current context
+- Safe - no risk of conflicts blocking your checkout
+- Changes are either uncommitted (existing worktree) or auto-committed (temp worktree)
+- Temp worktrees are automatically cleaned up
+
+**This is "parallel git":** Worktrees let you work on multiple branches simultaneously. Ledger extends this to operations like stash apply that git normally requires branch switching for.
+
+**Implementation:** `applyStashToBranch()` in `git-service.ts`
+
+---
+
 ## Future Opinions
 
 Things we might handle automatically in the future:

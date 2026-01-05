@@ -429,7 +429,7 @@ function renderInput(
         </select>
       )
 
-    case 'multiselect':
+    case 'multiselect': {
       const selectedValues = (value as unknown[]) ?? []
       return (
         <div className="plugin-config-multiselect">
@@ -451,6 +451,7 @@ function renderInput(
           ))}
         </div>
       )
+    }
 
     case 'color':
       return (

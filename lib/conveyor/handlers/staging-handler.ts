@@ -7,8 +7,9 @@ import {
   discardFileChanges,
   getFileDiff,
   getWorkingStatus,
+  getBehindMainCount,
 } from '@/lib/main/git-service'
-import { serializeError, logHandlerError } from '@/lib/utils/error-helpers'
+import { serializeError } from '@/lib/utils/error-helpers'
 
 export const registerStagingHandlers = () => {
   handle('get-staging-status', async () => {
@@ -70,6 +71,14 @@ export const registerStagingHandlers = () => {
   handle('get-file-diff', async (filePath: string, staged: boolean) => {
     try {
       return await getFileDiff(filePath, staged)
+    } catch (_error) {
+      return null
+    }
+  })
+
+  handle('get-behind-main-count', async () => {
+    try {
+      return await getBehindMainCount()
     } catch (_error) {
       return null
     }

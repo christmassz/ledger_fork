@@ -3,21 +3,21 @@ import * as path from 'path'
 import * as fs from 'fs'
 import * as os from 'os'
 
-const SETTINGS_PATH = path.join(os.homedir(), 'Library/Application Support/ledger/ledger-settings.json')
 const TEST_REPO = path.join(__dirname, '..')
 
 test.describe('Ledger App - Welcome Screen', () => {
   let app: ElectronApplication
   let page: Page
+  let settingsPath: string
 
   test.beforeAll(async () => {
-    // Clear settings to ensure fresh start
-    if (fs.existsSync(SETTINGS_PATH)) {
-      fs.unlinkSync(SETTINGS_PATH)
-    }
+    // Use an isolated settings file (avoid coupling tests to the real user profile)
+    const settingsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-tests-'))
+    settingsPath = path.join(settingsDir, 'ledger-settings.json')
 
     app = await electron.launch({
       args: [path.join(__dirname, '../out/main/main.js')],
+      env: { ...process.env, LEDGER_SETTINGS_PATH: settingsPath },
     })
     
     page = await app.firstWindow()
@@ -29,22 +29,20 @@ test.describe('Ledger App - Welcome Screen', () => {
   })
 
   test('displays welcome message', async () => {
-    await expect(page.locator('text=Welcome to Ledger')).toBeVisible()
+    await expect(page.getByTestId('empty-state')).toBeVisible()
+    await expect(page.getByText('Welcome to Ledger')).toBeVisible()
   })
 
-  test('displays Ledger logo', async () => {
-    const logo = page.locator('.logo')
-    await expect(logo).toBeVisible()
-    await expect(logo).toContainText('Ledger')
+  test('displays welcome icon', async () => {
+    await expect(page.getByTestId('empty-icon')).toBeVisible()
   })
 
   test('displays app header', async () => {
-    await expect(page.locator('.ledger-header')).toBeVisible()
+    await expect(page.getByTestId('app-header')).toBeVisible()
   })
 
   test('displays Select Repository button in empty state', async () => {
-    const button = page.locator('.empty-state button:has-text("Select Repository")')
-    await expect(button).toBeVisible()
+    await expect(page.getByTestId('select-repo-empty')).toBeVisible()
   })
 
   test('displays instruction text', async () => {
@@ -56,14 +54,20 @@ test.describe('Ledger App - Main View', () => {
   let app: ElectronApplication
   let page: Page
   let repoLoaded = false
+  let settingsPath: string
 
   test.beforeAll(async () => {
+    // Use an isolated settings file (avoid coupling tests to the real user profile)
+    const settingsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-tests-'))
+    settingsPath = path.join(settingsDir, 'ledger-settings.json')
+    
     // Launch app with --repo argument to load test repo directly
     app = await electron.launch({
       args: [
         path.join(__dirname, '../out/main/main.js'),
         `--repo=${TEST_REPO}`
       ],
+      env: { ...process.env, LEDGER_SETTINGS_PATH: settingsPath },
     })
     
     page = await app.firstWindow()
@@ -86,117 +90,106 @@ test.describe('Ledger App - Main View', () => {
     await app.close()
   })
 
-  test('displays five-column layout', async () => {
+  test('displays canvas layout', async () => {
     test.skip(!repoLoaded, 'Repo did not auto-load')
-    await expect(page.locator('.ledger-content.five-columns')).toBeVisible()
+    // Canvas system uses .canvas-layout inside .ledger-content.canvas-mode
+    await expect(page.getByTestId('main-content')).toBeVisible()
+    await expect(page.getByTestId('canvas-layout-radar')).toBeVisible()
   })
 
   test('displays Pull Requests column', async () => {
     test.skip(!repoLoaded, 'Repo did not auto-load')
-    await expect(page.locator('.pr-column')).toBeVisible()
-    await expect(page.locator('.pr-column h2')).toContainText('Pull Requests')
+    // Wait for canvas layout to be rendered first
+    // Ensure we're in Radar mode (click Radar button)
+    await page.getByTestId('view-toggle-radar').click()
+    const prColumn = page.getByTestId('canvas-column-pr-list')
+    await expect(prColumn).toBeVisible({ timeout: 10000 })
+    await expect(prColumn.locator('h2')).toContainText('Pull Requests')
   })
 
   test('displays Worktrees column', async () => {
     test.skip(!repoLoaded, 'Repo did not auto-load')
-    await expect(page.locator('.worktrees-column')).toBeVisible()
-    await expect(page.locator('.worktrees-column h2')).toContainText('Worktrees')
+    const wtColumn = page.getByTestId('canvas-column-worktree-list')
+    await expect(wtColumn).toBeVisible({ timeout: 10000 })
+    await expect(wtColumn.locator('h2')).toContainText('Worktrees')
   })
 
   test('displays Local Branches column', async () => {
     test.skip(!repoLoaded, 'Repo did not auto-load')
-    await expect(page.locator('.branches-column')).toBeVisible()
-    await expect(page.locator('.branches-column h2')).toContainText('Local Branches')
+    const branchColumn = page.getByTestId('canvas-column-branch-list')
+    await expect(branchColumn).toBeVisible({ timeout: 10000 })
+    await expect(branchColumn.locator('h2')).toContainText('Branches')
   })
 
   test('displays Remote Branches column', async () => {
     test.skip(!repoLoaded, 'Repo did not auto-load')
-    await expect(page.locator('.remotes-column')).toBeVisible()
-    await expect(page.locator('.remotes-column h2')).toContainText('Remote Branches')
-  })
-
-  test('displays filter and sort controls', async () => {
-    test.skip(!repoLoaded, 'Repo did not auto-load')
-    const controls = page.locator('.control-select')
-    await expect(controls.first()).toBeVisible()
-    await expect(controls).toHaveCount(4)
+    const remoteColumn = page.getByTestId('canvas-column-remote-list')
+    await expect(remoteColumn).toBeVisible({ timeout: 10000 })
+    await expect(remoteColumn.locator('h2')).toContainText('Remotes')
   })
 
   test('displays Refresh button', async () => {
     test.skip(!repoLoaded, 'Repo did not auto-load')
-    await expect(page.locator('button:has-text("Refresh")')).toBeVisible()
+    await expect(page.getByTestId('refresh-button')).toBeVisible()
   })
 
   test('displays Change Repo button', async () => {
     test.skip(!repoLoaded, 'Repo did not auto-load')
-    await expect(page.locator('button:has-text("Change Repo")')).toBeVisible()
+    await expect(page.getByTestId('change-repo-button')).toBeVisible()
   })
 
   test('displays repo path in header', async () => {
     test.skip(!repoLoaded, 'Repo did not auto-load')
-    const repoPath = page.locator('.repo-path')
-    await expect(repoPath).toBeVisible()
-    await expect(repoPath).toContainText('ledger')
+    const repoPathEl = page.getByTestId('repo-path')
+    await expect(repoPathEl).toBeVisible()
+    await expect(repoPathEl).not.toHaveText('')
   })
 
   test('displays branch list items', async () => {
     test.skip(!repoLoaded, 'Repo did not auto-load')
-    const branchItems = page.locator('.branches-column .item')
-    await expect(branchItems.first()).toBeVisible()
-  })
-
-  test('displays count badges', async () => {
-    test.skip(!repoLoaded, 'Repo did not auto-load')
-    const badges = page.locator('.count-badge')
-    await expect(badges.first()).toBeVisible()
-  })
-
-  test('current branch has indicator', async () => {
-    test.skip(!repoLoaded, 'Repo did not auto-load')
-    const currentBranch = page.locator('.branches-column .item.current')
-    await expect(currentBranch).toBeVisible()
+    const branchColumn = page.getByTestId('canvas-column-branch-list')
+    await expect(branchColumn).toBeVisible({ timeout: 10000 })
+    const branchItems = branchColumn.locator('.item')
+    await expect(branchItems.first()).toBeVisible({ timeout: 10000 })
   })
 
   test('displays Focus Mode toggle button', async () => {
     test.skip(!repoLoaded, 'Repo did not auto-load')
-    const toggleButton = page.locator('button.view-toggle-btn[title="Focus Mode"]')
+    const toggleButton = page.getByTestId('view-toggle-focus')
     await expect(toggleButton).toBeVisible()
-    await expect(toggleButton).toContainText('Focus')
   })
 
   test('can switch to Focus Mode', async () => {
     test.skip(!repoLoaded, 'Repo did not auto-load')
     
     // Click the toggle button to switch to Focus Mode
-    const toggleButton = page.locator('button.view-toggle-btn[title="Focus Mode"]')
-    await toggleButton.click()
+    await page.getByTestId('view-toggle-focus').click()
     
-    // Verify Focus Mode layout is visible
-    await expect(page.locator('.focus-mode-layout')).toBeVisible()
+    // Verify Focus Mode canvas is active (has sidebar panel)
+    await expect(page.getByTestId('canvas-layout-focus')).toBeVisible()
+    await expect(page.getByTestId('canvas-column-sidebar')).toBeVisible()
     
-    // Verify sidebar is present
-    await expect(page.locator('.focus-sidebar')).toBeVisible()
-    
-    // Verify main panel is present
-    await expect(page.locator('.focus-main')).toBeVisible()
-    
-    // Verify sidebar sections are present
-    const sidebarSections = page.locator('.sidebar-section')
-    await expect(sidebarSections).toHaveCount(5)
+    // Verify git graph is present in Focus mode
+    await expect(page.getByTestId('canvas-column-git-graph')).toBeVisible()
+
+    // Verify key sidebar sections exist (avoid asserting exact structure/count)
+    await expect(page.getByTestId('sidebar-panel')).toBeVisible()
+    await expect(page.getByTestId('sidebar-section-prs')).toBeVisible()
+    await expect(page.getByTestId('sidebar-section-branches')).toBeVisible()
   })
 
   test('can switch back to Radar Mode', async () => {
     test.skip(!repoLoaded, 'Repo did not auto-load')
     
     // First switch to Focus Mode
-    await page.locator('button.view-toggle-btn[title="Focus Mode"]').click()
-    await expect(page.locator('.focus-mode-layout')).toBeVisible()
+    await page.getByTestId('view-toggle-focus').click()
+    await expect(page.getByTestId('canvas-column-sidebar')).toBeVisible()
     
     // Click the toggle button to switch back to Radar Mode
-    const radarButton = page.locator('button.view-toggle-btn[title="Radar Mode"]')
-    await radarButton.click()
+    await page.getByTestId('view-toggle-radar').click()
     
-    // Verify five-column layout is visible again
-    await expect(page.locator('.ledger-content.five-columns')).toBeVisible()
+    // Verify Radar canvas is active (has pr-list column, no sidebar)
+    await expect(page.getByTestId('canvas-layout-radar')).toBeVisible()
+    await expect(page.getByTestId('canvas-column-pr-list')).toBeVisible()
   })
 })

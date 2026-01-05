@@ -105,7 +105,7 @@ show_help() {
     echo "  ${BOLD}From Windows, you can build for:${NC}"
     echo "    - Windows (native, with code signing)"
     echo "    - Linux (may require WSL)"
-    echo "    - macOS: NOT POSSIBLE (Apple restriction)"
+   echo "    - macOS: NOT POSSIBLE (Apple restriction)"
     echo ""
     echo -e "${BOLD}Output Directory:${NC}"
     echo "  All builds are placed in: dist/"
@@ -402,3 +402,4 @@ main() {
 
 # Run main function with all command-line arguments
 main "$@"
+ 

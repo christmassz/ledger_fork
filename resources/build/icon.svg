@@ -2,20 +2,20 @@
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
   <!-- 
     Ledger App Icon - macOS compliant with proper margins
-    Based on updated brand design - centered
+    Rails extend edge-to-edge, white L centered
   -->
   
   <!-- Transparent background -->
   <rect x="0" y="0" width="1024" height="1024" fill="transparent"/>
   
-  <!-- Icon background squircle - with proper margins for macOS dock -->
-  <rect x="56" y="56" width="912" height="912" rx="195" ry="195" fill="#000000"/>
+  <!-- Icon background squircle - with more external padding for macOS dock -->
+  <rect x="80" y="80" width="864" height="864" rx="185" ry="185" fill="#000000"/>
   
-  <!-- Gray vertical rail lines (background) - extend top to bottom -->
-  <!-- Left rail - behind white branch -->
-  <line x1="370" y1="120" x2="370" y2="904" stroke="#3a3a3a" stroke-width="28" stroke-linecap="round"/>
-  <!-- Right rail - aligned with right node -->
-  <line x1="656" y1="120" x2="656" y2="904" stroke="#3a3a3a" stroke-width="28" stroke-linecap="round"/>
+  <!-- Gray vertical rail lines - extend edge to edge within squircle -->
+  <!-- Left rail -->
+  <line x1="370" y1="100" x2="370" y2="924" stroke="#3a3a3a" stroke-width="28" stroke-linecap="round"/>
+  <!-- Right rail -->
+  <line x1="656" y1="100" x2="656" y2="924" stroke="#3a3a3a" stroke-width="28" stroke-linecap="round"/>
   
   <!-- Dark gray node on right branch -->
   <circle cx="656" cy="290" r="72" fill="#4a4a4a"/>

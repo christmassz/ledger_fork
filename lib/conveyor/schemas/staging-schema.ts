@@ -45,4 +45,11 @@ export const stagingIpcSchema = {
     args: z.tuple([z.string(), z.boolean()]),
     return: StagingFileDiffSchema.nullable(),
   },
+  'get-behind-main-count': {
+    args: z.tuple([]),
+    return: z.object({
+      behind: z.number(),
+      baseBranch: z.string(),
+    }).nullable(),
+  },
 }

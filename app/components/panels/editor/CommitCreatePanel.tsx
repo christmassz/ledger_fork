@@ -39,10 +39,35 @@ export function StagingPanel({ workingStatus, currentBranch, onRefresh, onStatus
   const [prTitle, setPrTitle] = useState('')
   const [prBody, setPrBody] = useState('')
   const [prDraft, setPrDraft] = useState(false)
+  // Behind main indicator
+  const [behindMain, setBehindMain] = useState<{ behind: number; baseBranch: string } | null>(null)
 
   const stagedFiles = workingStatus.files.filter((f) => f.staged)
   const unstagedFiles = workingStatus.files.filter((f) => !f.staged)
 
+  // Load behind main count
+  useEffect(() => {
+    let cancelled = false
+
+    const loadBehindMain = async () => {
+      try {
+        const result = await window.conveyor.staging.getBehindMainCount()
+        if (!cancelled) {
+          setBehindMain(result)
+        }
+      } catch {
+        if (!cancelled) {
+          setBehindMain(null)
+        }
+      }
+    }
+
+    loadBehindMain()
+
+    return () => {
+      cancelled = true
+    }
+  }, [currentBranch]) // Re-check when branch changes
 
   // Close file context menu when clicking outside
   useEffect(() => {
@@ -384,6 +409,14 @@ export function StagingPanel({ workingStatus, currentBranch, onRefresh, onStatus
             <span className="diff-deletions">-{workingStatus.deletions}</span>
           </span>
         </div>
+        {behindMain && behindMain.behind > 0 && (
+          <div className="behind-main-indicator">
+            <span className="behind-main-icon">↓</span>
+            <span className="behind-main-text">
+              {behindMain.behind} behind {behindMain.baseBranch.replace('origin/', '')}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* File Lists */}

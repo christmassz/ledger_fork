@@ -16,7 +16,7 @@ export function useLedgerEvent<T extends LedgerEvent = LedgerEvent>(
   deps: React.DependencyList = []
 ): void {
   // Memoize the callback to prevent unnecessary re-subscriptions
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   const memoizedCallback = useCallback(callback, deps)
 
   useEffect(() => {

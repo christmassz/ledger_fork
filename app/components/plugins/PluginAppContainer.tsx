@@ -136,30 +136,35 @@ export function PluginPanelContainer({
   data,
   onClose,
 }: PluginPanelContainerProps) {
-  const [error, setError] = useState<Error | null>(null)
+  const [_error, setError] = useState<Error | null>(null)
   const repoPath = useRepositoryStore((s) => s.repoPath)
 
+  // Create context before any early returns to satisfy React hooks rules
+  const context = useMemo(() => createFullPluginContext(pluginId), [pluginId])
+
   const plugin = pluginManager.get(pluginId)
-  if (!plugin || plugin.type !== 'panel') {
+  const panelPlugin = plugin?.type === 'panel'
+    ? (plugin as import('@/lib/plugins/plugin-types').PanelPlugin)
+    : null
+
+  const Component = panelPlugin
+    ? pluginComponentRegistry.getPanel(panelPlugin.component)
+    : null
+
+  // Early return AFTER all hooks
+  if (!panelPlugin || !Component) {
     return null
   }
-
-  const panelPlugin = plugin as import('@/lib/plugins/plugin-types').PanelPlugin
-  const Component = pluginComponentRegistry.getPanel(panelPlugin.component)
-  const context = useMemo(() => createFullPluginContext(pluginId), [pluginId])
 
   const sizeClass = `size-${panelPlugin.size ?? 'medium'}`
   const positionClass = `position-${panelPlugin.position ?? 'center'}`
-
-  if (!Component) {
-    return null
-  }
 
   return (
     <div className="plugin-panel-overlay" onClick={onClose}>
       <div
         className={`plugin-panel ${sizeClass} ${positionClass}`}
         onClick={(e) => e.stopPropagation()}
+        data-plugin-panel-instance={instanceId}
       >
         <div className="plugin-panel-header">
           <h4 className="plugin-panel-title">{panelPlugin.title}</h4>

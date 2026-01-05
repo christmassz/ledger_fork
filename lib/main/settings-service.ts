@@ -11,17 +11,46 @@ interface VSCodeTheme {
   colors: Record<string, string>;
 }
 
-interface Settings {
-  lastRepoPath?: string;
-  recentRepos?: string[];
-  viewMode?: ViewMode;
-  themeMode?: ThemeMode;
-  customTheme?: VSCodeTheme;
+// Canvas types (mirrored from app/types/app-types.ts for main process)
+type SlotType = 'list' | 'editor' | 'viz';
+type PanelType = string; // Simplified for settings
+
+interface CanvasColumn {
+  id: string;
+  slotType: SlotType;
+  panel: PanelType;
+  width: number | 'flex';
+  minWidth?: number;
+  config?: Record<string, unknown>;
+  // Display
+  label?: string;
+  icon?: string;
+  // Visibility
+  visible?: boolean;
+  collapsible?: boolean;
 }
 
-const MAX_RECENT_REPOS = 10;
+interface CanvasConfig {
+  id: string;
+  name: string;
+  columns: CanvasColumn[];
+  isPreset?: boolean;
+}
 
-const settingsPath = path.join(app.getPath('userData'), 'ledger-settings.json');
+interface Settings {
+  lastRepoPath?: string;
+  viewMode?: ViewMode;
+  themeMode?: ThemeMode;
+  selectedThemeId?: string;  // e.g., 'dracula', 'claude-desktop', 'light'
+  customTheme?: VSCodeTheme;
+  // Canvas settings
+  canvases?: CanvasConfig[];
+  activeCanvasId?: string;
+}
+
+// Allow tests (and power users) to override the settings location to avoid coupling to
+// the real user profile / machine-specific paths.
+const settingsPath = process.env.LEDGER_SETTINGS_PATH || path.join(app.getPath('userData'), 'ledger-settings.json');
 
 function loadSettings(): Settings {
   try {
@@ -37,6 +66,8 @@ function loadSettings(): Settings {
 
 function saveSettings(settings: Settings): void {
   try {
+    // Ensure parent directory exists (important when LEDGER_SETTINGS_PATH points to a temp location)
+    fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
     fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
   } catch (error) {
     console.error('Failed to save settings:', error);
@@ -64,47 +95,6 @@ export function clearLastRepoPath(): void {
   saveSettings(settings);
 }
 
-// ============================================================================
-// Recent Repositories
-// ============================================================================
-
-export function getRecentRepos(): string[] {
-  const settings = loadSettings();
-  // Filter out paths that no longer exist
-  return (settings.recentRepos || []).filter((repoPath) => fs.existsSync(repoPath));
-}
-
-export function addRecentRepo(repoPath: string): void {
-  const settings = loadSettings();
-  let recent = settings.recentRepos || [];
-
-  // Remove if already exists (will re-add at front)
-  recent = recent.filter((p) => p !== repoPath);
-
-  // Add to front
-  recent.unshift(repoPath);
-
-  // Trim to max
-  recent = recent.slice(0, MAX_RECENT_REPOS);
-
-  settings.recentRepos = recent;
-  saveSettings(settings);
-}
-
-export function removeRecentRepo(repoPath: string): void {
-  const settings = loadSettings();
-  if (settings.recentRepos) {
-    settings.recentRepos = settings.recentRepos.filter((p) => p !== repoPath);
-    saveSettings(settings);
-  }
-}
-
-export function clearRecentRepos(): void {
-  const settings = loadSettings();
-  delete settings.recentRepos;
-  saveSettings(settings);
-}
-
 export function getViewMode(): ViewMode {
   const settings = loadSettings();
   return settings.viewMode || 'columns';
@@ -122,10 +112,16 @@ export function getThemeMode(): ThemeMode {
   return settings.themeMode || 'system';
 }
 
-export function saveThemeMode(mode: ThemeMode): void {
+export function saveThemeMode(mode: ThemeMode, themeId?: string): void {
   const settings = loadSettings();
   settings.themeMode = mode;
+  settings.selectedThemeId = themeId || mode;  // Default to mode for base themes
   saveSettings(settings);
+}
+
+export function getSelectedThemeId(): string {
+  const settings = loadSettings();
+  return settings.selectedThemeId || settings.themeMode || 'system';
 }
 
 export function getCustomTheme(): VSCodeTheme | null {
@@ -161,18 +157,19 @@ export async function loadVSCodeThemeFile(): Promise<VSCodeTheme | null> {
   }
 }
 
-export function loadBuiltInTheme(themeFileName: string): VSCodeTheme | null {
+export function loadBuiltInTheme(themeFileName: string, themeId?: string): VSCodeTheme | null {
   try {
     const themePath = path.join(app.getAppPath(), 'resources', 'themes', themeFileName);
     const data = fs.readFileSync(themePath, 'utf-8');
     const theme = JSON.parse(data) as VSCodeTheme;
-    
-    // Save the custom theme
+
+    // Save the custom theme and track which theme was selected
     const settings = loadSettings();
     settings.customTheme = theme;
     settings.themeMode = 'custom';
+    settings.selectedThemeId = themeId || themeFileName.replace('.json', '');
     saveSettings(settings);
-    
+
     return theme;
   } catch (error) {
     console.error('Failed to load built-in theme:', error);
@@ -213,5 +210,91 @@ export function mapVSCodeThemeToCSS(theme: VSCodeTheme): Record<string, string> 
     '--scrollbar': colors['scrollbarSlider.background'] || '#64646466',
     '--scrollbar-hover': colors['scrollbarSlider.hoverBackground'] || '#646464b3',
   };
+}
+
+// Canvas persistence functions
+export function getCanvases(): CanvasConfig[] {
+  const settings = loadSettings();
+  return settings.canvases || [];
+}
+
+export function saveCanvases(canvases: CanvasConfig[]): void {
+  const settings = loadSettings();
+  // Save all canvases - presets included to preserve user modifications
+  // (column widths, visibility, order). On load, preset columns will be
+  // merged with code definitions to pick up any new columns.
+  settings.canvases = canvases;
+  saveSettings(settings);
+}
+
+export function getActiveCanvasId(): string {
+  const settings = loadSettings();
+  return settings.activeCanvasId || 'radar';
+}
+
+export function saveActiveCanvasId(canvasId: string): void {
+  const settings = loadSettings();
+  settings.activeCanvasId = canvasId;
+  saveSettings(settings);
+}
+
+export function addCanvas(canvas: CanvasConfig): void {
+  const settings = loadSettings();
+  const canvases = settings.canvases || [];
+  // Don't add if already exists
+  if (canvases.some(c => c.id === canvas.id)) return;
+  canvases.push(canvas);
+  settings.canvases = canvases;
+  saveSettings(settings);
+}
+
+export function removeCanvas(canvasId: string): void {
+  const settings = loadSettings();
+  settings.canvases = (settings.canvases || []).filter(c => c.id !== canvasId);
+  // If we removed the active canvas, reset to radar
+  if (settings.activeCanvasId === canvasId) {
+    settings.activeCanvasId = 'radar';
+  }
+  saveSettings(settings);
+}
+
+export function updateCanvas(canvasId: string, updates: Partial<CanvasConfig>): void {
+  const settings = loadSettings();
+  settings.canvases = (settings.canvases || []).map(c => 
+    c.id === canvasId ? { ...c, ...updates } : c
+  );
+  saveSettings(settings);
+}
+
+// Recent repos management
+const MAX_RECENT_REPOS = 10;
+
+export function getRecentRepos(): string[] {
+  const settings = loadSettings() as Settings & { recentRepos?: string[] };
+  // Filter out paths that no longer exist
+  return (settings.recentRepos || []).filter((repoPath) => fs.existsSync(repoPath));
+}
+
+export function addRecentRepo(repoPath: string): void {
+  const settings = loadSettings() as Settings & { recentRepos?: string[] };
+  let recent = settings.recentRepos || [];
+
+  // Remove if already exists (will re-add at front)
+  recent = recent.filter((p) => p !== repoPath);
+
+  // Add to front
+  recent.unshift(repoPath);
+
+  // Keep max recent
+  recent = recent.slice(0, MAX_RECENT_REPOS);
+
+  (settings as Settings & { recentRepos: string[] }).recentRepos = recent;
+  saveSettings(settings);
+}
+
+export function removeRecentRepo(repoPath: string): void {
+  const settings = loadSettings() as Settings & { recentRepos?: string[] };
+  (settings as Settings & { recentRepos: string[] }).recentRepos = (settings.recentRepos || []).filter((p) => p !== repoPath);
+  saveSettings(settings);
 }
 

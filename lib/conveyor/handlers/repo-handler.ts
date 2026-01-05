@@ -3,7 +3,7 @@ import { simpleGit } from 'simple-git'
 import * as path from 'path'
 import { handle } from '@/lib/main/shared'
 import { safeExec } from '@/lib/utils/safe-exec'
-import { setRepoPath, getRepoPath, initializeLegacySync } from '@/lib/main/git-service'
+import { setRepoPath, getRepoPath, initializeGlobalStateSync } from '@/lib/main/git-service'
 import { getLastRepoPath, saveLastRepoPath, getRecentRepos, addRecentRepo, removeRecentRepo } from '@/lib/main/settings-service'
 import { getRepositoryManager } from '@/lib/repositories'
 import { parseGitHubRepo, createRemoteRepositoryContext } from '@/lib/repositories/repository-context'
@@ -24,8 +24,8 @@ export interface RepositorySummary {
 }
 
 export const registerRepoHandlers = () => {
-  // SAFETY: Initialize legacy sync so git-service globals stay in sync with RepositoryManager
-  initializeLegacySync()
+  // Initialize global state sync so git-service module state stays in sync with RepositoryManager
+  initializeGlobalStateSync().catch((err) => console.error('Failed to initialize global state sync:', err))
 
   handle('select-repo', async () => {
     const result = await dialog.showOpenDialog({
@@ -40,13 +40,14 @@ export const registerRepoHandlers = () => {
     const selectedPath = result.filePaths[0]
     const previousPath = getRepoPath()
 
-    // Use RepositoryManager for the new architecture
+    // Open in RepositoryManager and sync module state
     const manager = getRepositoryManager()
     try {
       const ctx = await manager.open(selectedPath)
-      // Also update legacy global state for backward compatibility
+      // Update module state
       setRepoPath(ctx.path)
       saveLastRepoPath(ctx.path)
+      addRecentRepo(ctx.path)
 
       // Emit events
       emitRepoOpened(ctx.path)
@@ -55,10 +56,11 @@ export const registerRepoHandlers = () => {
       }
 
       return ctx.path
-    } catch (error) {
-      // Fall back to legacy behavior if RepositoryManager fails
+    } catch (_error) {
+      // Direct path handling if RepositoryManager fails
       setRepoPath(selectedPath)
       saveLastRepoPath(selectedPath)
+      addRecentRepo(selectedPath)
 
       // Emit events
       emitRepoOpened(selectedPath)
@@ -76,7 +78,7 @@ export const registerRepoHandlers = () => {
     const active = manager.getActive()
     if (active) return active.path
 
-    // Fall back to legacy
+    // Fall back to module state
     return getRepoPath()
   })
 
@@ -146,7 +148,7 @@ export const registerRepoHandlers = () => {
 
     const active = manager.getActive()
     if (active) {
-      // Only sync legacy state for local repos (remote repos have null path)
+      // Only sync module state for local repos (remote repos have null path)
       if (active.path) {
         setRepoPath(active.path)
         saveLastRepoPath(active.path)
@@ -186,7 +188,7 @@ export const registerRepoHandlers = () => {
       emitRepoClosed(closingPath)
     }
 
-    // Update legacy state
+    // Update module state
     const active = manager.getActive()
     setRepoPath(active?.path ?? null)
     if (active && active.path) {

@@ -6,6 +6,7 @@ export interface Branch {
   isRemote: boolean
   // Extended metadata
   lastCommitDate?: string
+  lastCommitMessage?: string
   firstCommitDate?: string
   commitCount?: number
   isLocalOnly?: boolean
@@ -35,15 +36,25 @@ export interface Worktree {
   changedFileCount: number
   additions: number
   deletions: number
-  // For ordering
-  lastModified: string // Directory mtime (ISO string)
-  // Activity tracking
+  // Directory modification time (used for sorting worktrees by creation order)
+  lastModified: string
+  // Activity tracking - dual signals for reliable detection
   activityStatus: WorktreeActivityStatus // 'active' | 'recent' | 'stale' | 'unknown'
+  /** Most recent file modification time in worktree (filesystem level) */
+  lastFileModified: string
+  /** Last git activity: commit time or working directory change time */
+  lastGitActivity: string
+  /** Source of activity status: 'file' | 'git' | 'both' */
+  activitySource: 'file' | 'git' | 'both'
   agentTaskHint: string | null // The agent's current task/prompt if available
 }
 
 export type BranchFilter = 'all' | 'local-only' | 'unmerged'
 export type BranchSort = 'name' | 'last-commit' | 'first-commit' | 'most-commits'
+
+export type WorktreeSort = 'folder-name' | 'last-modified' | 'branch-name'
+export type StashFilter = 'all' | 'has-changes' | 'redundant'
+export type StashSort = 'date' | 'message' | 'branch'
 
 export interface CheckoutResult {
   success: boolean
@@ -103,6 +114,42 @@ export interface GraphCommit {
   deletions?: number
 }
 
+// Contributor statistics for ridgeline chart
+export interface ContributorTimeSeries {
+  author: string
+  email: string
+  totalCommits: number
+  timeSeries: { date: string; count: number }[]
+}
+
+export interface ContributorStats {
+  contributors: ContributorTimeSeries[]
+  startDate: string
+  endDate: string
+  bucketSize: 'day' | 'week' | 'month'
+}
+
+// Mailmap types for author identity management
+export interface AuthorIdentity {
+  name: string
+  email: string
+  commitCount: number
+}
+
+export interface MailmapSuggestion {
+  canonicalName: string
+  canonicalEmail: string
+  aliases: AuthorIdentity[]
+  confidence: 'high' | 'medium' | 'low'
+}
+
+export interface MailmapEntry {
+  canonicalName: string
+  canonicalEmail: string
+  aliasName?: string
+  aliasEmail: string
+}
+
 // Diff types for commit detail view
 export interface DiffFile {
   path: string
@@ -150,7 +197,14 @@ export interface BranchDiff {
   totalAdditions: number
   totalDeletions: number
   commitCount: number
+  // For PR Preview mode - conflict information
+  hasConflicts?: boolean
+  conflictFiles?: string[]
 }
+
+// 'diff' = two-dot (current state vs master), 'changes' = three-dot (all branch changes since fork)
+// 'preview' = simulated merge result (what a PR would contribute)
+export type BranchDiffType = 'diff' | 'changes' | 'preview'
 
 // Stash entry
 export interface StashEntry {
@@ -158,6 +212,8 @@ export interface StashEntry {
   message: string
   branch: string
   date: string
+  /** True if stash changes already exist on the original branch */
+  redundant?: boolean
 }
 
 export interface StashFile {
@@ -285,4 +341,267 @@ export interface CreateWorktreeOptions {
   branchName: string
   isNewBranch: boolean
   folderPath: string
+}
+
+export interface RepoInfo {
+  path: string
+  name: string
+  isCurrent: boolean
+}
+
+// ========================================
+// Tech Tree Types
+// ========================================
+
+export type TechTreeSizeTier = 'xs' | 'sm' | 'md' | 'lg' | 'xl'
+
+export type TechTreeBranchType = 
+  | 'feature'
+  | 'fix'
+  | 'chore'
+  | 'refactor'
+  | 'docs'
+  | 'test'
+  | 'release'
+  | 'unknown'
+
+export interface TechTreeNodeStats {
+  linesAdded: number
+  linesRemoved: number
+  filesChanged: number
+  filesAdded: number
+  filesRemoved: number
+  commitCount: number
+  daysSinceMerge: number
+}
+
+export interface TechTreeNode {
+  id: string
+  branchName: string
+  commitHash: string
+  mergeCommitHash: string
+  author: string
+  mergeDate: string
+  message: string
+  prNumber?: number
+  stats: TechTreeNodeStats
+  // Computed tier (populated by git service)
+  sizeTier: TechTreeSizeTier
+  branchType: TechTreeBranchType
+  // Badge flags (percentile-based, computed by git service)
+  badges: {
+    massive: boolean     // Top 10% by total LOC
+    destructive: boolean // Top 15% by lines removed
+    additive: boolean    // Top 15% by lines added
+    multiFile: boolean   // Top 20% by files changed
+    surgical: boolean    // Bottom 10% by LOC (tiny changes)
+    ancient: boolean     // Top 15% oldest
+    fresh: boolean       // Top 15% newest
+  }
+}
+
+export interface TechTreeData {
+  masterBranch: string
+  nodes: TechTreeNode[]
+  // Global stats for normalization
+  stats: {
+    minLoc: number
+    maxLoc: number
+    minFiles: number
+    maxFiles: number
+    minAge: number
+    maxAge: number
+  }
+}
+
+export interface ElectronAPI {
+  selectRepo: () => Promise<string | null>
+  getRepoPath: () => Promise<string | null>
+  getSavedRepoPath: () => Promise<string | null>
+  loadSavedRepo: () => Promise<string | null>
+  getBranches: () => Promise<BranchesResult>
+  getBranchesBasic: () => Promise<BranchesResult>
+  getBranchesWithMetadata: () => Promise<BranchesResult>
+  getWorktrees: () => Promise<Worktree[] | { error: string }>
+  // Checkout operations
+  checkoutBranch: (branchName: string) => Promise<CheckoutResult>
+  createBranch: (branchName: string, checkout?: boolean) => Promise<{ success: boolean; message: string }>
+  deleteBranch: (branchName: string, force?: boolean) => Promise<{ success: boolean; message: string }>
+  renameBranch: (oldName: string, newName: string) => Promise<{ success: boolean; message: string }>
+  deleteRemoteBranch: (branchName: string) => Promise<{ success: boolean; message: string }>
+  pushBranch: (branchName?: string, setUpstream?: boolean) => Promise<{ success: boolean; message: string }>
+  checkoutRemoteBranch: (remoteBranch: string) => Promise<CheckoutResult>
+  openWorktree: (worktreePath: string) => Promise<{ success: boolean; message: string }>
+  // Pull requests
+  getPullRequests: () => Promise<PullRequestsResult>
+  openPullRequest: (url: string) => Promise<{ success: boolean; message: string }>
+  createPullRequest: (options: {
+    title: string
+    body?: string
+    headBranch?: string
+    baseBranch?: string
+    draft?: boolean
+    web?: boolean
+  }) => Promise<{ success: boolean; message: string; url?: string }>
+  checkoutPRBranch: (prNumber: number) => Promise<CheckoutResult>
+  // Remote operations
+  getGitHubUrl: () => Promise<string | null>
+  openBranchInGitHub: (branchName: string) => Promise<{ success: boolean; message: string }>
+  pullBranch: (remoteBranch: string) => Promise<{ success: boolean; message: string }>
+  // Commit history and working status
+  getCommitHistory: (limit?: number) => Promise<Commit[]>
+  getCommitHistoryForRef: (ref: string, limit?: number) => Promise<Commit[]>
+  getCommitDetails: (commitHash: string) => Promise<Commit | null>
+  getWorkingStatus: () => Promise<WorkingStatus>
+  // Reset operations
+  resetToCommit: (commitHash: string, mode: 'soft' | 'mixed' | 'hard') => Promise<CheckoutResult>
+  // Focus mode APIs
+  getCommitGraphHistory: (limit?: number, skipStats?: boolean, showCheckpoints?: boolean) => Promise<GraphCommit[]>
+  getContributorStats: (topN?: number, bucketSize?: 'day' | 'week' | 'month') => Promise<ContributorStats>
+  // Mailmap management
+  getMailmap: () => Promise<MailmapEntry[]>
+  getAuthorIdentities: () => Promise<AuthorIdentity[]>
+  suggestMailmapEntries: () => Promise<MailmapSuggestion[]>
+  addMailmapEntries: (entries: MailmapEntry[]) => Promise<{ success: boolean; message: string }>
+  removeMailmapEntry: (entry: MailmapEntry) => Promise<{ success: boolean; message: string }>
+  getCommitDiff: (commitHash: string) => Promise<CommitDiff | null>
+  getBranchDiff: (branchName: string, diffType?: BranchDiffType) => Promise<BranchDiff | null>
+  getStashes: () => Promise<StashEntry[]>
+  getStashFiles: (stashIndex: number) => Promise<StashFile[]>
+  getStashFileDiff: (stashIndex: number, filePath: string) => Promise<string | null>
+  getStashFileDiffParsed: (stashIndex: number, filePath: string) => Promise<StagingFileDiff | null>
+  getStashDiff: (stashIndex: number) => Promise<string | null>
+  applyStash: (stashIndex: number) => Promise<{ success: boolean; message: string }>
+  popStash: (stashIndex: number) => Promise<{ success: boolean; message: string }>
+  dropStash: (stashIndex: number) => Promise<{ success: boolean; message: string }>
+  stashToBranch: (stashIndex: number, branchName: string) => Promise<{ success: boolean; message: string }>
+  applyStashToBranch: (
+    stashIndex: number,
+    targetBranch: string,
+    stashMessage: string,
+    keepWorktree?: boolean
+  ) => Promise<{ success: boolean; message: string; usedExistingWorktree: boolean; worktreePath?: string }>
+  // Worktree operations
+  convertWorktreeToBranch: (worktreePath: string) => Promise<{ success: boolean; message: string; branchName?: string }>
+  applyWorktreeChanges: (worktreePath: string) => Promise<{ success: boolean; message: string }>
+  removeWorktree: (worktreePath: string, force?: boolean) => Promise<{ success: boolean; message: string }>
+  createWorktree: (options: CreateWorktreeOptions) => Promise<{ success: boolean; message: string; path?: string }>
+  selectWorktreeFolder: () => Promise<string | null>
+  // Worktree-specific staging & commit operations
+  getWorktreeWorkingStatus: (worktreePath: string) => Promise<WorkingStatus>
+  stageFileInWorktree: (worktreePath: string, filePath: string) => Promise<{ success: boolean; message: string }>
+  unstageFileInWorktree: (worktreePath: string, filePath: string) => Promise<{ success: boolean; message: string }>
+  stageAllInWorktree: (worktreePath: string) => Promise<{ success: boolean; message: string }>
+  unstageAllInWorktree: (worktreePath: string) => Promise<{ success: boolean; message: string }>
+  getFileDiffInWorktree: (
+    worktreePath: string,
+    filePath: string,
+    staged: boolean
+  ) => Promise<StagingFileDiff | null>
+  commitInWorktree: (
+    worktreePath: string,
+    message: string,
+    description?: string
+  ) => Promise<{ success: boolean; message: string }>
+  pushWorktreeBranch: (worktreePath: string) => Promise<{ success: boolean; message: string }>
+  // Staging & commit operations
+  stageFile: (filePath: string) => Promise<{ success: boolean; message: string }>
+  unstageFile: (filePath: string) => Promise<{ success: boolean; message: string }>
+  stageAll: () => Promise<{ success: boolean; message: string }>
+  unstageAll: () => Promise<{ success: boolean; message: string }>
+  discardFileChanges: (filePath: string) => Promise<{ success: boolean; message: string }>
+  discardAllChanges: () => Promise<{ success: boolean; message: string }>
+  getFileDiff: (filePath: string, staged: boolean) => Promise<StagingFileDiff | null>
+  commitChanges: (
+    message: string,
+    description?: string,
+    force?: boolean
+  ) => Promise<{ success: boolean; message: string; behindCount?: number }>
+  pullCurrentBranch: () => Promise<{
+    success: boolean
+    message: string
+    hadConflicts?: boolean
+    autoStashed?: boolean
+  }>
+  // PR Review operations
+  getPRDetail: (prNumber: number) => Promise<PRDetail | null>
+  getPRReviewComments: (prNumber: number) => Promise<PRReviewComment[]>
+  getPRFileDiff: (prNumber: number, filePath: string) => Promise<string | null>
+  commentOnPR: (prNumber: number, body: string) => Promise<{ success: boolean; message: string }>
+  mergePR: (prNumber: number, mergeMethod?: 'merge' | 'squash' | 'rebase') => Promise<{ success: boolean; message: string }>
+  // Theme operations
+  getThemeMode: () => Promise<'light' | 'dark' | 'system' | 'custom'>
+  getSelectedThemeId: () => Promise<string>
+  setThemeMode: (mode: 'light' | 'dark' | 'system' | 'custom', themeId?: string) => Promise<{ success: boolean }>
+  getSystemTheme: () => Promise<'light' | 'dark'>
+  getCustomTheme: () => Promise<{
+    theme: {
+      name: string
+      path: string
+      type: 'light' | 'dark'
+      colors: Record<string, string>
+    }
+    cssVars: Record<string, string>
+  } | null>
+  loadVSCodeTheme: () => Promise<{
+    theme: {
+      name: string
+      path: string
+      type: 'light' | 'dark'
+      colors: Record<string, string>
+    }
+    cssVars: Record<string, string>
+  } | null>
+  loadBuiltInTheme: (themeFileName: string, themeId?: string) => Promise<{
+    theme: {
+      name: string
+      path: string
+      type: 'light' | 'dark'
+      colors: Record<string, string>
+    }
+    cssVars: Record<string, string>
+  } | null>
+  clearCustomTheme: () => Promise<{ success: boolean }>
+  // Tech tree operations
+  getMergedBranchTree: (limit?: number) => Promise<TechTreeData>
+  // Canvas operations
+  getCanvases: () => Promise<CanvasConfig[]>
+  saveCanvases: (canvases: CanvasConfig[]) => Promise<{ success: boolean }>
+  getActiveCanvasId: () => Promise<string>
+  saveActiveCanvasId: (canvasId: string) => Promise<{ success: boolean }>
+  addCanvas: (canvas: CanvasConfig) => Promise<{ success: boolean }>
+  removeCanvas: (canvasId: string) => Promise<{ success: boolean }>
+  updateCanvas: (canvasId: string, updates: Partial<CanvasConfig>) => Promise<{ success: boolean }>
+  // Repo operations
+  getSiblingRepos: () => Promise<RepoInfo[]>
+}
+
+// Canvas configuration types for persistence
+interface CanvasColumnConfig {
+  id: string
+  slotType: 'list' | 'editor' | 'viz'
+  panel: string
+  width: number | 'flex'
+  minWidth?: number
+  config?: Record<string, unknown>
+  // Display
+  label?: string
+  icon?: string
+  // Visibility
+  visible?: boolean
+  collapsible?: boolean
+}
+
+interface CanvasConfig {
+  id: string
+  name: string
+  icon?: string
+  columns: CanvasColumnConfig[]
+  isPreset?: boolean
+}
+
+declare global {
+  interface Window {
+    electronAPI: ElectronAPI
+  }
 }

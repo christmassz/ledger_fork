@@ -1,4 +1,4 @@
-# PR Review System Design
+# PR Review System
 
 > Elevating Pull Request review to first-class citizen status in the AI age.
 
@@ -170,7 +170,7 @@ interface PRFile {
 
 ## UI Components
 
-### PRReviewPanel (Main Container)
+### PRDetailPanel (Main Container)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -266,7 +266,7 @@ Extract actionable items from comments:
 1. ✅ Design doc (this document)
 2. ✅ Add `getPRDetail()` to git-service
 3. ✅ Add `getPRReviewComments()` to git-service  
-4. ✅ Create `PRReviewPanel` component
+4. ✅ Create `PRDetailPanel` component
 5. ✅ Create `ConversationTab` component
 6. ✅ Create `FilesTab` with diff view
 7. ✅ Add inline comment rendering
