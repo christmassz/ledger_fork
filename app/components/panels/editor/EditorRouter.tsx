@@ -8,7 +8,7 @@
  * in the Canvas architecture.
  */
 
-import type { Branch, Worktree, StashEntry, RepoInfo } from '../../../types/electron'
+import type { Branch, Worktree, StashEntry, RepoInfo, PullRequest } from '../../../types/electron'
 import type { StatusMessage, SidebarFocus } from '../../../types/app-types'
 import { BranchDetailPanel } from './BranchDetailPanel'
 import { WorktreeDetailPanel } from './WorktreeDetailPanel'
@@ -38,7 +38,9 @@ export interface EditorRouterProps {
   branches?: Branch[]
   repoPath?: string | null
   worktrees?: Worktree[]
+  prs?: PullRequest[]
   onFocusWorktree?: (worktree: Worktree) => void
+  onNavigateToPR?: (pr: PullRequest) => void
   onOpenRepo?: (repo: RepoInfo) => void
   onOpenMailmap?: () => void
 }
@@ -63,7 +65,9 @@ export function EditorRouter({
   onOpenStaging,
   branches,
   repoPath,
+  prs,
   onFocusWorktree,
+  onNavigateToPR,
   onOpenRepo,
   onOpenMailmap,
 }: EditorRouterProps) {
@@ -85,6 +89,8 @@ export function EditorRouter({
           onDeleteBranch={onDeleteBranch}
           onRenameBranch={onRenameBranch}
           onOpenStaging={onOpenStaging}
+          onNavigateToPR={onNavigateToPR}
+          prs={prs}
           switching={switching}
           deleting={deleting}
           renaming={renaming}

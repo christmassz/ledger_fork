@@ -1378,6 +1378,12 @@ export default function App() {
           formatRelativeTime={formatRelativeTime}
           onCheckout={handlePRCheckout}
           onPRMerged={refresh}
+          onNavigateToBranch={(branchName) => {
+            const branch = branches.find((b) => b.name === branchName)
+            if (branch) {
+              handleSidebarFocus(branch.isRemote ? 'remote' : 'branch', branch)
+            }
+          }}
           switching={switching}
         />
       )
@@ -1407,7 +1413,9 @@ export default function App() {
           branches={branches}
           repoPath={repoPath}
           worktrees={worktrees}
+          prs={pullRequests}
           onFocusWorktree={(wt) => setSidebarFocus({ type: 'worktree', data: wt })}
+          onNavigateToPR={(pr) => handleSidebarFocus('pr', pr)}
           onOpenRepo={async (repo) => {
             if (repo.isCurrent) return
             setStatus({ type: 'info', message: `Opening ${repo.name}...` })

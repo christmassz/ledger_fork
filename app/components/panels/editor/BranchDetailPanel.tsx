@@ -4,8 +4,8 @@
  * Displays branch metadata, allows PR creation, and shows diff against base branch.
  */
 
-import { useState, useEffect } from 'react'
-import type { Branch, BranchDiff, BranchDiffType } from '../../../types/electron'
+import { useState, useEffect, useMemo } from 'react'
+import type { Branch, BranchDiff, BranchDiffType, PullRequest } from '../../../types/electron'
 import type { StatusMessage } from '../../../types/app-types'
 import { DiffViewer } from '../../ui/DiffViewer'
 
@@ -17,6 +17,8 @@ export interface BranchDetailPanelProps {
   onDeleteBranch?: (branch: Branch) => void
   onRenameBranch?: (branch: Branch, newName: string) => void
   onOpenStaging?: () => void
+  onNavigateToPR?: (pr: PullRequest) => void
+  prs?: PullRequest[]
   switching?: boolean
   deleting?: boolean
   renaming?: boolean
@@ -30,6 +32,8 @@ export function BranchDetailPanel({
   onDeleteBranch,
   onRenameBranch,
   onOpenStaging,
+  onNavigateToPR,
+  prs,
   switching,
   deleting,
   renaming,
@@ -52,6 +56,12 @@ export function BranchDetailPanel({
   const [newBranchName, setNewBranchName] = useState('')
 
   const isMainOrMaster = branch.name === 'main' || branch.name === 'master'
+
+  // Find PR for this branch
+  const branchPR = useMemo(() => {
+    if (!prs) return null
+    return prs.find((pr) => pr.branch === branch.name) || null
+  }, [prs, branch.name])
 
   // Reset form states when branch changes
   useEffect(() => {
@@ -216,6 +226,23 @@ export function BranchDetailPanel({
           <span className="meta-label">Merged</span>
           <span className="meta-value">{branch.isMerged ? 'Yes' : 'No'}</span>
         </div>
+        {branchPR && (
+          <div className="detail-meta-item">
+            <span className="meta-label">Pull Request</span>
+            {onNavigateToPR ? (
+              <button
+                className="pr-link-badge"
+                onClick={() => onNavigateToPR(branchPR)}
+                title={branchPR.title}
+              >
+                #{branchPR.number}
+                {branchPR.isDraft && <span className="pr-draft-indicator">Draft</span>}
+              </button>
+            ) : (
+              <span className="meta-value">#{branchPR.number}</span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Conflict Warning Banner */}

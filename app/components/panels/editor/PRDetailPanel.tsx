@@ -13,6 +13,7 @@ export interface PRReviewPanelProps {
   formatRelativeTime: (date: string) => string
   onCheckout?: (pr: PullRequest) => void
   onPRMerged?: () => void
+  onNavigateToBranch?: (branchName: string) => void
   switching?: boolean
 }
 
@@ -26,7 +27,7 @@ function isAIAuthor(login: string): boolean {
   return AI_AUTHORS.some((ai) => lower.includes(ai)) || lower.endsWith('[bot]') || lower.endsWith('-bot')
 }
 
-export function PRReviewPanel({ pr, formatRelativeTime, onCheckout, onPRMerged, switching }: PRReviewPanelProps) {
+export function PRReviewPanel({ pr, formatRelativeTime, onCheckout, onPRMerged, onNavigateToBranch, switching }: PRReviewPanelProps) {
   const [activeTab, setActiveTab] = useState<PRTab>('conversation')
   const [prDetail, setPrDetail] = useState<PRDetail | null>(null)
   const [reviewComments, setReviewComments] = useState<PRReviewComment[]>([])
@@ -255,9 +256,29 @@ export function PRReviewPanel({ pr, formatRelativeTime, onCheckout, onPRMerged, 
         </div>
         <div className="pr-review-meta">
           <span className="pr-review-branch">
-            <code>{prDetail.headRefName}</code>
+            {onNavigateToBranch ? (
+              <button
+                className="branch-link"
+                onClick={() => onNavigateToBranch(prDetail.headRefName)}
+                title={`View branch: ${prDetail.headRefName}`}
+              >
+                <code>{prDetail.headRefName}</code>
+              </button>
+            ) : (
+              <code>{prDetail.headRefName}</code>
+            )}
             <span className="pr-arrow">→</span>
-            <code>{prDetail.baseRefName}</code>
+            {onNavigateToBranch ? (
+              <button
+                className="branch-link"
+                onClick={() => onNavigateToBranch(prDetail.baseRefName)}
+                title={`View branch: ${prDetail.baseRefName}`}
+              >
+                <code>{prDetail.baseRefName}</code>
+              </button>
+            ) : (
+              <code>{prDetail.baseRefName}</code>
+            )}
           </span>
           <span className="pr-review-author">@{prDetail.author.login}</span>
           <span className="pr-review-time">{formatRelativeTime(prDetail.updatedAt)}</span>

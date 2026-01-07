@@ -148,6 +148,7 @@ export function StagingPanel({ workingStatus, currentBranch, onRefresh, onStatus
     setIsEditing(false)
     setEditContent('')
     setDiscardLinesConfirm(false)
+    setDiscardHunkConfirm(null)
   }, [selectedFile])
 
   // Syntax highlighting for diff lines

@@ -607,24 +607,22 @@ body,
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 0;
 }
 
 .item {
   padding: 8px 10px;
-  background: var(--bg-primary);
+  background: transparent;
   border-radius: var(--radius-sm);
-  border-left: 3px solid transparent;
   transition: background 0.1s ease;
 }
 
 .item:hover {
-  background: var(--bg-secondary);
+  background: var(--bg-hover);
 }
 
 /* Domain "active" state - current branch, current worktree, etc. */
 .item.current {
-  border-left-color: var(--accent);
   background: var(--accent-glow);
 }
 
@@ -911,7 +909,6 @@ body,
 
 /* Combined: item is both domain-active AND UI-selected */
 .item.current.selected {
-  border-left-color: var(--accent);
   background: var(--accent-glow);
 }
 
@@ -1573,13 +1570,12 @@ body,
 .commit-item {
   padding: 8px 12px;
   border-radius: var(--radius-sm);
-  border-left: 3px solid transparent;
   cursor: pointer;
   transition: background 0.1s ease;
 }
 
 .commit-item:hover {
-  background: var(--bg-secondary);
+  background: var(--bg-hover);
 }
 
 .commit-message {
@@ -2169,6 +2165,36 @@ body,
   font-size: 11px;
   user-select: text;
   cursor: text;
+}
+
+/* PR link badge in branch detail */
+.pr-link-badge {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  transition: background 0.15s ease;
+}
+
+.pr-link-badge:hover {
+  background: var(--bg-hover);
+}
+
+.pr-link-badge .pr-draft-indicator {
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 /* Copyable text - only in detail panels, not in list items */
@@ -4591,6 +4617,20 @@ body,
   border-radius: 4px;
   background: var(--bg-tertiary);
   color: var(--text-secondary);
+}
+
+.pr-review-branch .branch-link {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+}
+
+.pr-review-branch .branch-link code {
+  transition: background 0.15s ease;
+}
+
+.pr-review-branch .branch-link:hover code {
+  background: var(--bg-hover);
 }
 
 .pr-arrow {
