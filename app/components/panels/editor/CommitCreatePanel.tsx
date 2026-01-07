@@ -147,6 +147,7 @@ export function StagingPanel({ workingStatus, currentBranch, onRefresh, onStatus
     setHighlightedLines(new Map())
     setIsEditing(false)
     setEditContent('')
+    setDiscardLinesConfirm(false)
   }, [selectedFile])
 
   // Syntax highlighting for diff lines
