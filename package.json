@@ -56,6 +56,7 @@
     "clsx": "^2.1.1",
     "fix-path": "^5.0.0",
     "lucide-react": "^0.541.0",
+    "shiki": "^3.20.0",
     "simple-git": "^3.30.0",
     "tailwind-merge": "^3.3.1",
     "tw-animate-css": "^1.3.7",

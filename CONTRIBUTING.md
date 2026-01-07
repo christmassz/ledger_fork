@@ -18,7 +18,7 @@ Thank you for your interest in contributing to Ledger! This document provides gu
 git clone https://github.com/peterjthomson/ledger.git
 cd ledger
 
-# Install dependencies
+# Install the dependencies
 npm install
 
 # Start development server
@@ -165,5 +165,3 @@ All git commands go through `simple-git` library in `git-service.ts`. PR operati
 ## License
 
 By contributing, you agree that your contributions will be licensed under the MIT License.
-
-

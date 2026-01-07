@@ -260,10 +260,16 @@ export interface EnhancedWorktree {
   changedFileCount: number
   additions: number
   deletions: number
-  // For ordering
+  // Directory modification time (used for sorting worktrees by creation order)
   lastModified: string
-  // Activity tracking
+  // Activity tracking - dual signals for more reliable detection
   activityStatus: WorktreeActivityStatus
+  /** Most recent file modification time in worktree (filesystem level) */
+  lastFileModified: string
+  /** Last git activity: commit time or working directory change time */
+  lastGitActivity: string
+  /** Source of activity status: 'file' | 'git' | 'both' */
+  activitySource: 'file' | 'git' | 'both'
   agentTaskHint: string | null // The agent's current task/prompt if available
 }
 
@@ -279,8 +285,9 @@ function detectAgent(worktreePath: string): WorktreeAgent {
     return 'claude'
   }
 
-  // Gemini might use ~/.gemini/worktrees/
-  if (worktreePath.includes('/.gemini/worktrees/')) {
+  // Gemini CLI (gemini-wt) uses ~/.gemini/worktrees/{project}/
+  // Branches are typically named gemini-{timestamp} or custom names
+  if (worktreePath.includes('/.gemini/worktrees/') || worktreePath.includes('/gemini-worktrees/')) {
     return 'gemini'
   }
 
@@ -375,7 +382,7 @@ async function getWorktreeCommitMessage(worktreePath: string): Promise<string> {
   }
 }
 
-// Get directory modification time
+// Get directory modification time (used for sorting worktrees by creation order)
 async function getDirectoryMtime(dirPath: string): Promise<string> {
   try {
     const stat = await statAsync(dirPath)
@@ -385,16 +392,161 @@ async function getDirectoryMtime(dirPath: string): Promise<string> {
   }
 }
 
-// Calculate activity status based on last modified time
-function calculateActivityStatus(lastModified: string): WorktreeActivityStatus {
-  const now = Date.now()
-  const modified = new Date(lastModified).getTime()
-  const diffMinutes = (now - modified) / (1000 * 60)
+/**
+ * Get the most recent file modification time in a worktree
+ * Scans files recursively, respecting .gitignore patterns
+ * This detects activity even when agents make changes not yet tracked by git
+ */
+async function getLastFileModifiedTime(worktreePath: string): Promise<string> {
+  try {
+    // Use git ls-files to get tracked files, then check their mtimes
+    // Also check untracked files that aren't ignored
+    const { stdout: trackedOutput } = await execAsync('git ls-files', { cwd: worktreePath })
+    const trackedFiles = trackedOutput.split('\n').filter(Boolean)
 
-  if (diffMinutes < 5) return 'active' // Modified in last 5 minutes
-  if (diffMinutes < 60) return 'recent' // Modified in last hour
-  if (diffMinutes < 24 * 60) return 'stale' // Modified in last 24 hours
-  return 'unknown' // Older than 24 hours
+    // Get untracked files (respects .gitignore)
+    const { stdout: untrackedOutput } = await execAsync(
+      'git ls-files --others --exclude-standard',
+      { cwd: worktreePath }
+    )
+    const untrackedFiles = untrackedOutput.split('\n').filter(Boolean)
+
+    const allFiles = [...trackedFiles, ...untrackedFiles]
+
+    let latestMtime = 0
+
+    // Check file mtimes in batches for efficiency
+    const batchSize = 50
+    for (let i = 0; i < allFiles.length; i += batchSize) {
+      const batch = allFiles.slice(i, i + batchSize)
+      const mtimePromises = batch.map(async (file) => {
+        try {
+          const fullPath = path.join(worktreePath, file)
+          const stat = await statAsync(fullPath)
+          return stat.mtime.getTime()
+        } catch {
+          return 0
+        }
+      })
+      const mtimes = await Promise.all(mtimePromises)
+      const maxInBatch = Math.max(...mtimes, 0)
+      if (maxInBatch > latestMtime) {
+        latestMtime = maxInBatch
+      }
+    }
+
+    return latestMtime > 0 ? new Date(latestMtime).toISOString() : new Date().toISOString()
+  } catch {
+    // Fallback to directory mtime
+    return getDirectoryMtime(worktreePath)
+  }
+}
+
+/**
+ * Get the last git activity time for a worktree
+ * Returns the more recent of: last commit time, or last change to working directory
+ */
+async function getLastGitActivity(worktreePath: string): Promise<string> {
+  try {
+    // Get last commit time
+    let lastCommitTime = 0
+    try {
+      const { stdout: commitTimeOutput } = await execAsync(
+        'git log -1 --format=%ct',
+        { cwd: worktreePath }
+      )
+      const timestamp = parseInt(commitTimeOutput.trim(), 10)
+      if (!isNaN(timestamp)) {
+        lastCommitTime = timestamp * 1000 // Convert to milliseconds
+      }
+    } catch {
+      // No commits yet
+    }
+
+    // Check for uncommitted changes and their modification times
+    let lastChangeTime = 0
+    try {
+      // Get modified files in working directory
+      const { stdout: diffFiles } = await execAsync(
+        'git diff --name-only',
+        { cwd: worktreePath }
+      )
+      const { stdout: stagedFiles } = await execAsync(
+        'git diff --staged --name-only',
+        { cwd: worktreePath }
+      )
+      const { stdout: untrackedFiles } = await execAsync(
+        'git ls-files --others --exclude-standard',
+        { cwd: worktreePath }
+      )
+
+      const changedFiles = [
+        ...diffFiles.split('\n').filter(Boolean),
+        ...stagedFiles.split('\n').filter(Boolean),
+        ...untrackedFiles.split('\n').filter(Boolean),
+      ]
+
+      // Get the most recent mtime of changed files
+      for (const file of changedFiles.slice(0, 20)) { // Limit to 20 files for perf
+        try {
+          const fullPath = path.join(worktreePath, file)
+          const stat = await statAsync(fullPath)
+          if (stat.mtime.getTime() > lastChangeTime) {
+            lastChangeTime = stat.mtime.getTime()
+          }
+        } catch {
+          // File might have been deleted
+        }
+      }
+    } catch {
+      // No changes
+    }
+
+    // Return the more recent of commit time or change time
+    const latestActivity = Math.max(lastCommitTime, lastChangeTime)
+    return latestActivity > 0 ? new Date(latestActivity).toISOString() : new Date().toISOString()
+  } catch {
+    return new Date().toISOString()
+  }
+}
+
+/**
+ * Calculate activity status based on both file and git activity
+ * Uses the more recent of the two signals
+ */
+function calculateActivityStatus(
+  lastFileModified: string,
+  lastGitActivity: string
+): { status: WorktreeActivityStatus; source: 'file' | 'git' | 'both' } {
+  const now = Date.now()
+  const fileModified = new Date(lastFileModified).getTime()
+  const gitActivity = new Date(lastGitActivity).getTime()
+
+  // Use the more recent activity
+  const moreRecent = Math.max(fileModified, gitActivity)
+  const diffMinutes = (now - moreRecent) / (1000 * 60)
+
+  // Determine which source is more recent
+  let source: 'file' | 'git' | 'both' = 'both'
+  const timeDiff = Math.abs(fileModified - gitActivity)
+  const significantDiff = 60 * 1000 // 1 minute threshold
+  
+  if (timeDiff > significantDiff) {
+    source = fileModified > gitActivity ? 'file' : 'git'
+  }
+
+  let status: WorktreeActivityStatus
+  if (diffMinutes < 5) {
+    status = 'active' // Modified in last 5 minutes
+  } else if (diffMinutes < 60) {
+    status = 'recent' // Modified in last hour
+  } else if (diffMinutes < 24 * 60) {
+    status = 'stale' // Modified in last 24 hours
+  } else {
+    status = 'unknown' // Older than 24 hours
+  }
+
+  return { status, source }
 }
 
 // Get agent task hint from Cursor transcript files
@@ -463,6 +615,79 @@ async function getCursorAgentTaskHint(worktreePath: string): Promise<string | nu
   }
 }
 
+// Get agent task hint from Claude Code session files
+// Claude Code stores sessions in ~/.claude/projects/{encoded-path}/*.jsonl
+async function getClaudeCodeAgentTaskHint(worktreePath: string): Promise<string | null> {
+  try {
+    const homeDir = process.env.HOME || ''
+    const projectsDir = path.join(homeDir, '.claude', 'projects')
+
+    // Check if the projects directory exists
+    if (!fs.existsSync(projectsDir)) return null
+
+    // Claude Code encodes paths by replacing / with - (e.g., /Users/foo/bar -> -Users-foo-bar)
+    const encodedPath = worktreePath.replace(/\//g, '-')
+    const projectFolder = path.join(projectsDir, encodedPath)
+
+    // Check if this worktree has a Claude Code project folder
+    if (!fs.existsSync(projectFolder)) return null
+
+    // Get session files sorted by modification time (newest first)
+    // Session files are UUIDs.jsonl, skip agent-*.jsonl files
+    const files = fs.readdirSync(projectFolder)
+      .filter(f => f.endsWith('.jsonl') && !f.startsWith('agent-'))
+      .map(f => ({
+        name: f,
+        path: path.join(projectFolder, f),
+        mtime: fs.statSync(path.join(projectFolder, f)).mtime.getTime()
+      }))
+      .sort((a, b) => b.mtime - a.mtime)
+
+    // Check the most recent session file
+    for (const file of files.slice(0, 3)) { // Only check 3 most recent sessions
+      try {
+        const content = fs.readFileSync(file.path, 'utf-8')
+        const lines = content.split('\n').filter(Boolean)
+
+        // Find the first user message in the session
+        for (const line of lines) {
+          try {
+            const entry = JSON.parse(line)
+            
+            // Look for user messages
+            if (entry.type === 'user' && entry.message?.content) {
+              let userContent = entry.message.content
+              
+              // Strip system instruction tags if present
+              userContent = userContent.replace(/<system[_-]?instruction>[\s\S]*?<\/system[_-]?instruction>/gi, '')
+              
+              // Get the actual user query, trimming whitespace
+              const trimmed = userContent.trim()
+              if (!trimmed) continue
+              
+              // Get first meaningful line
+              const firstLine = trimmed.split('\n')[0].trim()
+              if (!firstLine) continue
+              
+              return firstLine.slice(0, 60) + (firstLine.length > 60 ? '…' : '')
+            }
+          } catch {
+            // Skip malformed lines
+            continue
+          }
+        }
+      } catch {
+        // Skip unreadable files
+        continue
+      }
+    }
+
+    return null
+  } catch {
+    return null
+  }
+}
+
 // Get enhanced worktrees with agent detection and metadata
 export async function getEnhancedWorktrees(): Promise<EnhancedWorktree[]> {
   if (!git) throw new Error('No repository selected')
@@ -475,15 +700,19 @@ export async function getEnhancedWorktrees(): Promise<EnhancedWorktree[]> {
     const agent = detectAgent(wt.path)
 
     // Gather all metadata in parallel
-    const [diffStats, commitMessage, lastModified, agentTaskHint] = await Promise.all([
+    const [diffStats, commitMessage, lastModified, lastFileModified, lastGitActivity, agentTaskHint] = await Promise.all([
       getWorktreeDiffStats(wt.path),
       getWorktreeCommitMessage(wt.path),
       getDirectoryMtime(wt.path),
-      agent === 'cursor' ? getCursorAgentTaskHint(wt.path) : Promise.resolve(null),
+      getLastFileModifiedTime(wt.path),
+      getLastGitActivity(wt.path),
+      agent === 'cursor' ? getCursorAgentTaskHint(wt.path) :
+      agent === 'claude' ? getClaudeCodeAgentTaskHint(wt.path) :
+      Promise.resolve(null),
     ])
 
     const contextHint = getContextHint(wt.branch, diffStats.changedFiles, commitMessage)
-    const activityStatus = calculateActivityStatus(lastModified)
+    const { status: activityStatus, source: activitySource } = calculateActivityStatus(lastFileModified, lastGitActivity)
 
     return {
       ...wt,
@@ -496,6 +725,9 @@ export async function getEnhancedWorktrees(): Promise<EnhancedWorktree[]> {
       deletions: diffStats.deletions,
       lastModified,
       activityStatus,
+      lastFileModified,
+      lastGitActivity,
+      activitySource,
       agentTaskHint,
     }
   })
@@ -717,6 +949,54 @@ export async function deleteBranch(
       }
     }
     return { success: false, message: errorMessage }
+  }
+}
+
+// Rename a branch
+export async function renameBranch(
+  oldName: string,
+  newName: string
+): Promise<{ success: boolean; message: string }> {
+  if (!git) throw new Error('No repository selected')
+
+  try {
+    const trimmedOldName = oldName.trim()
+    const trimmedNewName = newName.trim()
+
+    if (!trimmedOldName || !trimmedNewName) {
+      return { success: false, message: 'Branch names cannot be empty' }
+    }
+
+    // Don't allow renaming main/master
+    if (trimmedOldName === 'main' || trimmedOldName === 'master') {
+      return { success: false, message: 'Cannot rename main or master branch' }
+    }
+
+    // Don't allow renaming to main/master
+    if (trimmedNewName === 'main' || trimmedNewName === 'master') {
+      return { success: false, message: 'Cannot rename to main or master' }
+    }
+
+    // Validate new branch name format (no spaces, special chars at start)
+    if (!/^[a-zA-Z0-9]/.test(trimmedNewName)) {
+      return { success: false, message: 'Branch name must start with a letter or number' }
+    }
+
+    if (/\s/.test(trimmedNewName)) {
+      return { success: false, message: 'Branch name cannot contain spaces' }
+    }
+
+    // Check if new name already exists
+    const branches = await git.branchLocal()
+    if (branches.all.includes(trimmedNewName)) {
+      return { success: false, message: `Branch '${trimmedNewName}' already exists` }
+    }
+
+    // Rename the branch using -m flag
+    await git.branch(['-m', trimmedOldName, trimmedNewName])
+    return { success: true, message: `Renamed branch '${trimmedOldName}' to '${trimmedNewName}'` }
+  } catch (error) {
+    return { success: false, message: (error as Error).message }
   }
 }
 
@@ -1246,7 +1526,7 @@ export async function getPRReviewComments(prNumber: number): Promise<PRReviewCom
   }
 }
 
-// Get the diff for a specific file in a PR
+// Get the diff for a specific file in a PR (raw text)
 export async function getPRFileDiff(prNumber: number, filePath: string): Promise<string | null> {
   if (!repoPath) return null
 
@@ -1282,6 +1562,23 @@ export async function getPRFileDiff(prNumber: number, filePath: string): Promise
     return result.length > 0 ? result.join('\n') : null
   } catch (error) {
     console.error('Error fetching PR file diff:', error)
+    return null
+  }
+}
+
+// Get parsed diff for a specific file in a PR (with hunks and line-by-line info)
+export async function getPRFileDiffParsed(prNumber: number, filePath: string): Promise<StagingFileDiff | null> {
+  if (!repoPath) return null
+
+  try {
+    // Get the raw diff first
+    const rawDiff = await getPRFileDiff(prNumber, filePath)
+    if (!rawDiff) return null
+
+    // Parse the diff using the same parser as staging
+    return parseDiff(rawDiff, filePath)
+  } catch (error) {
+    console.error('Error fetching parsed PR file diff:', error)
     return null
   }
 }
@@ -1563,6 +1860,55 @@ export async function getWorkingStatus(): Promise<WorkingStatus> {
     unstagedCount,
     additions,
     deletions,
+  }
+}
+
+/**
+ * Get how many commits the current branch is behind main/master
+ * Returns null if cannot be determined (e.g. no main branch, on main already)
+ */
+export async function getBehindMainCount(): Promise<{
+  behind: number
+  baseBranch: string
+} | null> {
+  if (!git) throw new Error('No repository selected')
+
+  try {
+    const status = await git.status()
+    const currentBranch = status.current
+
+    if (!currentBranch) return null
+
+    // Don't show indicator if we're on main/master
+    if (currentBranch === 'main' || currentBranch === 'master') {
+      return null
+    }
+
+    // Find the base branch (origin/main, origin/master, or local main/master)
+    let baseBranch: string | null = null
+    const candidates = ['origin/main', 'origin/master', 'main', 'master']
+
+    for (const candidate of candidates) {
+      try {
+        await git.raw(['rev-parse', '--verify', candidate])
+        baseBranch = candidate
+        break
+      } catch {
+        // Try next candidate
+      }
+    }
+
+    if (!baseBranch) return null
+
+    // Count commits the current branch is behind main
+    // baseBranch..HEAD = commits in HEAD not in baseBranch (ahead)
+    // HEAD..baseBranch = commits in baseBranch not in HEAD (behind)
+    const behindOutput = await git.raw(['rev-list', '--count', `HEAD..${baseBranch}`])
+    const behind = parseInt(behindOutput.trim()) || 0
+
+    return { behind, baseBranch }
+  } catch {
+    return null
   }
 }
 
@@ -4031,6 +4377,428 @@ export async function discardAllChanges(): Promise<{ success: boolean; message: 
   }
 }
 
+/**
+ * Apply a patch using git apply with stdin via child_process
+ */
+async function applyPatch(
+  targetPath: string,
+  patch: string,
+  args: string[]
+): Promise<void> {
+  const { spawn } = await import('child_process')
+
+  return new Promise((resolve, reject) => {
+    const gitProcess = spawn('git', ['apply', ...args], {
+      cwd: targetPath,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
+
+    let stderr = ''
+
+    gitProcess.stderr.on('data', (data) => {
+      stderr += data.toString()
+    })
+
+    gitProcess.on('close', (code) => {
+      if (code === 0) {
+        resolve()
+      } else {
+        reject(new Error(stderr || `git apply failed with code ${code}`))
+      }
+    })
+
+    gitProcess.on('error', (err) => {
+      reject(err)
+    })
+
+    // Write the patch to stdin
+    gitProcess.stdin.write(patch)
+    gitProcess.stdin.end()
+  })
+}
+
+// Stage a single hunk
+export async function stageHunk(
+  filePath: string,
+  hunkIndex: number
+): Promise<{ success: boolean; message: string }> {
+  if (!git || !repoPath) throw new Error('No repository selected')
+
+  try {
+    // Get the current diff to extract the hunk
+    const diff = await getFileDiff(filePath, false)
+    if (!diff) {
+      return { success: false, message: 'Could not get file diff' }
+    }
+
+    if (hunkIndex < 0 || hunkIndex >= diff.hunks.length) {
+      return { success: false, message: `Invalid hunk index: ${hunkIndex}` }
+    }
+
+    const hunk = diff.hunks[hunkIndex]
+    if (!hunk.rawPatch) {
+      return { success: false, message: 'Hunk has no raw patch data' }
+    }
+
+    // Apply the patch to the index
+    await applyPatch(repoPath, hunk.rawPatch, ['--cached'])
+    return { success: true, message: `Staged hunk ${hunkIndex + 1}` }
+  } catch (error) {
+    return { success: false, message: (error as Error).message }
+  }
+}
+
+// Unstage a single hunk
+export async function unstageHunk(
+  filePath: string,
+  hunkIndex: number
+): Promise<{ success: boolean; message: string }> {
+  if (!git || !repoPath) throw new Error('No repository selected')
+
+  try {
+    // Get the staged diff to extract the hunk
+    const diff = await getFileDiff(filePath, true)
+    if (!diff) {
+      return { success: false, message: 'Could not get staged file diff' }
+    }
+
+    if (hunkIndex < 0 || hunkIndex >= diff.hunks.length) {
+      return { success: false, message: `Invalid hunk index: ${hunkIndex}` }
+    }
+
+    const hunk = diff.hunks[hunkIndex]
+    if (!hunk.rawPatch) {
+      return { success: false, message: 'Hunk has no raw patch data' }
+    }
+
+    // Reverse apply the patch from the index
+    await applyPatch(repoPath, hunk.rawPatch, ['--cached', '-R'])
+    return { success: true, message: `Unstaged hunk ${hunkIndex + 1}` }
+  } catch (error) {
+    return { success: false, message: (error as Error).message }
+  }
+}
+
+// Discard a single hunk
+export async function discardHunk(
+  filePath: string,
+  hunkIndex: number
+): Promise<{ success: boolean; message: string }> {
+  if (!git || !repoPath) throw new Error('No repository selected')
+
+  try {
+    // Get the current diff to extract the hunk
+    const diff = await getFileDiff(filePath, false)
+    if (!diff) {
+      return { success: false, message: 'Could not get file diff' }
+    }
+
+    if (hunkIndex < 0 || hunkIndex >= diff.hunks.length) {
+      return { success: false, message: `Invalid hunk index: ${hunkIndex}` }
+    }
+
+    const hunk = diff.hunks[hunkIndex]
+    if (!hunk.rawPatch) {
+      return { success: false, message: 'Hunk has no raw patch data' }
+    }
+
+    // Reverse apply the patch to the working tree
+    await applyPatch(repoPath, hunk.rawPatch, ['-R'])
+    return { success: true, message: `Discarded hunk ${hunkIndex + 1}` }
+  } catch (error) {
+    return { success: false, message: (error as Error).message }
+  }
+}
+
+/**
+ * Build a partial patch from a hunk with only selected lines.
+ *
+ * For staging (applying to index from unstaged diff):
+ * - Selected add lines: include as '+' (add to index)
+ * - Non-selected add lines: OMIT entirely (they don't exist in index, can't be context)
+ * - Selected delete lines: include as '-' (remove from index)
+ * - Non-selected delete lines: include as context ' ' (keep in index)
+ * - Context lines: include as context ' '
+ */
+function buildPartialPatch(
+  filePath: string,
+  hunk: StagingDiffHunk,
+  selectedLineIndices: number[]
+): string {
+  const selectedSet = new Set(selectedLineIndices)
+
+  const patchLines: string[] = []
+  let oldCount = 0
+  let newCount = 0
+
+  for (const line of hunk.lines) {
+    const isSelected = selectedSet.has(line.lineIndex)
+
+    if (line.type === 'context') {
+      // Context lines are always included
+      patchLines.push(' ' + line.content)
+      oldCount++
+      newCount++
+    } else if (line.type === 'add') {
+      if (isSelected) {
+        // Selected add line - include as addition
+        patchLines.push('+' + line.content)
+        newCount++
+      }
+      // Non-selected add lines are OMITTED entirely.
+      // They exist in the working tree but NOT in the index,
+      // so they can't be used as context for git apply --cached.
+    } else if (line.type === 'delete') {
+      if (isSelected) {
+        // Selected delete line - include as deletion
+        patchLines.push('-' + line.content)
+        oldCount++
+      } else {
+        // Non-selected delete line - keep as context (line stays in index)
+        patchLines.push(' ' + line.content)
+        oldCount++
+        newCount++
+      }
+    }
+  }
+
+  const newHeader = `@@ -${hunk.oldStart},${oldCount} +${hunk.newStart},${newCount} @@`
+
+  return (
+    `diff --git a/${filePath} b/${filePath}\n` +
+    `--- a/${filePath}\n` +
+    `+++ b/${filePath}\n` +
+    newHeader +
+    '\n' +
+    patchLines.join('\n') +
+    '\n'
+  )
+}
+
+/**
+ * Build a partial patch for reversed application (unstage/discard).
+ *
+ * For unstaging (applying -R to index) or discarding (applying -R to working tree):
+ * - Selected add lines: include as '+' (will be removed by -R)
+ * - Non-selected add lines: include as context ' ' (they exist in the target and must match)
+ * - Selected delete lines: include as '-' (will be restored by -R)
+ * - Non-selected delete lines: include as context ' ' (keep in target)
+ * - Context lines: include as context ' '
+ *
+ * The key difference: when applying with -R, ALL lines (selected and non-selected)
+ * must exist in the target for proper context matching.
+ */
+function buildReversedPartialPatch(
+  filePath: string,
+  hunk: StagingDiffHunk,
+  selectedLineIndices: number[]
+): string {
+  const selectedSet = new Set(selectedLineIndices)
+
+  const patchLines: string[] = []
+  let oldCount = 0
+  let newCount = 0
+
+  for (const line of hunk.lines) {
+    const isSelected = selectedSet.has(line.lineIndex)
+
+    if (line.type === 'context') {
+      // Context lines are always included
+      patchLines.push(' ' + line.content)
+      oldCount++
+      newCount++
+    } else if (line.type === 'add') {
+      if (isSelected) {
+        // Selected add line - include as addition (will be removed by -R)
+        patchLines.push('+' + line.content)
+        newCount++
+      } else {
+        // Non-selected add line - include as context (exists in target, must match)
+        patchLines.push(' ' + line.content)
+        oldCount++
+        newCount++
+      }
+    } else if (line.type === 'delete') {
+      if (isSelected) {
+        // Selected delete line - include as deletion (will be restored by -R)
+        patchLines.push('-' + line.content)
+        oldCount++
+      } else {
+        // Non-selected delete line - keep as context
+        patchLines.push(' ' + line.content)
+        oldCount++
+        newCount++
+      }
+    }
+  }
+
+  const newHeader = `@@ -${hunk.oldStart},${oldCount} +${hunk.newStart},${newCount} @@`
+
+  return (
+    `diff --git a/${filePath} b/${filePath}\n` +
+    `--- a/${filePath}\n` +
+    `+++ b/${filePath}\n` +
+    newHeader +
+    '\n' +
+    patchLines.join('\n') +
+    '\n'
+  )
+}
+
+// Stage specific lines within a hunk
+export async function stageLines(
+  filePath: string,
+  hunkIndex: number,
+  lineIndices: number[]
+): Promise<{ success: boolean; message: string }> {
+  if (!git || !repoPath) throw new Error('No repository selected')
+
+  try {
+    if (lineIndices.length === 0) {
+      return { success: false, message: 'No lines selected' }
+    }
+
+    const diff = await getFileDiff(filePath, false)
+    if (!diff) {
+      return { success: false, message: 'Could not get file diff' }
+    }
+
+    if (hunkIndex < 0 || hunkIndex >= diff.hunks.length) {
+      return { success: false, message: `Invalid hunk index: ${hunkIndex}` }
+    }
+
+    const hunk = diff.hunks[hunkIndex]
+    const partialPatch = buildPartialPatch(filePath, hunk, lineIndices)
+
+    await applyPatch(repoPath, partialPatch, ['--cached'])
+    return { success: true, message: `Staged ${lineIndices.length} line(s)` }
+  } catch (error) {
+    return { success: false, message: (error as Error).message }
+  }
+}
+
+// Unstage specific lines within a hunk
+export async function unstageLines(
+  filePath: string,
+  hunkIndex: number,
+  lineIndices: number[]
+): Promise<{ success: boolean; message: string }> {
+  if (!git || !repoPath) throw new Error('No repository selected')
+
+  try {
+    if (lineIndices.length === 0) {
+      return { success: false, message: 'No lines selected' }
+    }
+
+    const diff = await getFileDiff(filePath, true)
+    if (!diff) {
+      return { success: false, message: 'Could not get staged file diff' }
+    }
+
+    if (hunkIndex < 0 || hunkIndex >= diff.hunks.length) {
+      return { success: false, message: `Invalid hunk index: ${hunkIndex}` }
+    }
+
+    const hunk = diff.hunks[hunkIndex]
+    const partialPatch = buildReversedPartialPatch(filePath, hunk, lineIndices)
+
+    await applyPatch(repoPath, partialPatch, ['--cached', '-R'])
+    return { success: true, message: `Unstaged ${lineIndices.length} line(s)` }
+  } catch (error) {
+    return { success: false, message: (error as Error).message }
+  }
+}
+
+// Discard specific lines within a hunk
+export async function discardLines(
+  filePath: string,
+  hunkIndex: number,
+  lineIndices: number[]
+): Promise<{ success: boolean; message: string }> {
+  if (!git || !repoPath) throw new Error('No repository selected')
+
+  try {
+    if (lineIndices.length === 0) {
+      return { success: false, message: 'No lines selected' }
+    }
+
+    const diff = await getFileDiff(filePath, false)
+    if (!diff) {
+      return { success: false, message: 'Could not get file diff' }
+    }
+
+    if (hunkIndex < 0 || hunkIndex >= diff.hunks.length) {
+      return { success: false, message: `Invalid hunk index: ${hunkIndex}` }
+    }
+
+    const hunk = diff.hunks[hunkIndex]
+    const partialPatch = buildReversedPartialPatch(filePath, hunk, lineIndices)
+
+    await applyPatch(repoPath, partialPatch, ['-R'])
+    return { success: true, message: `Discarded ${lineIndices.length} line(s)` }
+  } catch (error) {
+    return { success: false, message: (error as Error).message }
+  }
+}
+
+// Get the full content of a file for editing
+export async function getFileContent(filePath: string): Promise<string | null> {
+  if (!repoPath) return null
+
+  try {
+    const fullPath = path.join(repoPath, filePath)
+
+    // Security: ensure the file is within the repo
+    const resolvedPath = path.resolve(fullPath)
+    const resolvedRepo = path.resolve(repoPath)
+    if (!resolvedPath.startsWith(resolvedRepo + path.sep)) {
+      console.error('Security: attempted to read file outside repository')
+      return null
+    }
+
+    // Check if file exists
+    if (!fs.existsSync(fullPath)) {
+      return null
+    }
+
+    const content = await fs.promises.readFile(fullPath, 'utf-8')
+    return content
+  } catch (error) {
+    console.error('Error reading file content:', error)
+    return null
+  }
+}
+
+// Save content to a file (for inline editing)
+export async function saveFileContent(
+  filePath: string,
+  content: string
+): Promise<{ success: boolean; message: string }> {
+  if (!repoPath) return { success: false, message: 'No repository selected' }
+
+  try {
+    const fullPath = path.join(repoPath, filePath)
+
+    // Security: ensure the file is within the repo
+    const resolvedPath = path.resolve(fullPath)
+    const resolvedRepo = path.resolve(repoPath)
+    if (!resolvedPath.startsWith(resolvedRepo + path.sep)) {
+      return { success: false, message: 'Cannot write to files outside repository' }
+    }
+
+    // Ensure parent directory exists (for new files)
+    const dir = path.dirname(fullPath)
+    if (!fs.existsSync(dir)) {
+      await fs.promises.mkdir(dir, { recursive: true })
+    }
+
+    await fs.promises.writeFile(fullPath, content, 'utf-8')
+    return { success: true, message: `Saved ${filePath}` }
+  } catch (error) {
+    return { success: false, message: (error as Error).message }
+  }
+}
+
 // Staging file diff types (for working directory changes)
 export interface StagingDiffHunk {
   header: string
@@ -4039,6 +4807,8 @@ export interface StagingDiffHunk {
   newStart: number
   newLines: number
   lines: StagingDiffLine[]
+  /** Raw patch text for this hunk (used for git apply) */
+  rawPatch: string
 }
 
 export interface StagingDiffLine {
@@ -4046,6 +4816,8 @@ export interface StagingDiffLine {
   content: string
   oldLineNumber?: number
   newLineNumber?: number
+  /** Index of this line within the hunk (0-based, for selection) */
+  lineIndex: number
 }
 
 export interface StagingFileDiff {
@@ -4078,25 +4850,40 @@ export async function getFileDiff(filePath: string, staged: boolean): Promise<St
         const fullPath = path.join(repoPath!, filePath)
         try {
           const content = await fs.promises.readFile(fullPath, 'utf-8')
-          const lines = content.split('\n')
+          const fileLines = content.split('\n')
+
+          // Build raw patch for untracked file
+          const header = `@@ -0,0 +1,${fileLines.length} @@`
+          const patchLines = fileLines.map((l) => '+' + l)
+          const rawPatch =
+            `diff --git a/${filePath} b/${filePath}\n` +
+            `new file mode 100644\n` +
+            `--- /dev/null\n` +
+            `+++ b/${filePath}\n` +
+            header +
+            '\n' +
+            patchLines.join('\n') +
+            '\n'
 
           return {
             filePath,
             status: 'untracked',
             isBinary: false,
-            additions: lines.length,
+            additions: fileLines.length,
             deletions: 0,
             hunks: [
               {
-                header: `@@ -0,0 +1,${lines.length} @@`,
+                header,
                 oldStart: 0,
                 oldLines: 0,
                 newStart: 1,
-                newLines: lines.length,
-                lines: lines.map((line, idx) => ({
+                newLines: fileLines.length,
+                rawPatch,
+                lines: fileLines.map((line, idx) => ({
                   type: 'add' as const,
                   content: line,
                   newLineNumber: idx + 1,
+                  lineIndex: idx,
                 })),
               },
             ],
@@ -4122,6 +4909,7 @@ function parseDiff(diffOutput: string, filePath: string): StagingFileDiff {
   const lines = diffOutput.split('\n')
   const hunks: StagingDiffHunk[] = []
   let currentHunk: StagingDiffHunk | null = null
+  let currentHunkRawLines: string[] = []
   let oldLineNum = 0
   let newLineNum = 0
   let additions = 0
@@ -4129,6 +4917,17 @@ function parseDiff(diffOutput: string, filePath: string): StagingFileDiff {
   let isBinary = false
   let status: StagingFileDiff['status'] = 'modified'
   let oldPath: string | undefined
+
+  // Extract file header lines for building rawPatch
+  let fileHeader = ''
+  for (const line of lines) {
+    if (line.startsWith('diff --git') || line.startsWith('---') || line.startsWith('+++')) {
+      fileHeader += line + '\n'
+    }
+    if (line.startsWith('+++')) break
+  }
+
+  let lineIndex = 0
 
   for (const line of lines) {
     // Check for binary file
@@ -4159,12 +4958,16 @@ function parseDiff(diffOutput: string, filePath: string): StagingFileDiff {
     // Parse hunk header
     const hunkMatch = line.match(/^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)$/)
     if (hunkMatch) {
+      // Finalize previous hunk
       if (currentHunk) {
+        currentHunk.rawPatch = fileHeader + currentHunkRawLines.join('\n') + '\n'
         hunks.push(currentHunk)
       }
 
       oldLineNum = parseInt(hunkMatch[1])
       newLineNum = parseInt(hunkMatch[3])
+      lineIndex = 0
+      currentHunkRawLines = [line]
 
       currentHunk = {
         header: line,
@@ -4173,6 +4976,7 @@ function parseDiff(diffOutput: string, filePath: string): StagingFileDiff {
         newStart: newLineNum,
         newLines: parseInt(hunkMatch[4] || '1'),
         lines: [],
+        rawPatch: '', // Will be set when hunk is finalized
       }
       continue
     }
@@ -4180,25 +4984,31 @@ function parseDiff(diffOutput: string, filePath: string): StagingFileDiff {
     // Parse diff lines
     if (currentHunk) {
       if (line.startsWith('+') && !line.startsWith('+++')) {
+        currentHunkRawLines.push(line)
         additions++
         currentHunk.lines.push({
           type: 'add',
           content: line.slice(1),
           newLineNumber: newLineNum++,
+          lineIndex: lineIndex++,
         })
       } else if (line.startsWith('-') && !line.startsWith('---')) {
+        currentHunkRawLines.push(line)
         deletions++
         currentHunk.lines.push({
           type: 'delete',
           content: line.slice(1),
           oldLineNumber: oldLineNum++,
+          lineIndex: lineIndex++,
         })
       } else if (line.startsWith(' ')) {
+        currentHunkRawLines.push(line)
         currentHunk.lines.push({
           type: 'context',
           content: line.slice(1),
           oldLineNumber: oldLineNum++,
           newLineNumber: newLineNum++,
+          lineIndex: lineIndex++,
         })
       }
     }
@@ -4206,6 +5016,7 @@ function parseDiff(diffOutput: string, filePath: string): StagingFileDiff {
 
   // Don't forget the last hunk
   if (currentHunk) {
+    currentHunk.rawPatch = fileHeader + currentHunkRawLines.join('\n') + '\n'
     hunks.push(currentHunk)
   }
 
@@ -4379,25 +5190,40 @@ export async function getFileDiffInWorktree(
         const fullPath = path.join(worktreePath, filePath)
         try {
           const content = await fs.promises.readFile(fullPath, 'utf-8')
-          const lines = content.split('\n')
+          const fileLines = content.split('\n')
+
+          // Build raw patch for untracked file
+          const header = `@@ -0,0 +1,${fileLines.length} @@`
+          const patchLines = fileLines.map((l) => '+' + l)
+          const rawPatch =
+            `diff --git a/${filePath} b/${filePath}\n` +
+            `new file mode 100644\n` +
+            `--- /dev/null\n` +
+            `+++ b/${filePath}\n` +
+            header +
+            '\n' +
+            patchLines.join('\n') +
+            '\n'
 
           return {
             filePath,
             status: 'untracked',
             isBinary: false,
-            additions: lines.length,
+            additions: fileLines.length,
             deletions: 0,
             hunks: [
               {
-                header: `@@ -0,0 +1,${lines.length} @@`,
+                header,
                 oldStart: 0,
                 oldLines: 0,
                 newStart: 1,
-                newLines: lines.length,
-                lines: lines.map((line, idx) => ({
+                newLines: fileLines.length,
+                rawPatch,
+                lines: fileLines.map((line, idx) => ({
                   type: 'add' as const,
                   content: line,
                   newLineNumber: idx + 1,
+                  lineIndex: idx,
                 })),
               },
             ],

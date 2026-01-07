@@ -78,6 +78,7 @@ import {
   checkoutBranch,
   createBranch,
   deleteBranch,
+  renameBranch,
   deleteRemoteBranch,
   pushBranch,
   checkoutRemoteBranch,
@@ -318,6 +319,14 @@ app.whenReady().then(() => {
   ipcMain.handle('delete-branch', async (_, branchName: string, force: boolean = false) => {
     try {
       return await deleteBranch(branchName, force)
+    } catch (error) {
+      return { success: false, message: (error as Error).message }
+    }
+  })
+
+  ipcMain.handle('rename-branch', async (_, oldName: string, newName: string) => {
+    try {
+      return await renameBranch(oldName, newName)
     } catch (error) {
       return { success: false, message: (error as Error).message }
     }

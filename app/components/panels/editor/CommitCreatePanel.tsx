@@ -5,10 +5,12 @@
  * for creating new branches and PRs.
  */
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import type { WorkingStatus, UncommittedFile, StagingFileDiff } from '../../../types/electron'
 import type { StatusMessage } from '../../../types/app-types'
 import { beforeCommit, afterCommit } from '@/lib/plugins'
+import { getLanguageFromPath, highlightLines } from '../../../utils/syntax-highlighter'
+import type { BundledLanguage } from 'shiki'
 
 export interface StagingPanelProps {
   workingStatus: WorkingStatus
@@ -39,10 +41,45 @@ export function StagingPanel({ workingStatus, currentBranch, onRefresh, onStatus
   const [prTitle, setPrTitle] = useState('')
   const [prBody, setPrBody] = useState('')
   const [prDraft, setPrDraft] = useState(false)
+  // Behind main indicator
+  const [behindMain, setBehindMain] = useState<{ behind: number; baseBranch: string } | null>(null)
+  // Line selection state: Map of hunkIndex -> Set of lineIndices
+  const [selectedLines, setSelectedLines] = useState<Map<number, Set<number>>>(new Map())
+  const [lastClickedLine, setLastClickedLine] = useState<{ hunkIndex: number; lineIndex: number } | null>(null)
+  // Syntax highlighting state: Map of lineIndex to highlighted HTML
+  const [highlightedLines, setHighlightedLines] = useState<Map<number, string>>(new Map())
+  // Inline editing state
+  const [isEditing, setIsEditing] = useState(false)
+  const [editContent, setEditContent] = useState('')
+  const [loadingEdit, setLoadingEdit] = useState(false)
+  const [savingEdit, setSavingEdit] = useState(false)
 
   const stagedFiles = workingStatus.files.filter((f) => f.staged)
   const unstagedFiles = workingStatus.files.filter((f) => !f.staged)
 
+  // Load behind main count
+  useEffect(() => {
+    let cancelled = false
+
+    const loadBehindMain = async () => {
+      try {
+        const result = await window.conveyor.staging.getBehindMainCount()
+        if (!cancelled) {
+          setBehindMain(result)
+        }
+      } catch {
+        if (!cancelled) {
+          setBehindMain(null)
+        }
+      }
+    }
+
+    loadBehindMain()
+
+    return () => {
+      cancelled = true
+    }
+  }, [currentBranch]) // Re-check when branch changes
 
   // Close file context menu when clicking outside
   useEffect(() => {
@@ -103,6 +140,239 @@ export function StagingPanel({ workingStatus, currentBranch, onRefresh, onStatus
     }
   }, [selectedFile])
 
+  // Clear line selection and edit state when file changes
+  useEffect(() => {
+    setSelectedLines(new Map())
+    setLastClickedLine(null)
+    setHighlightedLines(new Map())
+    setIsEditing(false)
+    setEditContent('')
+    setDiscardLinesConfirm(false)
+    setDiscardHunkConfirm(null)
+  }, [selectedFile])
+
+  // Syntax highlighting for diff lines
+  useEffect(() => {
+    if (!fileDiff || !selectedFile) {
+      setHighlightedLines(new Map())
+      return
+    }
+
+    let cancelled = false
+
+    const highlightDiff = async () => {
+      const language = getLanguageFromPath(selectedFile.path)
+      if (!language) {
+        // No language detected, skip highlighting
+        setHighlightedLines(new Map())
+        return
+      }
+
+      // Collect all lines from all hunks with a global index for lookup
+      const allLines: Array<{ code: string; lineIndex: number; globalKey: number }> = []
+      let globalIndex = 0
+
+      for (const hunk of fileDiff.hunks) {
+        for (const line of hunk.lines) {
+          allLines.push({
+            code: line.content,
+            lineIndex: line.lineIndex,
+            globalKey: globalIndex++,
+          })
+        }
+      }
+
+      try {
+        const highlighted = await highlightLines(
+          allLines.map((l) => ({ code: l.code, lineIndex: l.globalKey })),
+          language as BundledLanguage
+        )
+
+        if (!cancelled) {
+          // Convert back using global index as key
+          const resultMap = new Map<number, string>()
+          for (const line of allLines) {
+            const html = highlighted.get(line.globalKey)
+            if (html) {
+              resultMap.set(line.globalKey, html)
+            }
+          }
+          setHighlightedLines(resultMap)
+        }
+      } catch (error) {
+        console.warn('[StagingPanel] Syntax highlighting failed:', error)
+        if (!cancelled) {
+          setHighlightedLines(new Map())
+        }
+      }
+    }
+
+    highlightDiff()
+
+    return () => {
+      cancelled = true
+    }
+  }, [fileDiff, selectedFile])
+
+  // Build a lookup for highlighted content by global line index
+  const getHighlightedContent = useCallback(
+    (hunkIdx: number, lineIndex: number): string | null => {
+      if (!fileDiff) return null
+
+      // Calculate global index
+      let globalIndex = 0
+      for (let h = 0; h < hunkIdx; h++) {
+        globalIndex += fileDiff.hunks[h].lines.length
+      }
+      globalIndex += lineIndex
+
+      return highlightedLines.get(globalIndex) || null
+    },
+    [fileDiff, highlightedLines]
+  )
+
+  // Line selection handlers
+  const handleLineClick = (hunkIndex: number, lineIndex: number, shiftKey: boolean) => {
+    setSelectedLines((prev) => {
+      const newSelection = new Map(prev)
+
+      if (shiftKey && lastClickedLine && lastClickedLine.hunkIndex === hunkIndex && fileDiff) {
+        // Shift-click: select range (excluding context lines)
+        const start = Math.min(lastClickedLine.lineIndex, lineIndex)
+        const end = Math.max(lastClickedLine.lineIndex, lineIndex)
+        const hunkSelection = new Set(newSelection.get(hunkIndex) || [])
+        const hunk = fileDiff.hunks[hunkIndex]
+        for (let i = start; i <= end; i++) {
+          // Only add actionable lines (add/delete), skip context lines
+          const line = hunk?.lines.find((l) => l.lineIndex === i)
+          if (line && line.type !== 'context') {
+            hunkSelection.add(i)
+          }
+        }
+        newSelection.set(hunkIndex, hunkSelection)
+      } else {
+        // Regular click: toggle single line
+        const hunkSelection = new Set(newSelection.get(hunkIndex) || [])
+        if (hunkSelection.has(lineIndex)) {
+          hunkSelection.delete(lineIndex)
+        } else {
+          hunkSelection.add(lineIndex)
+        }
+        if (hunkSelection.size > 0) {
+          newSelection.set(hunkIndex, hunkSelection)
+        } else {
+          newSelection.delete(hunkIndex)
+        }
+      }
+
+      return newSelection
+    })
+    setLastClickedLine({ hunkIndex, lineIndex })
+  }
+
+  const getSelectedLinesCount = () => {
+    if (!fileDiff) return 0
+    let count = 0
+    for (const [hunkIndex, lineIndices] of selectedLines.entries()) {
+      const hunk = fileDiff.hunks[hunkIndex]
+      if (!hunk) continue
+      // Only count actionable lines (add/delete), not context lines
+      for (const lineIndex of lineIndices) {
+        const line = hunk.lines.find((l) => l.lineIndex === lineIndex)
+        if (line && line.type !== 'context') {
+          count++
+        }
+      }
+    }
+    return count
+  }
+
+  const clearLineSelection = () => {
+    setSelectedLines(new Map())
+    setLastClickedLine(null)
+  }
+
+  // Stage selected lines
+  // Process hunks in reverse order (highest index first) to avoid index drift
+  const handleStageSelectedLines = async () => {
+    if (!selectedFile) return
+
+    // Sort hunk indices in descending order to prevent index drift after each operation
+    const sortedHunks = Array.from(selectedLines.entries()).sort(([a], [b]) => b - a)
+
+    for (const [hunkIndex, lineIndices] of sortedHunks) {
+      const result = await window.electronAPI.stageLines(selectedFile.path, hunkIndex, Array.from(lineIndices))
+      if (!result.success) {
+        onStatusChange({ type: 'error', message: result.message })
+        return
+      }
+    }
+
+    onStatusChange({ type: 'success', message: `Staged ${getSelectedLinesCount()} line(s)` })
+    clearLineSelection()
+    // Reload diff and refresh
+    const diff = await window.conveyor.staging.getFileDiff(selectedFile.path, selectedFile.staged)
+    setFileDiff(diff)
+    await onRefresh()
+  }
+
+  // Unstage selected lines
+  // Process hunks in reverse order (highest index first) to avoid index drift
+  const handleUnstageSelectedLines = async () => {
+    if (!selectedFile) return
+
+    // Sort hunk indices in descending order to prevent index drift after each operation
+    const sortedHunks = Array.from(selectedLines.entries()).sort(([a], [b]) => b - a)
+
+    for (const [hunkIndex, lineIndices] of sortedHunks) {
+      const result = await window.electronAPI.unstageLines(selectedFile.path, hunkIndex, Array.from(lineIndices))
+      if (!result.success) {
+        onStatusChange({ type: 'error', message: result.message })
+        return
+      }
+    }
+
+    onStatusChange({ type: 'success', message: `Unstaged ${getSelectedLinesCount()} line(s)` })
+    clearLineSelection()
+    const diff = await window.conveyor.staging.getFileDiff(selectedFile.path, selectedFile.staged)
+    setFileDiff(diff)
+    await onRefresh()
+  }
+
+  // Discard selected lines
+  const [discardLinesConfirm, setDiscardLinesConfirm] = useState(false)
+
+  // Process hunks in reverse order (highest index first) to avoid index drift
+  const handleDiscardSelectedLines = async () => {
+    if (!selectedFile) return
+
+    // Require confirmation
+    if (!discardLinesConfirm) {
+      setDiscardLinesConfirm(true)
+      setTimeout(() => setDiscardLinesConfirm(false), 3000)
+      return
+    }
+
+    setDiscardLinesConfirm(false)
+
+    // Sort hunk indices in descending order to prevent index drift after each operation
+    const sortedHunks = Array.from(selectedLines.entries()).sort(([a], [b]) => b - a)
+
+    for (const [hunkIndex, lineIndices] of sortedHunks) {
+      const result = await window.electronAPI.discardLines(selectedFile.path, hunkIndex, Array.from(lineIndices))
+      if (!result.success) {
+        onStatusChange({ type: 'error', message: result.message })
+        return
+      }
+    }
+
+    onStatusChange({ type: 'success', message: `Discarded ${getSelectedLinesCount()} line(s)` })
+    clearLineSelection()
+    const diff = await window.conveyor.staging.getFileDiff(selectedFile.path, selectedFile.staged)
+    setFileDiff(diff)
+    await onRefresh()
+  }
+
   // Stage a file
   const handleStageFile = async (file: UncommittedFile) => {
     const result = await window.conveyor.staging.stageFile(file.path)
@@ -156,6 +426,121 @@ export function StagingPanel({ workingStatus, currentBranch, onRefresh, onStatus
       if (selectedFile?.path === file.path) {
         setSelectedFile(null)
       }
+      await onRefresh()
+    } else {
+      onStatusChange({ type: 'error', message: result.message })
+    }
+  }
+
+  // Start editing a file
+  const handleStartEdit = async () => {
+    if (!selectedFile) return
+    
+    setLoadingEdit(true)
+    try {
+      const content = await window.conveyor.staging.getFileContent(selectedFile.path)
+      if (content !== null) {
+        setEditContent(content)
+        setIsEditing(true)
+      } else {
+        onStatusChange({ type: 'error', message: 'Could not load file content' })
+      }
+    } catch (_error) {
+      onStatusChange({ type: 'error', message: 'Failed to load file for editing' })
+    } finally {
+      setLoadingEdit(false)
+    }
+  }
+
+  // Cancel editing
+  const handleCancelEdit = () => {
+    setIsEditing(false)
+    setEditContent('')
+  }
+
+  // Save edited file
+  const handleSaveEdit = async () => {
+    if (!selectedFile) return
+    
+    setSavingEdit(true)
+    try {
+      const result = await window.conveyor.staging.saveFileContent(selectedFile.path, editContent)
+      if (result.success) {
+        onStatusChange({ type: 'success', message: result.message })
+        setIsEditing(false)
+        setEditContent('')
+        // Refresh diff to show updated changes
+        const diff = await window.conveyor.staging.getFileDiff(selectedFile.path, selectedFile.staged)
+        setFileDiff(diff)
+        await onRefresh()
+      } else {
+        onStatusChange({ type: 'error', message: result.message })
+      }
+    } catch (_error) {
+      onStatusChange({ type: 'error', message: 'Failed to save file' })
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
+  // Stage a single hunk
+  const handleStageHunk = async (hunkIndex: number) => {
+    if (!selectedFile) return
+    const result = await window.electronAPI.stageHunk(selectedFile.path, hunkIndex)
+    if (result.success) {
+      onStatusChange({ type: 'success', message: result.message })
+      // Clear stale line selections before reloading diff
+      clearLineSelection()
+      // Reload diff and refresh file list
+      const diff = await window.conveyor.staging.getFileDiff(selectedFile.path, selectedFile.staged)
+      setFileDiff(diff)
+      await onRefresh()
+    } else {
+      onStatusChange({ type: 'error', message: result.message })
+    }
+  }
+
+  // Unstage a single hunk
+  const handleUnstageHunk = async (hunkIndex: number) => {
+    if (!selectedFile) return
+    const result = await window.electronAPI.unstageHunk(selectedFile.path, hunkIndex)
+    if (result.success) {
+      onStatusChange({ type: 'success', message: result.message })
+      // Clear stale line selections before reloading diff
+      clearLineSelection()
+      // Reload diff and refresh file list
+      const diff = await window.conveyor.staging.getFileDiff(selectedFile.path, selectedFile.staged)
+      setFileDiff(diff)
+      await onRefresh()
+    } else {
+      onStatusChange({ type: 'error', message: result.message })
+    }
+  }
+
+  // Discard a single hunk
+  const [discardHunkConfirm, setDiscardHunkConfirm] = useState<number | null>(null)
+
+  const handleDiscardHunk = async (hunkIndex: number) => {
+    if (!selectedFile) return
+
+    // Show confirmation first
+    if (discardHunkConfirm !== hunkIndex) {
+      setDiscardHunkConfirm(hunkIndex)
+      // Auto-clear confirmation after 3 seconds
+      setTimeout(() => setDiscardHunkConfirm(null), 3000)
+      return
+    }
+
+    // User confirmed - proceed with discard
+    setDiscardHunkConfirm(null)
+    const result = await window.electronAPI.discardHunk(selectedFile.path, hunkIndex)
+    if (result.success) {
+      onStatusChange({ type: 'success', message: result.message })
+      // Clear stale line selections before reloading diff
+      clearLineSelection()
+      // Reload diff and refresh file list
+      const diff = await window.conveyor.staging.getFileDiff(selectedFile.path, selectedFile.staged)
+      setFileDiff(diff)
       await onRefresh()
     } else {
       onStatusChange({ type: 'error', message: result.message })
@@ -384,6 +769,14 @@ export function StagingPanel({ workingStatus, currentBranch, onRefresh, onStatus
             <span className="diff-deletions">-{workingStatus.deletions}</span>
           </span>
         </div>
+        {behindMain && behindMain.behind > 0 && (
+          <div className="behind-main-indicator">
+            <span className="behind-main-icon">↓</span>
+            <span className="behind-main-text">
+              {behindMain.behind} behind {behindMain.baseBranch.replace('origin/', '')}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* File Lists */}
@@ -495,13 +888,82 @@ export function StagingPanel({ workingStatus, currentBranch, onRefresh, onStatus
         <div className="staging-diff">
           <div className="staging-diff-header">
             <span className="staging-diff-title">{selectedFile.path}</span>
-            {fileDiff && (
-              <span className="staging-diff-stats">
-                <span className="diff-additions">+{fileDiff.additions}</span>
-                <span className="diff-deletions">-{fileDiff.deletions}</span>
-              </span>
-            )}
+            <div className="staging-diff-header-actions">
+              {fileDiff && !isEditing && (
+                <span className="staging-diff-stats">
+                  <span className="diff-additions">+{fileDiff.additions}</span>
+                  <span className="diff-deletions">-{fileDiff.deletions}</span>
+                </span>
+              )}
+              {!selectedFile.staged && selectedFile.status !== 'deleted' && !isEditing && (
+                <button
+                  className="btn btn-sm btn-secondary"
+                  onClick={handleStartEdit}
+                  disabled={loadingEdit || loadingDiff}
+                  title="Edit file content"
+                >
+                  {loadingEdit ? 'Loading...' : 'Edit'}
+                </button>
+              )}
+            </div>
           </div>
+
+          {/* Edit Mode */}
+          {isEditing ? (
+            <div className="staging-edit-mode">
+              <textarea
+                className="staging-edit-textarea"
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                spellCheck={false}
+              />
+              <div className="staging-edit-actions">
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={handleSaveEdit}
+                  disabled={savingEdit}
+                >
+                  {savingEdit ? 'Saving...' : 'Save'}
+                </button>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={handleCancelEdit}
+                  disabled={savingEdit}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+          {/* Line Selection Action Bar */}
+          {getSelectedLinesCount() > 0 && (
+            <div className="line-selection-bar">
+              <span className="line-selection-count">{getSelectedLinesCount()} line(s) selected</span>
+              <div className="line-selection-actions">
+                {selectedFile?.staged ? (
+                  <button className="line-action-btn unstage" onClick={handleUnstageSelectedLines}>
+                    Unstage Selected
+                  </button>
+                ) : (
+                  <>
+                    <button className="line-action-btn stage" onClick={handleStageSelectedLines}>
+                      Stage Selected
+                    </button>
+                    <button
+                      className={`line-action-btn discard ${discardLinesConfirm ? 'confirm' : ''}`}
+                      onClick={handleDiscardSelectedLines}
+                    >
+                      {discardLinesConfirm ? 'Confirm Discard?' : 'Discard Selected'}
+                    </button>
+                  </>
+                )}
+                <button className="line-action-btn clear" onClick={clearLineSelection}>
+                  Clear
+                </button>
+              </div>
+            </div>
+          )}
           <div className="staging-diff-content">
             {loadingDiff ? (
               <div className="staging-diff-loading">Loading diff...</div>
@@ -512,18 +974,69 @@ export function StagingPanel({ workingStatus, currentBranch, onRefresh, onStatus
             ) : fileDiff ? (
               fileDiff.hunks.map((hunk, hunkIdx) => (
                 <div key={hunkIdx} className="staging-hunk">
-                  <div className="staging-hunk-header">{hunk.header}</div>
+                  <div className="staging-hunk-header">
+                    <span className="staging-hunk-header-text">{hunk.header}</span>
+                    <div className="staging-hunk-actions">
+                      {/* Show stage/unstage button based on whether file is staged */}
+                      {selectedFile?.staged ? (
+                        <button
+                          className="hunk-action-btn unstage"
+                          onClick={() => handleUnstageHunk(hunkIdx)}
+                          title="Unstage this hunk"
+                        >
+                          Unstage
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            className="hunk-action-btn stage"
+                            onClick={() => handleStageHunk(hunkIdx)}
+                            title="Stage this hunk"
+                          >
+                            Stage
+                          </button>
+                          <button
+                            className={`hunk-action-btn discard ${discardHunkConfirm === hunkIdx ? 'confirm' : ''}`}
+                            onClick={() => handleDiscardHunk(hunkIdx)}
+                            title={discardHunkConfirm === hunkIdx ? 'Click again to confirm' : 'Discard this hunk'}
+                          >
+                            {discardHunkConfirm === hunkIdx ? 'Confirm?' : 'Discard'}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
                   <div className="staging-hunk-lines">
-                    {hunk.lines.map((line, lineIdx) => (
-                      <div key={lineIdx} className={`staging-diff-line diff-line-${line.type}`}>
-                        <span className="diff-line-number old">{line.oldLineNumber || ''}</span>
-                        <span className="diff-line-number new">{line.newLineNumber || ''}</span>
-                        <span className="diff-line-prefix">
-                          {line.type === 'add' ? '+' : line.type === 'delete' ? '-' : ' '}
-                        </span>
-                        <span className="diff-line-content">{line.content}</span>
-                      </div>
-                    ))}
+                    {hunk.lines.map((line) => {
+                      const isSelectable = line.type !== 'context'
+                      const isSelected = selectedLines.get(hunkIdx)?.has(line.lineIndex) || false
+                      const highlightedHtml = getHighlightedContent(hunkIdx, line.lineIndex)
+                      return (
+                        <div
+                          key={line.lineIndex}
+                          className={`staging-diff-line diff-line-${line.type} ${isSelected ? 'selected' : ''} ${isSelectable ? 'selectable' : ''}`}
+                          onClick={
+                            isSelectable
+                              ? (e) => handleLineClick(hunkIdx, line.lineIndex, e.shiftKey)
+                              : undefined
+                          }
+                        >
+                          <span className="diff-line-number old">{line.oldLineNumber || ''}</span>
+                          <span className="diff-line-number new">{line.newLineNumber || ''}</span>
+                          <span className="diff-line-prefix">
+                            {line.type === 'add' ? '+' : line.type === 'delete' ? '-' : ' '}
+                          </span>
+                          {highlightedHtml ? (
+                            <span
+                              className="diff-line-content highlighted"
+                              dangerouslySetInnerHTML={{ __html: highlightedHtml }}
+                            />
+                          ) : (
+                            <span className="diff-line-content">{line.content}</span>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
               ))
@@ -531,6 +1044,8 @@ export function StagingPanel({ workingStatus, currentBranch, onRefresh, onStatus
               <div className="staging-diff-empty">Select a file to view diff</div>
             )}
           </div>
+          </>
+          )}
         </div>
       )}
 

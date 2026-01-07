@@ -607,24 +607,22 @@ body,
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 0;
 }
 
 .item {
   padding: 8px 10px;
-  background: var(--bg-primary);
+  background: transparent;
   border-radius: var(--radius-sm);
-  border-left: 3px solid transparent;
   transition: background 0.1s ease;
 }
 
 .item:hover {
-  background: var(--bg-secondary);
+  background: var(--bg-hover);
 }
 
 /* Domain "active" state - current branch, current worktree, etc. */
 .item.current {
-  border-left-color: var(--accent);
   background: var(--accent-glow);
 }
 
@@ -911,7 +909,6 @@ body,
 
 /* Combined: item is both domain-active AND UI-selected */
 .item.current.selected {
-  border-left-color: var(--accent);
   background: var(--accent-glow);
 }
 
@@ -1163,6 +1160,46 @@ body,
 .activity-status.activity-stale,
 .activity-status.activity-unknown {
   color: var(--text-muted);
+}
+
+/* Activity source hint (file/git indicator) */
+.activity-source-hint {
+  font-size: 0.85em;
+  opacity: 0.7;
+  font-style: italic;
+}
+
+/* Detailed activity timestamps */
+.activity-details {
+  margin-top: 4px;
+}
+
+.activity-timestamps {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.9em;
+}
+
+.activity-timestamp {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+}
+
+.activity-timestamp .timestamp-icon {
+  font-size: 0.9em;
+  opacity: 0.8;
+}
+
+.activity-timestamp .timestamp-label {
+  font-weight: 500;
+  min-width: 36px;
+}
+
+.activity-timestamp .timestamp-value {
+  color: var(--text-secondary);
 }
 
 /* Agent Task Callout (in detail panel) */
@@ -1533,13 +1570,12 @@ body,
 .commit-item {
   padding: 8px 12px;
   border-radius: var(--radius-sm);
-  border-left: 3px solid transparent;
   cursor: pointer;
   transition: background 0.1s ease;
 }
 
 .commit-item:hover {
-  background: var(--bg-secondary);
+  background: var(--bg-hover);
 }
 
 .commit-message {
@@ -2131,6 +2167,36 @@ body,
   cursor: text;
 }
 
+/* PR link badge in branch detail */
+.pr-link-badge {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  transition: background 0.15s ease;
+}
+
+.pr-link-badge:hover {
+  background: var(--bg-hover);
+}
+
+.pr-link-badge .pr-draft-indicator {
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
 /* Copyable text - only in detail panels, not in list items */
 .copyable-text {
   user-select: text;
@@ -2451,6 +2517,29 @@ body,
   margin-left: auto;
 }
 
+/* Behind main indicator */
+.behind-main-indicator {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  padding: 6px 10px;
+  background: color-mix(in srgb, var(--warning, #f59e0b) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warning, #f59e0b) 30%, transparent);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  color: var(--text-primary);
+}
+
+.behind-main-icon {
+  color: var(--warning, #f59e0b);
+  font-weight: 600;
+}
+
+.behind-main-text {
+  font-weight: 500;
+}
+
 /* File Lists */
 .staging-files {
   flex: 0 0 auto;
@@ -2628,6 +2717,48 @@ body,
   font-size: 11px;
 }
 
+.staging-diff-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Inline Edit Mode */
+.staging-edit-mode {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 200px;
+}
+
+.staging-edit-textarea {
+  flex: 1;
+  width: 100%;
+  min-height: 200px;
+  padding: 12px 16px;
+  border: none;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'JetBrains Mono', 'SF Mono', Monaco, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+}
+
+.staging-edit-textarea:focus {
+  outline: none;
+}
+
+.staging-edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-subtle);
+}
+
 .staging-diff-content {
   flex: 1;
   overflow-y: auto;
@@ -2645,14 +2776,185 @@ body,
 }
 
 .staging-hunk-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: 4px 16px;
   background: var(--bg-tertiary);
   color: var(--text-muted);
   font-size: 10px;
 }
 
+.staging-hunk-header-text {
+  flex: 1;
+  font-family: 'JetBrains Mono', 'SF Mono', Monaco, monospace;
+}
+
+.staging-hunk-actions {
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.staging-hunk:hover .staging-hunk-actions {
+  opacity: 1;
+}
+
+.hunk-action-btn {
+  padding: 2px 8px;
+  font-size: 10px;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s ease;
+}
+
+.hunk-action-btn.stage {
+  background: var(--success);
+  color: white;
+}
+
+.hunk-action-btn.stage:hover {
+  background: color-mix(in srgb, var(--success) 85%, white);
+}
+
+.hunk-action-btn.unstage {
+  background: var(--warning);
+  color: white;
+}
+
+.hunk-action-btn.unstage:hover {
+  background: color-mix(in srgb, var(--warning) 85%, white);
+}
+
+.hunk-action-btn.discard {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+}
+
+.hunk-action-btn.discard:hover {
+  background: var(--error);
+  color: white;
+  border-color: var(--error);
+}
+
+.hunk-action-btn.discard.confirm {
+  background: var(--error);
+  color: white;
+  border-color: var(--error);
+  animation: pulse 0.5s ease infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
 .staging-hunk-lines {
   padding: 0;
+}
+
+/* Line selection styling */
+.staging-diff-line.selectable {
+  cursor: pointer;
+}
+
+.staging-diff-line.selectable:hover {
+  background: color-mix(in srgb, var(--accent) 15%, var(--bg-secondary));
+}
+
+.staging-diff-line.selected {
+  background: color-mix(in srgb, var(--accent) 25%, var(--bg-secondary)) !important;
+  border-left: 2px solid var(--accent);
+}
+
+.staging-diff-line.diff-line-add.selected {
+  background: color-mix(in srgb, var(--accent) 25%, var(--diff-add-bg)) !important;
+}
+
+.staging-diff-line.diff-line-delete.selected {
+  background: color-mix(in srgb, var(--accent) 25%, var(--diff-remove-bg)) !important;
+}
+
+/* Line Selection Action Bar */
+.line-selection-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 16px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-secondary));
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 12px;
+}
+
+.line-selection-count {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.line-selection-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.line-action-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+
+.line-action-btn.stage {
+  background: var(--success);
+  color: white;
+}
+
+.line-action-btn.stage:hover {
+  background: color-mix(in srgb, var(--success) 85%, white);
+}
+
+.line-action-btn.unstage {
+  background: var(--warning);
+  color: white;
+}
+
+.line-action-btn.unstage:hover {
+  background: color-mix(in srgb, var(--warning) 85%, white);
+}
+
+.line-action-btn.discard {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+}
+
+.line-action-btn.discard:hover {
+  background: var(--error);
+  color: white;
+  border-color: var(--error);
+}
+
+.line-action-btn.discard.confirm {
+  background: var(--error);
+  color: white;
+  border-color: var(--error);
+  animation: pulse 0.5s ease infinite;
+}
+
+.line-action-btn.clear {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.line-action-btn.clear:hover {
+  color: var(--text-primary);
 }
 
 .staging-diff-line {
@@ -2678,6 +2980,24 @@ body,
   flex: 1;
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+/* Syntax highlighting in diffs */
+.staging-diff-line .diff-line-content.highlighted {
+  font-family: 'JetBrains Mono', 'SF Mono', Monaco, 'Fira Code', monospace;
+}
+
+.staging-diff-line .diff-line-content.highlighted span {
+  /* Allow Shiki colors to show, but keep readable on diff backgrounds */
+}
+
+/* Ensure Shiki inline spans don't break layout */
+.staging-diff-line .diff-line-content.highlighted code,
+.staging-diff-line .diff-line-content.highlighted pre {
+  display: inline;
+  background: transparent;
+  padding: 0;
+  margin: 0;
 }
 
 .staging-diff-line.diff-line-add {
@@ -4107,6 +4427,94 @@ body,
   padding: 8px 16px;
 }
 
+/* Conflict file highlighting */
+.branch-diff-file.has-conflict {
+  background: rgba(239, 68, 68, 0.05);
+  border-left: 3px solid var(--danger, #ef4444);
+  margin-left: -3px;
+}
+
+.branch-diff-file.has-conflict .branch-diff-file-header:hover {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.diff-file-conflict-badge {
+  color: var(--danger, #ef4444);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.diff-conflict-indicator {
+  background: var(--danger, #ef4444);
+  color: white;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  padding: 2px 5px;
+  border-radius: 3px;
+  letter-spacing: 0.3px;
+}
+
+/* Conflict Warning Banner */
+.conflict-warning-banner {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.08), rgba(239, 68, 68, 0.04));
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+
+.conflict-warning-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.conflict-warning-icon {
+  font-size: 16px;
+}
+
+.conflict-warning-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--danger, #ef4444);
+}
+
+.conflict-warning-description {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+
+.conflict-files-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.conflict-file-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  color: var(--text-primary);
+  background: rgba(239, 68, 68, 0.06);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.conflict-file-icon {
+  color: var(--danger, #ef4444);
+  font-size: 10px;
+}
+
+.conflict-file-path {
+  word-break: break-all;
+}
+
 /* ========================================
    PR Review Panel
    ======================================== */
@@ -4209,6 +4617,20 @@ body,
   border-radius: 4px;
   background: var(--bg-tertiary);
   color: var(--text-secondary);
+}
+
+.pr-review-branch .branch-link {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+}
+
+.pr-review-branch .branch-link code {
+  transition: background 0.15s ease;
+}
+
+.pr-review-branch .branch-link:hover code {
+  background: var(--bg-hover);
 }
 
 .pr-arrow {

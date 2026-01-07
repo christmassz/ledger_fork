@@ -4,9 +4,10 @@
  * Displays branch metadata, allows PR creation, and shows diff against base branch.
  */
 
-import { useState, useEffect } from 'react'
-import type { Branch, BranchDiff, BranchDiffType } from '../../../types/electron'
+import { useState, useEffect, useMemo } from 'react'
+import type { Branch, BranchDiff, BranchDiffType, PullRequest } from '../../../types/electron'
 import type { StatusMessage } from '../../../types/app-types'
+import { DiffViewer } from '../../ui/DiffViewer'
 
 export interface BranchDetailPanelProps {
   branch: Branch
@@ -14,9 +15,13 @@ export interface BranchDetailPanelProps {
   onStatusChange?: (status: StatusMessage | null) => void
   onCheckoutBranch?: (branch: Branch) => void
   onDeleteBranch?: (branch: Branch) => void
+  onRenameBranch?: (branch: Branch, newName: string) => void
   onOpenStaging?: () => void
+  onNavigateToPR?: (pr: PullRequest) => void
+  prs?: PullRequest[]
   switching?: boolean
   deleting?: boolean
+  renaming?: boolean
 }
 
 export function BranchDetailPanel({
@@ -25,9 +30,13 @@ export function BranchDetailPanel({
   onStatusChange,
   onCheckoutBranch,
   onDeleteBranch,
+  onRenameBranch,
   onOpenStaging,
+  onNavigateToPR,
+  prs,
   switching,
   deleting,
+  renaming,
 }: BranchDetailPanelProps) {
   const [creatingPR, setCreatingPR] = useState(false)
   const [pushing, setPushing] = useState(false)
@@ -42,7 +51,27 @@ export function BranchDetailPanel({
   const [prBody, setPrBody] = useState('')
   const [prDraft, setPrDraft] = useState(false)
 
+  // Branch rename form state
+  const [showRenameForm, setShowRenameForm] = useState(false)
+  const [newBranchName, setNewBranchName] = useState('')
+
   const isMainOrMaster = branch.name === 'main' || branch.name === 'master'
+
+  // Find PR for this branch
+  const branchPR = useMemo(() => {
+    if (!prs) return null
+    return prs.find((pr) => pr.branch === branch.name) || null
+  }, [prs, branch.name])
+
+  // Reset form states when branch changes
+  useEffect(() => {
+    setShowRenameForm(false)
+    setNewBranchName('')
+    setShowPRForm(false)
+    setPrTitle('')
+    setPrBody('')
+    setPrDraft(false)
+  }, [branch.name])
 
   // Load branch diff when branch or diff type changes
   useEffect(() => {
@@ -84,6 +113,23 @@ export function BranchDetailPanel({
     setPrTitle('')
     setPrBody('')
     setPrDraft(false)
+  }
+
+  const handleStartRename = () => {
+    setNewBranchName(branch.name)
+    setShowRenameForm(true)
+  }
+
+  const handleCancelRename = () => {
+    setShowRenameForm(false)
+    setNewBranchName('')
+  }
+
+  const handleSubmitRename = () => {
+    if (!newBranchName.trim() || newBranchName === branch.name) return
+    onRenameBranch?.(branch, newBranchName.trim())
+    setShowRenameForm(false)
+    setNewBranchName('')
   }
 
   const handleSubmitPR = async () => {
@@ -180,7 +226,47 @@ export function BranchDetailPanel({
           <span className="meta-label">Merged</span>
           <span className="meta-value">{branch.isMerged ? 'Yes' : 'No'}</span>
         </div>
+        {branchPR && (
+          <div className="detail-meta-item">
+            <span className="meta-label">Pull Request</span>
+            {onNavigateToPR ? (
+              <button
+                className="pr-link-badge"
+                onClick={() => onNavigateToPR(branchPR)}
+                title={branchPR.title}
+              >
+                #{branchPR.number}
+                {branchPR.isDraft && <span className="pr-draft-indicator">Draft</span>}
+              </button>
+            ) : (
+              <span className="meta-value">#{branchPR.number}</span>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Conflict Warning Banner */}
+      {branchDiff?.hasConflicts && branchDiff.conflictFiles && branchDiff.conflictFiles.length > 0 && (
+        <div className="conflict-warning-banner">
+          <div className="conflict-warning-header">
+            <span className="conflict-warning-icon">⚠️</span>
+            <span className="conflict-warning-title">
+              {branchDiff.conflictFiles.length} Merge {branchDiff.conflictFiles.length === 1 ? 'Conflict' : 'Conflicts'} with {branchDiff.baseBranch}
+            </span>
+          </div>
+          <div className="conflict-warning-description">
+            This branch has conflicts that must be resolved before merging.
+          </div>
+          <div className="conflict-files-list">
+            {branchDiff.conflictFiles.map((file) => (
+              <div key={file} className="conflict-file-item">
+                <span className="conflict-file-icon">⊘</span>
+                <span className="conflict-file-path">{file}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Latest Commit Message */}
       {branch.lastCommitMessage && (
@@ -239,8 +325,50 @@ export function BranchDetailPanel({
         </div>
       )}
 
+      {/* Branch Rename Form */}
+      {showRenameForm && !isMainOrMaster && (
+        <div className="pr-create-form">
+          <div className="pr-form-header">
+            <span className="pr-form-title">Rename Branch</span>
+            <button className="pr-form-close" onClick={handleCancelRename} title="Cancel">
+              ×
+            </button>
+          </div>
+          <div className="pr-form-field">
+            <label className="pr-form-label">New Branch Name</label>
+            <input
+              type="text"
+              className="pr-form-input"
+              value={newBranchName}
+              onChange={(e) => setNewBranchName(e.target.value)}
+              placeholder="new-branch-name"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && newBranchName.trim() && newBranchName !== branch.name) {
+                  handleSubmitRename()
+                } else if (e.key === 'Escape') {
+                  handleCancelRename()
+                }
+              }}
+            />
+          </div>
+          <div className="pr-form-actions">
+            <button className="btn btn-secondary" onClick={handleCancelRename} disabled={renaming}>
+              Cancel
+            </button>
+            <button
+              className="btn btn-primary"
+              onClick={handleSubmitRename}
+              disabled={renaming || !newBranchName.trim() || newBranchName === branch.name}
+            >
+              {renaming ? 'Renaming...' : 'Rename'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Actions */}
-      {!showPRForm && (
+      {!showPRForm && !showRenameForm && (
         <div className="detail-actions">
           {!branch.current && onCheckoutBranch && (
             <button className="btn btn-primary" onClick={() => onCheckoutBranch(branch)} disabled={switching || deleting}>
@@ -262,11 +390,16 @@ export function BranchDetailPanel({
               Create Pull Request
             </button>
           )}
-          <button className="btn btn-secondary" onClick={() => window.electronAPI.openBranchInGitHub(branch.name)} disabled={deleting}>
+          <button className="btn btn-secondary" onClick={() => window.electronAPI.openBranchInGitHub(branch.name)} disabled={deleting || renaming}>
             View on GitHub
           </button>
+          {!isMainOrMaster && onRenameBranch && (
+            <button className="btn btn-secondary" onClick={handleStartRename} disabled={switching || deleting || renaming}>
+              Rename Branch
+            </button>
+          )}
           {!isMainOrMaster && !branch.current && onDeleteBranch && (
-            <button className="btn btn-secondary btn-danger" onClick={() => onDeleteBranch(branch)} disabled={switching || deleting}>
+            <button className="btn btn-secondary btn-danger" onClick={() => onDeleteBranch(branch)} disabled={switching || deleting || renaming}>
               {deleting ? 'Deleting...' : 'Delete Branch'}
             </button>
           )}
@@ -324,12 +457,17 @@ export function BranchDetailPanel({
             <div className="branch-diff-empty">No changes from {branchDiff.baseBranch}</div>
           ) : (
             <div className="branch-diff-files">
-              {branchDiff.files.map((fileDiff) => (
-                <div key={fileDiff.file.path} className="branch-diff-file">
+              {branchDiff.files.map((fileDiff) => {
+                const hasConflict = branchDiff.conflictFiles?.includes(fileDiff.file.path)
+                return (
+                <div key={fileDiff.file.path} className={`branch-diff-file ${hasConflict ? 'has-conflict' : ''}`}>
                   <div className="branch-diff-file-header" onClick={() => toggleFile(fileDiff.file.path)}>
                     <span className={`diff-file-chevron ${expandedFiles.has(fileDiff.file.path) ? 'open' : ''}`}>
                       ▸
                     </span>
+                    {hasConflict && (
+                      <span className="diff-file-conflict-badge" title="This file has merge conflicts">⊘</span>
+                    )}
                     <span className={`diff-file-status diff-status-${fileDiff.file.status}`}>
                       {fileDiff.file.status === 'added'
                         ? 'A'
@@ -344,6 +482,9 @@ export function BranchDetailPanel({
                       {fileDiff.file.path}
                     </span>
                     <span className="diff-file-stats">
+                      {hasConflict && (
+                        <span className="diff-conflict-indicator">Conflict</span>
+                      )}
                       {fileDiff.file.additions > 0 && (
                         <span className="diff-additions">+{fileDiff.file.additions}</span>
                       )}
@@ -355,35 +496,15 @@ export function BranchDetailPanel({
 
                   {expandedFiles.has(fileDiff.file.path) && (
                     <div className="diff-file-content">
-                      {fileDiff.isBinary ? (
-                        <div className="diff-binary">Binary file</div>
-                      ) : fileDiff.hunks.length === 0 ? (
-                        <div className="diff-empty">No changes</div>
-                      ) : (
-                        fileDiff.hunks.map((hunk, hunkIdx) => (
-                          <div key={hunkIdx} className="diff-hunk">
-                            <div className="diff-hunk-header">
-                              @@ -{hunk.oldStart},{hunk.oldLines} +{hunk.newStart},{hunk.newLines} @@
-                            </div>
-                            <div className="diff-hunk-lines">
-                              {hunk.lines.map((line, lineIdx) => (
-                                <div key={lineIdx} className={`diff-line diff-line-${line.type}`}>
-                                  <span className="diff-line-number old">{line.oldLineNumber || ''}</span>
-                                  <span className="diff-line-number new">{line.newLineNumber || ''}</span>
-                                  <span className="diff-line-prefix">
-                                    {line.type === 'add' ? '+' : line.type === 'delete' ? '-' : ' '}
-                                  </span>
-                                  <span className="diff-line-content">{line.content}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ))
-                      )}
+                      <DiffViewer
+                        diff={fileDiff}
+                        filePath={fileDiff.file.path}
+                        emptyMessage="No changes"
+                      />
                     </div>
                   )}
                 </div>
-              ))}
+              )})}
             </div>
           )}
         </div>

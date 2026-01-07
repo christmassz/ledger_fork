@@ -102,6 +102,181 @@ Playwright E2E tests in `tests/app.spec.ts`:
 
 Run with `npm test` (builds first) or `npm run test:headed`.
 
+## Chrome DevTools Protocol (CDP) Access
+
+AI agents can interact with the running Electron app via Chrome DevTools Protocol for debugging, validation, and UI interaction.
+
+### Starting the App with Debugging
+
+```bash
+npm run dev -- --remote-debugging-port=9222
+```
+
+This starts the app with CDP enabled on port 9222.
+
+### Checking if Debugging is Available
+
+```bash
+# List available debug targets
+curl -s http://127.0.0.1:9222/json
+
+# Get browser/app version info
+curl -s http://127.0.0.1:9222/json/version
+```
+
+### CDP Helper Scripts
+
+Helper scripts are available in `tools/electron-mcp-server/`:
+
+| Script | Purpose |
+|--------|---------|
+| `cdp-snapshot.js` | Get page content and text |
+| `cdp-screenshot.js` | Capture PNG screenshot |
+| `cdp-click.js` | Click element by CSS selector |
+
+### Common CDP Operations
+
+**1. Get Page Content (text, element count)**
+
+```javascript
+import CDP from 'chrome-remote-interface';
+
+const client = await CDP({ port: 9222 });
+const { Runtime } = client;
+
+const { result } = await Runtime.evaluate({
+  expression: `({
+    title: document.title,
+    url: window.location.href,
+    bodyText: document.body?.innerText?.substring(0, 5000),
+    elementCount: document.querySelectorAll('*').length
+  })`,
+  returnByValue: true
+});
+
+console.log(result.value);
+await client.close();
+```
+
+**2. Take a Screenshot**
+
+```javascript
+import CDP from 'chrome-remote-interface';
+import fs from 'fs';
+
+const client = await CDP({ port: 9222 });
+const { Page } = client;
+
+await Page.enable();
+const { data } = await Page.captureScreenshot({ format: 'png' });
+fs.writeFileSync('screenshot.png', Buffer.from(data, 'base64'));
+
+await client.close();
+```
+
+**3. Click an Element**
+
+```javascript
+import CDP from 'chrome-remote-interface';
+
+const client = await CDP({ port: 9222 });
+const { Runtime, Input } = client;
+
+// Find element and get its position
+const { result } = await Runtime.evaluate({
+  expression: `(() => {
+    const el = document.querySelector('[data-testid="my-button"]');
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    return { x: rect.x + rect.width/2, y: rect.y + rect.height/2 };
+  })()`,
+  returnByValue: true
+});
+
+if (result.value) {
+  await Input.dispatchMouseEvent({
+    type: 'mousePressed',
+    x: result.value.x,
+    y: result.value.y,
+    button: 'left',
+    clickCount: 1
+  });
+  await Input.dispatchMouseEvent({
+    type: 'mouseReleased',
+    x: result.value.x,
+    y: result.value.y,
+    button: 'left'
+  });
+}
+
+await client.close();
+```
+
+**4. Execute Arbitrary JavaScript**
+
+```javascript
+import CDP from 'chrome-remote-interface';
+
+const client = await CDP({ port: 9222 });
+const { Runtime } = client;
+
+// Access React state, trigger actions, etc.
+const { result } = await Runtime.evaluate({
+  expression: `window.someGlobalFunction?.() || 'not available'`,
+  returnByValue: true
+});
+
+await client.close();
+```
+
+**5. Monitor Console Output**
+
+```javascript
+import CDP from 'chrome-remote-interface';
+
+const client = await CDP({ port: 9222 });
+const { Runtime } = client;
+
+await Runtime.enable();
+client.on('Runtime.consoleAPICalled', (params) => {
+  console.log('Console:', params.type, params.args);
+});
+
+// Keep listening...
+```
+
+### Quick One-Liner Examples
+
+```bash
+# Get page content and text
+cd tools/electron-mcp-server && node cdp-snapshot.js
+
+# Take a screenshot (saves to wip/app-screenshot.png)
+cd tools/electron-mcp-server && node cdp-screenshot.js
+
+# Take screenshot to custom path
+cd tools/electron-mcp-server && node cdp-screenshot.js /path/to/output.png
+
+# Click an element by selector
+cd tools/electron-mcp-server && node cdp-click.js "button.refresh"
+cd tools/electron-mcp-server && node cdp-click.js "[data-testid='submit']"
+```
+
+### Typical Validation Workflow
+
+1. Start app with debugging: `npm run dev -- --remote-debugging-port=9222`
+2. Wait for app to load (~5 seconds)
+3. Verify debugging available: `curl -s http://127.0.0.1:9222/json`
+4. Run CDP scripts to inspect/interact with the UI
+5. Take screenshots to validate visual state
+
+### Notes
+
+- CDP scripts require `chrome-remote-interface` package (installed in `tools/electron-mcp-server/`)
+- Screenshots saved to `wip/` are gitignored
+- The app must be running for CDP to connect
+- Port 9222 is the standard Chrome debugging port
+
 ## Git Operations Available
 
 This list is intentionally **non-exhaustive**. The canonical contract is:
@@ -209,7 +384,7 @@ xcrun notarytool info <submission-id> --keychain-profile "AC_PASSWORD"
 
 ## Areas for Improvement
 
-1. The `git-service.ts` file is large (~3300 lines) - could be modularized
+1. The `git-service.ts` file is large (~5400 lines) - partially modularized into `lib/services/`
 2. No loading skeletons - just "Loading..." text
 3. No keyboard shortcuts yet
 4. PR integration requires `gh` CLI - could add fallback

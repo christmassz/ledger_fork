@@ -70,6 +70,7 @@ export default function App() {
   const [status, setStatus] = useState<StatusMessage | null>(null)
   const [switching, setSwitching] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [renaming, setRenaming] = useState(false)
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null)
   const [showNewBranchModal, setShowNewBranchModal] = useState(false)
   const [newBranchName, setNewBranchName] = useState('')
@@ -1050,6 +1051,39 @@ export default function App() {
     [deleting, refresh]
   )
 
+  // Rename a branch
+  const handleRenameBranch = useCallback(
+    async (branch: Branch, newName: string) => {
+      if (renaming) return
+
+      const isMainOrMaster = branch.name === 'main' || branch.name === 'master'
+      if (isMainOrMaster) {
+        setStatus({ type: 'error', message: 'Cannot rename main or master branch' })
+        return
+      }
+
+      setRenaming(true)
+      setStatus({ type: 'info', message: `Renaming branch '${branch.name}' to '${newName}'...` })
+
+      try {
+        const result = await window.electronAPI.renameBranch(branch.name, newName)
+        if (result.success) {
+          setStatus({ type: 'success', message: result.message })
+          // Update the sidebar focus to the new branch name
+          setSidebarFocus({ type: 'branch', data: { ...branch, name: newName } })
+          await refresh()
+        } else {
+          setStatus({ type: 'error', message: result.message })
+        }
+      } catch (error) {
+        setStatus({ type: 'error', message: (error as Error).message })
+      } finally {
+        setRenaming(false)
+      }
+    },
+    [renaming, refresh]
+  )
+
   // Delete a remote branch
   const handleDeleteRemoteBranch = useCallback(
     async (branch: Branch) => {
@@ -1344,6 +1378,12 @@ export default function App() {
           formatRelativeTime={formatRelativeTime}
           onCheckout={handlePRCheckout}
           onPRMerged={refresh}
+          onNavigateToBranch={(branchName) => {
+            const branch = branches.find((b) => b.name === branchName)
+            if (branch) {
+              handleSidebarFocus(branch.isRemote ? 'remote' : 'branch', branch)
+            }
+          }}
           switching={switching}
         />
       )
@@ -1359,6 +1399,7 @@ export default function App() {
           currentBranch={currentBranch}
           switching={switching}
           deleting={deleting}
+          renaming={renaming}
           onStatusChange={setStatus}
           onRefresh={refresh}
           onClearFocus={() => setSidebarFocus(null)}
@@ -1366,12 +1407,15 @@ export default function App() {
           onCheckoutRemoteBranch={handleRemoteBranchDoubleClick}
           onCheckoutWorktree={handleWorktreeDoubleClick}
           onDeleteBranch={handleDeleteBranch}
+          onRenameBranch={handleRenameBranch}
           onDeleteRemoteBranch={handleDeleteRemoteBranch}
           onOpenStaging={openStaging}
           branches={branches}
           repoPath={repoPath}
           worktrees={worktrees}
+          prs={pullRequests}
           onFocusWorktree={(wt) => setSidebarFocus({ type: 'worktree', data: wt })}
+          onNavigateToPR={(pr) => handleSidebarFocus('pr', pr)}
           onOpenRepo={async (repo) => {
             if (repo.isCurrent) return
             setStatus({ type: 'info', message: `Opening ${repo.name}...` })
@@ -1418,10 +1462,10 @@ export default function App() {
     return null
   }, [
     mainPanelView, themeMode, handleThemeChange,
-    sidebarFocus, workingStatus, currentBranch, refresh, switching, deleting,
+    sidebarFocus, workingStatus, currentBranch, refresh, switching, deleting, renaming,
     formatRelativeTime, formatDate, handlePRCheckout, handleBranchDoubleClick,
-    handleRemoteBranchDoubleClick, handleWorktreeDoubleClick, handleDeleteBranch,
-    handleDeleteRemoteBranch, branches, repoPath, worktrees, handleSidebarFocus,
+    handleRemoteBranchDoubleClick, handleWorktreeDoubleClick, handleDeleteBranch, handleRenameBranch,
+    handleDeleteRemoteBranch, branches, repoPath, worktrees, pullRequests, handleSidebarFocus,
     selectedCommit, loadingDiff, commitDiff
   ])
 

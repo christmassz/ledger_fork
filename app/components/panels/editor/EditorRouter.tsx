@@ -8,13 +8,13 @@
  * in the Canvas architecture.
  */
 
-import type { Branch, Worktree, StashEntry, RepoInfo } from '../../../types/electron'
+import type { Branch, Worktree, StashEntry, RepoInfo, PullRequest } from '../../../types/electron'
 import type { StatusMessage, SidebarFocus } from '../../../types/app-types'
 import { BranchDetailPanel } from './BranchDetailPanel'
 import { WorktreeDetailPanel } from './WorktreeDetailPanel'
 import { StashDetailPanel } from './StashDetailPanel'
 import { WorktreeCreatePanel } from './WorktreeCreatePanel'
-import { MailmapDetailsPanel } from './MailmapDetailsPanel'
+import { MailmapDetailPanel } from './MailmapDetailPanel'
 import { RepoDetailPanel } from './RepoDetailPanel'
 
 export interface EditorRouterProps {
@@ -24,6 +24,7 @@ export interface EditorRouterProps {
   currentBranch: string
   switching?: boolean
   deleting?: boolean
+  renaming?: boolean
   onStatusChange?: (status: StatusMessage | null) => void
   onRefresh?: () => Promise<void>
   onClearFocus?: () => void
@@ -31,12 +32,15 @@ export interface EditorRouterProps {
   onCheckoutRemoteBranch?: (branch: Branch) => void
   onCheckoutWorktree?: (worktree: Worktree) => void
   onDeleteBranch?: (branch: Branch) => void
+  onRenameBranch?: (branch: Branch, newName: string) => void
   onDeleteRemoteBranch?: (branch: Branch) => void
   onOpenStaging?: () => void
   branches?: Branch[]
   repoPath?: string | null
   worktrees?: Worktree[]
+  prs?: PullRequest[]
   onFocusWorktree?: (worktree: Worktree) => void
+  onNavigateToPR?: (pr: PullRequest) => void
   onOpenRepo?: (repo: RepoInfo) => void
   onOpenMailmap?: () => void
 }
@@ -48,6 +52,7 @@ export function EditorRouter({
   currentBranch,
   switching,
   deleting,
+  renaming,
   onStatusChange,
   onRefresh,
   onClearFocus,
@@ -55,11 +60,14 @@ export function EditorRouter({
   onCheckoutRemoteBranch,
   onCheckoutWorktree,
   onDeleteBranch,
+  onRenameBranch,
   onDeleteRemoteBranch,
   onOpenStaging,
   branches,
   repoPath,
+  prs,
   onFocusWorktree,
+  onNavigateToPR,
   onOpenRepo,
   onOpenMailmap,
 }: EditorRouterProps) {
@@ -79,9 +87,13 @@ export function EditorRouter({
           onStatusChange={onStatusChange}
           onCheckoutBranch={onCheckoutBranch}
           onDeleteBranch={onDeleteBranch}
+          onRenameBranch={onRenameBranch}
           onOpenStaging={onOpenStaging}
+          onNavigateToPR={onNavigateToPR}
+          prs={prs}
           switching={switching}
           deleting={deleting}
+          renaming={renaming}
         />
       )
     }
@@ -205,7 +217,7 @@ export function EditorRouter({
 
     case 'mailmap': {
       return (
-        <MailmapDetailsPanel
+        <MailmapDetailPanel
           onStatusChange={onStatusChange}
         />
       )
@@ -227,7 +239,3 @@ export function EditorRouter({
       return null
   }
 }
-
-// Alias for backwards compatibility
-export { EditorRouter as SidebarDetailPanel }
-export type { EditorRouterProps as SidebarDetailPanelProps }

@@ -9,6 +9,36 @@ import { useState, useEffect, useRef } from 'react'
 import type { Worktree, UncommittedFile, StagingFileDiff, WorkingStatus } from '../../../types/electron'
 import type { StatusMessage } from '../../../types/app-types'
 
+/**
+ * Format a timestamp as relative time (e.g., "2 mins ago", "1 hour ago")
+ */
+function formatRelativeTime(isoString: string): string {
+  const now = Date.now()
+  const timestamp = new Date(isoString).getTime()
+  const diffSeconds = Math.floor((now - timestamp) / 1000)
+
+  if (diffSeconds < 60) {
+    return 'just now'
+  }
+  
+  const diffMinutes = Math.floor(diffSeconds / 60)
+  if (diffMinutes < 60) {
+    return `${diffMinutes} min${diffMinutes !== 1 ? 's' : ''} ago`
+  }
+  
+  const diffHours = Math.floor(diffMinutes / 60)
+  if (diffHours < 24) {
+    return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`
+  }
+  
+  const diffDays = Math.floor(diffHours / 24)
+  if (diffDays < 7) {
+    return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`
+  }
+  
+  return new Date(isoString).toLocaleDateString()
+}
+
 export interface WorktreeDetailPanelProps {
   worktree: Worktree
   currentBranch: string
@@ -436,20 +466,45 @@ export function WorktreeDetailPanel({
         </div>
         {/* Activity status for agent worktrees */}
         {worktree.agent !== 'unknown' && worktree.agent !== 'working-folder' && (
-          <div className="detail-meta-item">
-            <span className="meta-label">Activity</span>
-            <span className={`meta-value activity-status activity-${worktree.activityStatus}`}>
-              {worktree.activityStatus === 'active' && '● Active now'}
-              {worktree.activityStatus === 'recent' && '◐ Recent (< 1 hour)'}
-              {worktree.activityStatus === 'stale' && '○ Stale (> 1 hour)'}
-              {worktree.activityStatus === 'unknown' && '○ Inactive'}
-            </span>
-          </div>
+          <>
+            <div className="detail-meta-item">
+              <span className="meta-label">Activity</span>
+              <span className={`meta-value activity-status activity-${worktree.activityStatus}`}>
+                {worktree.activityStatus === 'active' && '● Active now'}
+                {worktree.activityStatus === 'recent' && '◐ Recent (< 1 hour)'}
+                {worktree.activityStatus === 'stale' && '○ Stale (> 1 hour)'}
+                {worktree.activityStatus === 'unknown' && '○ Inactive'}
+                {worktree.activitySource && worktree.activitySource !== 'both' && (
+                  <span className="activity-source-hint" title={`Activity detected from ${worktree.activitySource === 'file' ? 'file changes' : 'git activity'}`}>
+                    {' '}({worktree.activitySource === 'file' ? 'files' : 'git'})
+                  </span>
+                )}
+              </span>
+            </div>
+            {/* Show detailed activity timestamps when status is active or recent */}
+            {(worktree.activityStatus === 'active' || worktree.activityStatus === 'recent') && (
+              <div className="detail-meta-item full-width activity-details">
+                <span className="meta-label">Activity Details</span>
+                <div className="activity-timestamps">
+                  <span className="activity-timestamp" title="Most recent file modification in worktree">
+                    <span className="timestamp-icon">📁</span>
+                    <span className="timestamp-label">Files:</span>
+                    <span className="timestamp-value">{formatRelativeTime(worktree.lastFileModified)}</span>
+                  </span>
+                  <span className="activity-timestamp" title="Last git commit or working directory change">
+                    <span className="timestamp-icon">📊</span>
+                    <span className="timestamp-label">Git:</span>
+                    <span className="timestamp-value">{formatRelativeTime(worktree.lastGitActivity)}</span>
+                  </span>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 
-      {/* Show agent task hint for Cursor agents */}
-      {worktree.agent === 'cursor' && worktree.agentTaskHint && (
+      {/* Show agent task hint for AI agents (Cursor, Claude Code) */}
+      {(worktree.agent === 'cursor' || worktree.agent === 'claude') && worktree.agentTaskHint && (
         <div className="agent-task-callout">
           <div className="agent-task-header">
             <span className="agent-task-icon">🤖</span>
