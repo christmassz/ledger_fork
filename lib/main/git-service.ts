@@ -4575,6 +4575,76 @@ function buildPartialPatch(
   )
 }
 
+/**
+ * Build a partial patch for reversed application (unstage/discard).
+ *
+ * For unstaging (applying -R to index) or discarding (applying -R to working tree):
+ * - Selected add lines: include as '+' (will be removed by -R)
+ * - Non-selected add lines: include as context ' ' (they exist in the target and must match)
+ * - Selected delete lines: include as '-' (will be restored by -R)
+ * - Non-selected delete lines: include as context ' ' (keep in target)
+ * - Context lines: include as context ' '
+ *
+ * The key difference: when applying with -R, ALL lines (selected and non-selected)
+ * must exist in the target for proper context matching.
+ */
+function buildReversedPartialPatch(
+  filePath: string,
+  hunk: StagingDiffHunk,
+  selectedLineIndices: number[]
+): string {
+  const selectedSet = new Set(selectedLineIndices)
+
+  const patchLines: string[] = []
+  let oldCount = 0
+  let newCount = 0
+
+  for (const line of hunk.lines) {
+    const isSelected = selectedSet.has(line.lineIndex)
+
+    if (line.type === 'context') {
+      // Context lines are always included
+      patchLines.push(' ' + line.content)
+      oldCount++
+      newCount++
+    } else if (line.type === 'add') {
+      if (isSelected) {
+        // Selected add line - include as addition (will be removed by -R)
+        patchLines.push('+' + line.content)
+        newCount++
+      } else {
+        // Non-selected add line - include as context (exists in target, must match)
+        patchLines.push(' ' + line.content)
+        oldCount++
+        newCount++
+      }
+    } else if (line.type === 'delete') {
+      if (isSelected) {
+        // Selected delete line - include as deletion (will be restored by -R)
+        patchLines.push('-' + line.content)
+        oldCount++
+      } else {
+        // Non-selected delete line - keep as context
+        patchLines.push(' ' + line.content)
+        oldCount++
+        newCount++
+      }
+    }
+  }
+
+  const newHeader = `@@ -${hunk.oldStart},${oldCount} +${hunk.newStart},${newCount} @@`
+
+  return (
+    `diff --git a/${filePath} b/${filePath}\n` +
+    `--- a/${filePath}\n` +
+    `+++ b/${filePath}\n` +
+    newHeader +
+    '\n' +
+    patchLines.join('\n') +
+    '\n'
+  )
+}
+
 // Stage specific lines within a hunk
 export async function stageLines(
   filePath: string,
@@ -4630,7 +4700,7 @@ export async function unstageLines(
     }
 
     const hunk = diff.hunks[hunkIndex]
-    const partialPatch = buildPartialPatch(filePath, hunk, lineIndices)
+    const partialPatch = buildReversedPartialPatch(filePath, hunk, lineIndices)
 
     await applyPatch(repoPath, partialPatch, ['--cached', '-R'])
     return { success: true, message: `Unstaged ${lineIndices.length} line(s)` }
@@ -4662,7 +4732,7 @@ export async function discardLines(
     }
 
     const hunk = diff.hunks[hunkIndex]
-    const partialPatch = buildPartialPatch(filePath, hunk, lineIndices)
+    const partialPatch = buildReversedPartialPatch(filePath, hunk, lineIndices)
 
     await applyPatch(repoPath, partialPatch, ['-R'])
     return { success: true, message: `Discarded ${lineIndices.length} line(s)` }
