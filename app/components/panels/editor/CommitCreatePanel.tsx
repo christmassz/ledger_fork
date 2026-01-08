@@ -125,17 +125,18 @@ export function StagingPanel({ workingStatus, currentBranch, onRefresh, onStatus
         setSelectedFile(nextFile)
         
         window.conveyor.staging.discardFileChanges(fileToDiscard.path).then(async (result) => {
-          setPendingDiscard(prev => {
-            const next = new Set(prev)
-            next.delete(fileToDiscard.path)
-            return next
-          })
-          
           if (result.success) {
             await onRefresh()
           } else {
             onStatusChange({ type: 'error', message: result.message })
           }
+          
+          // Clear pending state AFTER refresh so file doesn't flicker back
+          setPendingDiscard(prev => {
+            const next = new Set(prev)
+            next.delete(fileToDiscard.path)
+            return next
+          })
         })
       }
     }
@@ -461,18 +462,18 @@ export function StagingPanel({ workingStatus, currentBranch, onRefresh, onStatus
     
     const result = await window.conveyor.staging.stageFile(file.path)
     
-    // Clear pending state
-    setPendingStage(prev => {
-      const next = new Set(prev)
-      next.delete(file.path)
-      return next
-    })
-    
     if (result.success) {
       await onRefresh()
     } else {
       onStatusChange({ type: 'error', message: result.message })
     }
+    
+    // Clear pending state AFTER refresh so file doesn't flicker back
+    setPendingStage(prev => {
+      const next = new Set(prev)
+      next.delete(file.path)
+      return next
+    })
   }
 
   // Keyboard navigation for unstaged files list
@@ -514,23 +515,22 @@ export function StagingPanel({ workingStatus, currentBranch, onRefresh, onStatus
       setSelectedFile(nextFile)
       
       window.conveyor.staging.discardFileChanges(fileToDiscard.path).then(async (result) => {
-        // Clear pending state
-        setPendingDiscard(prev => {
-          const next = new Set(prev)
-          next.delete(fileToDiscard.path)
-          return next
-        })
-        
         if (result.success) {
           await onRefresh()
         } else {
           onStatusChange({ type: 'error', message: result.message })
         }
+        
+        // Clear pending state AFTER refresh so file doesn't flicker back
+        setPendingDiscard(prev => {
+          const next = new Set(prev)
+          next.delete(fileToDiscard.path)
+          return next
+        })
       })
     }
   }, [unstagedFiles, selectedFile, handleStageFile, discardFileConfirm, onRefresh, onStatusChange])
 
-  // Unstage a file
   // Unstage a file (silently, no toast on success) - with optimistic update
   const handleUnstageFile = useCallback(async (file: UncommittedFile) => {
     // Calculate next file before unstaging
@@ -556,18 +556,18 @@ export function StagingPanel({ workingStatus, currentBranch, onRefresh, onStatus
     
     const result = await window.conveyor.staging.unstageFile(file.path)
     
-    // Clear pending state
-    setPendingUnstage(prev => {
-      const next = new Set(prev)
-      next.delete(file.path)
-      return next
-    })
-    
     if (result.success) {
       await onRefresh()
     } else {
       onStatusChange({ type: 'error', message: result.message })
     }
+    
+    // Clear pending state AFTER refresh so file doesn't flicker back
+    setPendingUnstage(prev => {
+      const next = new Set(prev)
+      next.delete(file.path)
+      return next
+    })
   }, [stagedFiles, onRefresh, onStatusChange])
 
   // Keyboard navigation for staged files list
@@ -667,18 +667,18 @@ export function StagingPanel({ workingStatus, currentBranch, onRefresh, onStatus
 
     const result = await window.conveyor.staging.discardFileChanges(file.path)
     
-    // Clear pending state
-    setPendingDiscard(prev => {
-      const next = new Set(prev)
-      next.delete(file.path)
-      return next
-    })
-    
     if (result.success) {
       await onRefresh()
     } else {
       onStatusChange({ type: 'error', message: result.message })
     }
+    
+    // Clear pending state AFTER refresh so file doesn't flicker back
+    setPendingDiscard(prev => {
+      const next = new Set(prev)
+      next.delete(file.path)
+      return next
+    })
   }
 
   // Discard all unstaged changes with inline confirmation

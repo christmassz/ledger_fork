@@ -769,6 +769,29 @@ export default function App() {
     }
   }
 
+  // Checkout a specific commit (optionally via its branch if at tip)
+  const handleCommitCheckout = async (commitHash: string, branchName?: string) => {
+    if (switching) return
+
+    setSwitching(true)
+    const target = branchName || commitHash.slice(0, 7)
+    setStatus({ type: 'info', message: `Checking out ${target}...` })
+
+    try {
+      const result: CheckoutResult = await window.electronAPI.checkoutCommit(commitHash, branchName)
+      if (result.success) {
+        setStatus({ type: 'success', message: result.message, stashed: result.stashed })
+        await refresh()
+      } else {
+        setStatus({ type: 'error', message: result.message })
+      }
+    } catch (err) {
+      setStatus({ type: 'error', message: (err as Error).message })
+    } finally {
+      setSwitching(false)
+    }
+  }
+
   // Push local branch to remote
   const handleLocalBranchPush = async (branch: Branch) => {
     closeContextMenu()
@@ -1446,12 +1469,14 @@ export default function App() {
             selectedCommit={selectedCommit}
             formatRelativeTime={formatRelativeTime}
             branches={branches}
+            switching={switching}
             onBranchClick={(branchName) => {
               const branch = branches.find((b) => b.name === branchName)
               if (branch) {
                 handleSidebarFocus(branch.isRemote ? 'remote' : 'branch', branch)
               }
             }}
+            onCheckoutCommit={handleCommitCheckout}
           />
         )
       }
@@ -1466,7 +1491,7 @@ export default function App() {
     formatRelativeTime, formatDate, handlePRCheckout, handleBranchDoubleClick,
     handleRemoteBranchDoubleClick, handleWorktreeDoubleClick, handleDeleteBranch, handleRenameBranch,
     handleDeleteRemoteBranch, branches, repoPath, worktrees, pullRequests, handleSidebarFocus,
-    selectedCommit, loadingDiff, commitDiff
+    selectedCommit, loadingDiff, commitDiff, handleCommitCheckout
   ])
 
   const canvasHandlers: CanvasHandlers = useMemo(() => ({
