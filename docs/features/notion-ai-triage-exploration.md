@@ -2,7 +2,107 @@
 
 ## Overview
 
-This document explores adding AI-powered card triage functionality to Ledger, integrating with Notion databases and using Claude/Gemini for intelligent summarization and investigation prompts.
+This document explores two interconnected features:
+
+1. **Core AI Infrastructure** - First-class support for Anthropic, OpenAI, and Gemini as foundational services available throughout Ledger
+2. **Notion Triage Plugin** - A gamified card triage experience (Pokémon-style encounters) that uses AI to help build complete product specs
+
+---
+
+## Part 0: Vision - The Pokémon Triage Experience
+
+### Concept
+
+Each Notion card is like encountering a wild Pokémon. The user enters a triage session and cards appear one at a time. For each card:
+
+1. **Encounter** - Card appears with AI-generated summary of current state
+2. **Investigation** - AI asks multi-choice questions to gather context
+3. **Knowledge Transfer** - Answers are synthesized and written back to Notion
+4. **Satisfaction Check** - AI evaluates if the card has enough detail for an agent to code it
+5. **Capture or Release** - Card is triaged (status updated) or skipped for later
+
+The goal: Transform vague ideas into complete product specs that AI coding agents can execute.
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  A wild CARD appeared!                              [Run] [Catch]   │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│   ╔═══════════════════════════════════════════════════════════╗    │
+│   ║  🎴 Fix auth timeout on mobile                            ║    │
+│   ║  ─────────────────────────────────────────────────────────║    │
+│   ║  HP: ████████░░ 80% (Missing: acceptance criteria)        ║    │
+│   ║  Type: Bug | Priority: Unknown | Sprint: Unassigned       ║    │
+│   ╚═══════════════════════════════════════════════════════════╝    │
+│                                                                     │
+│   ┌─────────────────────────────────────────────────────────────┐  │
+│   │ AI Summary:                                                  │  │
+│   │ Users report sessions expire after 5 mins on iOS. Likely    │  │
+│   │ related to Safari's aggressive background tab handling.     │  │
+│   │ Missing: reproduction steps, affected versions, priority.   │  │
+│   └─────────────────────────────────────────────────────────────┘  │
+│                                                                     │
+│   ┌─────────────────────────────────────────────────────────────┐  │
+│   │ Question 1 of 4:                                             │  │
+│   │                                                              │  │
+│   │ Which platforms are affected?                                │  │
+│   │                                                              │  │
+│   │   ○ iOS only                                                 │  │
+│   │   ○ Android only                                             │  │
+│   │   ○ Both iOS and Android                                     │  │
+│   │   ○ Web browsers only                                        │  │
+│   │   ○ All platforms                                            │  │
+│   │   ○ Unknown - needs investigation                            │  │
+│   └─────────────────────────────────────────────────────────────┘  │
+│                                                                     │
+│   Progress: ██░░░░░░░░ Question 1/4                                │
+│   Answers collected: 0 | Card completeness: 45%                    │
+│                                                                     │
+│   [Skip Question] [Answer & Continue →]                            │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Write-Back to Notion
+
+After each triage session, results are written back to the card:
+
+1. **Content Addendum** - Appended to the card body:
+   ```markdown
+   ---
+   ## Triage Notes (2025-01-08)
+
+   **Platforms Affected:** iOS only
+   **Severity:** High - affects 30% of users
+   **Root Cause Hypothesis:** Safari background tab throttling
+   **Acceptance Criteria:**
+   - [ ] Session persists for 30 mins in background
+   - [ ] Graceful re-auth flow when session expires
+   - [ ] Analytics event for session timeout
+
+   **Agent Readiness:** ✅ Ready for implementation
+   ```
+
+2. **Comment Thread** - For discussion/audit trail:
+   ```
+   🤖 Triage completed by @user via Ledger
+   - Added platform details, severity assessment
+   - Generated acceptance criteria
+   - Card is now ready for sprint planning
+   ```
+
+### Satisfaction System
+
+The AI evaluates card "completeness" based on:
+
+| Dimension | Weight | Questions |
+|-----------|--------|-----------|
+| **Problem Definition** | 25% | What, who, when, impact |
+| **Acceptance Criteria** | 30% | Definition of done, test cases |
+| **Technical Context** | 20% | Related systems, dependencies |
+| **Priority/Urgency** | 15% | Business impact, deadlines |
+| **Scope Boundaries** | 10% | What's NOT included |
+
+Once completeness reaches threshold (e.g., 80%), AI declares the card "ready for an agent."
 
 ---
 
@@ -12,26 +112,20 @@ This document explores adding AI-powered card triage functionality to Ledger, in
 
 | Component | Location | Rationale |
 |-----------|----------|-----------|
-| **AI Service** | Core | Enables AI across the app (commit messages, PR summaries, diff explanations) |
-| **Notion Service** | Core | Complex API, auth flow, rate limiting better handled centrally |
-| **Triage UI** | Plugin | Workflow-specific, optional, can evolve independently |
+| **AI Infrastructure** | Core | First-class citizen - used everywhere in the app |
+| **Notion Service** | Core | Complex API, auth flow, rate limiting - centralized |
+| **Triage Plugin** | Plugin | Gamified UX, optional, can evolve independently |
 
-### Why Core AI Service?
+### Why Core AI Infrastructure?
 
-The plugin architecture already defines AI hooks (`lib/plugins/plugin-types.ts:256-261`):
+AI should be a **first-class citizen** in Ledger, not an afterthought:
 
-```typescript
-// Existing AI hooks that need a core implementation
-'ai:analyze-commit': (commit: Commit) => Promise<CommitAnalysis>
-'ai:review-pr': (pr: PullRequest, diff: string) => Promise<PRReviewSuggestion[]>
-'ai:suggest-commit-message': (diff: string, context?: CommitContext) => Promise<string>
-'ai:summarize-changes': (commits: Commit[]) => Promise<string>
-'ai:explain-diff': (diff: string) => Promise<string>
-```
+1. **Multiple providers** - Users should be able to use Anthropic, OpenAI, or Gemini based on preference/cost
+2. **Model preferences** - Different tasks need different models (Haiku for quick summaries, Opus for complex analysis)
+3. **Ubiquitous access** - Commit messages, PR reviews, diff explanations, branch summaries, merge conflict help
+4. **Plugin ecosystem** - All plugins should have easy access to AI capabilities
 
-These hooks currently have no implementation. A core AI service would power both:
-1. Built-in features (commit message suggestions, diff explanations)
-2. Plugins like Notion Triage
+The plugin architecture already defines AI hooks (`lib/plugins/plugin-types.ts:256-261`) that need implementation.
 
 ### Why Core Notion Service?
 
@@ -46,87 +140,385 @@ These hooks currently have no implementation. A core AI service would power both
 
 ---
 
-## Part 1: Core AI Service
+## Part 1: Core AI Infrastructure
+
+The AI system is designed as **first-class infrastructure** with all three major providers treated equally.
 
 ### New Files
 
 ```
-lib/main/ai-service.ts              # AI provider abstraction
-lib/conveyor/handlers/ai-handler.ts # IPC handlers
-lib/conveyor/schemas/ai-schema.ts   # Zod validation
-lib/conveyor/api/ai-api.ts          # Renderer API
+lib/main/ai/
+├── ai-service.ts           # Main service orchestrator
+├── providers/
+│   ├── index.ts            # Provider registry
+│   ├── anthropic.ts        # Claude implementation
+│   ├── openai.ts           # GPT implementation
+│   └── gemini.ts           # Gemini implementation
+├── models.ts               # Model definitions and capabilities
+└── types.ts                # Shared types
+
+lib/conveyor/handlers/ai-handler.ts
+lib/conveyor/schemas/ai-schema.ts
+lib/conveyor/api/ai-api.ts
 ```
 
-### Settings Extension
+### Settings Architecture
+
+All three providers can be configured simultaneously. Users can set a default provider but switch per-task.
 
 ```typescript
 // lib/main/settings-service.ts - Add to Settings interface
 interface Settings {
   // ... existing fields ...
 
-  ai?: {
-    provider: 'anthropic' | 'gemini' | 'openai'
-    anthropicApiKey?: string      // Encrypted or use keychain
-    geminiApiKey?: string
-    openaiApiKey?: string         // Future-proofing
-    defaultModel?: string         // e.g., 'claude-sonnet-4-20250514'
-    maxTokens?: number            // Default context limit
+  ai?: AISettings
+}
+
+interface AISettings {
+  // Provider API Keys (all can be configured simultaneously)
+  providers: {
+    anthropic?: {
+      apiKey: string
+      enabled: boolean
+    }
+    openai?: {
+      apiKey: string
+      enabled: boolean
+      organization?: string  // Optional org ID
+    }
+    gemini?: {
+      apiKey: string
+      enabled: boolean
+    }
   }
+
+  // Default preferences
+  defaults: {
+    provider: 'anthropic' | 'openai' | 'gemini'
+
+    // Model preferences by task type
+    models: {
+      quick: string      // Fast responses (haiku, gpt-4o-mini, flash)
+      balanced: string   // General use (sonnet, gpt-4o, pro)
+      powerful: string   // Complex tasks (opus, o1, pro)
+    }
+  }
+
+  // Usage tracking
+  usage?: {
+    trackCosts: boolean
+    monthlyBudget?: number  // Optional spending limit
+    history: UsageRecord[]
+  }
+}
+
+interface UsageRecord {
+  date: string
+  provider: string
+  model: string
+  inputTokens: number
+  outputTokens: number
+  estimatedCost: number
+}
+```
+
+### Model Registry
+
+Define available models with their capabilities:
+
+```typescript
+// lib/main/ai/models.ts
+
+export interface ModelDefinition {
+  id: string
+  provider: 'anthropic' | 'openai' | 'gemini'
+  displayName: string
+  contextWindow: number
+  maxOutput: number
+  tier: 'quick' | 'balanced' | 'powerful'
+  capabilities: ModelCapability[]
+  costPer1kInput: number   // USD
+  costPer1kOutput: number  // USD
+}
+
+export type ModelCapability =
+  | 'text'
+  | 'vision'
+  | 'tools'
+  | 'streaming'
+  | 'json-mode'
+  | 'extended-thinking'
+
+export const MODELS: ModelDefinition[] = [
+  // Anthropic
+  {
+    id: 'claude-3-5-haiku-20241022',
+    provider: 'anthropic',
+    displayName: 'Claude 3.5 Haiku',
+    contextWindow: 200000,
+    maxOutput: 8192,
+    tier: 'quick',
+    capabilities: ['text', 'vision', 'tools', 'streaming'],
+    costPer1kInput: 0.001,
+    costPer1kOutput: 0.005,
+  },
+  {
+    id: 'claude-sonnet-4-20250514',
+    provider: 'anthropic',
+    displayName: 'Claude Sonnet 4',
+    contextWindow: 200000,
+    maxOutput: 16384,
+    tier: 'balanced',
+    capabilities: ['text', 'vision', 'tools', 'streaming', 'extended-thinking'],
+    costPer1kInput: 0.003,
+    costPer1kOutput: 0.015,
+  },
+  {
+    id: 'claude-opus-4-20250514',
+    provider: 'anthropic',
+    displayName: 'Claude Opus 4',
+    contextWindow: 200000,
+    maxOutput: 16384,
+    tier: 'powerful',
+    capabilities: ['text', 'vision', 'tools', 'streaming', 'extended-thinking'],
+    costPer1kInput: 0.015,
+    costPer1kOutput: 0.075,
+  },
+
+  // OpenAI
+  {
+    id: 'gpt-4o-mini',
+    provider: 'openai',
+    displayName: 'GPT-4o Mini',
+    contextWindow: 128000,
+    maxOutput: 16384,
+    tier: 'quick',
+    capabilities: ['text', 'vision', 'tools', 'streaming', 'json-mode'],
+    costPer1kInput: 0.00015,
+    costPer1kOutput: 0.0006,
+  },
+  {
+    id: 'gpt-4o',
+    provider: 'openai',
+    displayName: 'GPT-4o',
+    contextWindow: 128000,
+    maxOutput: 16384,
+    tier: 'balanced',
+    capabilities: ['text', 'vision', 'tools', 'streaming', 'json-mode'],
+    costPer1kInput: 0.005,
+    costPer1kOutput: 0.015,
+  },
+  {
+    id: 'o1',
+    provider: 'openai',
+    displayName: 'o1',
+    contextWindow: 200000,
+    maxOutput: 100000,
+    tier: 'powerful',
+    capabilities: ['text', 'extended-thinking'],
+    costPer1kInput: 0.015,
+    costPer1kOutput: 0.060,
+  },
+
+  // Gemini
+  {
+    id: 'gemini-2.0-flash',
+    provider: 'gemini',
+    displayName: 'Gemini 2.0 Flash',
+    contextWindow: 1000000,
+    maxOutput: 8192,
+    tier: 'quick',
+    capabilities: ['text', 'vision', 'tools', 'streaming'],
+    costPer1kInput: 0.0001,
+    costPer1kOutput: 0.0004,
+  },
+  {
+    id: 'gemini-1.5-pro',
+    provider: 'gemini',
+    displayName: 'Gemini 1.5 Pro',
+    contextWindow: 2000000,
+    maxOutput: 8192,
+    tier: 'balanced',
+    capabilities: ['text', 'vision', 'tools', 'streaming', 'json-mode'],
+    costPer1kInput: 0.00125,
+    costPer1kOutput: 0.005,
+  },
+]
+
+export function getModelsByTier(tier: 'quick' | 'balanced' | 'powerful'): ModelDefinition[] {
+  return MODELS.filter(m => m.tier === tier)
+}
+
+export function getModelsByProvider(provider: string): ModelDefinition[] {
+  return MODELS.filter(m => m.provider === provider)
 }
 ```
 
 ### AI Service Interface
 
 ```typescript
-// lib/main/ai-service.ts
+// lib/main/ai/types.ts
 
-export type AIProvider = 'anthropic' | 'gemini' | 'openai'
+export type AIProvider = 'anthropic' | 'openai' | 'gemini'
 
 export interface AIMessage {
   role: 'user' | 'assistant' | 'system'
-  content: string
+  content: string | AIContentBlock[]
 }
 
-export interface AIServiceConfig {
-  provider: AIProvider
-  apiKey: string
-  model?: string
-  maxTokens?: number
-}
-
-export interface AIService {
-  // Core methods
-  complete(prompt: string, options?: CompletionOptions): Promise<string>
-  chat(messages: AIMessage[], options?: ChatOptions): Promise<string>
-  streamChat(messages: AIMessage[], onChunk: (text: string) => void): Promise<string>
-
-  // Convenience methods
-  summarize(content: string, maxLength?: number): Promise<string>
-  askQuestions(context: string, topic: string): Promise<string[]>
-  analyze(content: string, schema: AnalysisSchema): Promise<unknown>
+export interface AIContentBlock {
+  type: 'text' | 'image'
+  text?: string
+  imageUrl?: string
+  imageBase64?: string
 }
 
 export interface CompletionOptions {
+  model?: string              // Override default model
+  provider?: AIProvider       // Override default provider
   maxTokens?: number
   temperature?: number
   stopSequences?: string[]
+  jsonMode?: boolean          // Request JSON output
+  systemPrompt?: string
 }
 
-// Provider implementations
-class AnthropicProvider implements AIService { /* ... */ }
-class GeminiProvider implements AIService { /* ... */ }
+export interface StreamCallbacks {
+  onChunk: (text: string) => void
+  onComplete?: (fullText: string) => void
+  onError?: (error: Error) => void
+}
 
-// Factory
-export function createAIService(config: AIServiceConfig): AIService {
-  switch (config.provider) {
-    case 'anthropic':
-      return new AnthropicProvider(config)
-    case 'gemini':
-      return new GeminiProvider(config)
-    default:
-      throw new Error(`Unknown provider: ${config.provider}`)
+// lib/main/ai/ai-service.ts
+
+export interface AIService {
+  // Configuration
+  isConfigured(provider?: AIProvider): boolean
+  getAvailableProviders(): AIProvider[]
+  getAvailableModels(provider?: AIProvider): ModelDefinition[]
+
+  // Core methods
+  complete(prompt: string, options?: CompletionOptions): Promise<AIResponse>
+  chat(messages: AIMessage[], options?: CompletionOptions): Promise<AIResponse>
+  stream(messages: AIMessage[], callbacks: StreamCallbacks, options?: CompletionOptions): Promise<void>
+
+  // Structured output
+  generateJSON<T>(prompt: string, schema: z.ZodSchema<T>, options?: CompletionOptions): Promise<T>
+
+  // Convenience methods (use default quick model)
+  summarize(content: string, maxWords?: number): Promise<string>
+
+  // Convenience methods (use default balanced model)
+  analyze<T>(content: string, analysisType: AnalysisType): Promise<T>
+  generateQuestions(context: string, purpose: string, count?: number): Promise<TriageQuestion[]>
+
+  // Convenience methods (use default powerful model)
+  synthesize(inputs: string[], goal: string): Promise<string>
+}
+
+export interface AIResponse {
+  content: string
+  model: string
+  provider: AIProvider
+  usage: {
+    inputTokens: number
+    outputTokens: number
+    estimatedCost: number
+  }
+  finishReason: 'complete' | 'length' | 'stop' | 'error'
+}
+
+export interface TriageQuestion {
+  id: string
+  question: string
+  type: 'single-choice' | 'multi-choice' | 'text' | 'scale'
+  options?: string[]
+  context?: string           // Why this question matters
+  dimension: TriageDimension // Which completeness dimension it addresses
+}
+
+export type TriageDimension =
+  | 'problem-definition'
+  | 'acceptance-criteria'
+  | 'technical-context'
+  | 'priority-urgency'
+  | 'scope-boundaries'
+
+export type AnalysisType =
+  | 'card-completeness'    // Evaluate how ready a card is for implementation
+  | 'commit-summary'       // Summarize a commit's changes
+  | 'pr-review'            // Review a PR for issues
+  | 'diff-explanation'     // Explain what a diff does
+  | 'branch-summary'       // Summarize a branch's purpose
+```
+
+### Provider Implementations
+
+```typescript
+// lib/main/ai/providers/anthropic.ts
+
+import Anthropic from '@anthropic-ai/sdk'
+import type { AIProvider, AIMessage, CompletionOptions, AIResponse } from '../types'
+
+export class AnthropicProvider {
+  private client: Anthropic
+
+  constructor(apiKey: string) {
+    this.client = new Anthropic({ apiKey })
+  }
+
+  async complete(messages: AIMessage[], options: CompletionOptions): Promise<AIResponse> {
+    const response = await this.client.messages.create({
+      model: options.model || 'claude-sonnet-4-20250514',
+      max_tokens: options.maxTokens || 4096,
+      temperature: options.temperature ?? 0.7,
+      system: options.systemPrompt,
+      messages: this.convertMessages(messages),
+    })
+
+    return {
+      content: response.content[0].type === 'text' ? response.content[0].text : '',
+      model: response.model,
+      provider: 'anthropic',
+      usage: {
+        inputTokens: response.usage.input_tokens,
+        outputTokens: response.usage.output_tokens,
+        estimatedCost: this.calculateCost(response.model, response.usage),
+      },
+      finishReason: this.mapStopReason(response.stop_reason),
+    }
+  }
+
+  async stream(
+    messages: AIMessage[],
+    callbacks: StreamCallbacks,
+    options: CompletionOptions
+  ): Promise<void> {
+    const stream = this.client.messages.stream({
+      model: options.model || 'claude-sonnet-4-20250514',
+      max_tokens: options.maxTokens || 4096,
+      messages: this.convertMessages(messages),
+    })
+
+    let fullText = ''
+    for await (const event of stream) {
+      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+        fullText += event.delta.text
+        callbacks.onChunk(event.delta.text)
+      }
+    }
+    callbacks.onComplete?.(fullText)
+  }
+
+  private convertMessages(messages: AIMessage[]): Anthropic.MessageParam[] {
+    return messages.map(m => ({
+      role: m.role === 'system' ? 'user' : m.role,
+      content: typeof m.content === 'string' ? m.content : this.convertContent(m.content),
+    }))
   }
 }
+
+// Similar implementations for OpenAI and Gemini...
 ```
 
 ### IPC Channels
@@ -464,21 +856,32 @@ class NotionServiceImpl implements NotionService {
 
 ---
 
-## Part 3: Notion Triage Plugin
+## Part 3: Notion Triage Plugin - Pokémon Edition
 
 ### Plugin Structure
 
 ```
 lib/plugins/notion-triage/
-├── index.ts                    # Plugin definition
+├── index.ts                        # Plugin definition
 ├── components/
-│   ├── TriageApp.tsx           # Main app component
-│   ├── SetupPanel.tsx          # Initial configuration
-│   ├── CardViewer.tsx          # Single card display
-│   ├── AIInsights.tsx          # Summary + questions
-│   └── TriageActions.tsx       # Status change buttons
-└── hooks/
-    └── useTriage.ts            # Triage state management
+│   ├── TriageApp.tsx               # Main encounter screen
+│   ├── SetupWizard.tsx             # First-time configuration
+│   ├── EncounterCard.tsx           # Pokemon-style card display
+│   ├── QuestionPanel.tsx           # Multi-choice question UI
+│   ├── CompletenessBar.tsx         # HP-style progress bar
+│   ├── TriageActions.tsx           # Catch/Run/Skip buttons
+│   ├── SessionSummary.tsx          # End-of-session stats
+│   └── SettingsPanel.tsx           # Plugin settings
+├── hooks/
+│   ├── useTriage.ts                # Main triage state machine
+│   ├── useCardCompleteness.ts      # Completeness scoring
+│   └── useNotionWriteBack.ts       # Write results to Notion
+├── prompts/
+│   ├── question-generation.ts      # Prompts for generating questions
+│   ├── completeness-eval.ts        # Prompts for evaluating readiness
+│   └── synthesis.ts                # Prompts for synthesizing answers
+├── types.ts                        # Plugin-specific types
+└── styles.css                      # Pokemon-inspired styling
 ```
 
 ### Plugin Definition
@@ -490,13 +893,13 @@ import type { AppPlugin } from '@/lib/plugins/plugin-types'
 
 export const notionTriagePlugin: AppPlugin = {
   id: 'ledger.notion-triage',
-  name: 'Notion Triage',
+  name: 'Card Triage',
   version: '1.0.0',
   type: 'app',
-  description: 'AI-powered triage for Notion database cards',
+  description: 'Pokémon-style card triage - catch em all with complete specs!',
 
-  icon: 'ListChecks',           // Lucide icon
-  iconTooltip: 'Notion Triage',
+  icon: 'Sparkles',            // Lucide icon
+  iconTooltip: 'Card Triage',
   iconOrder: 50,
 
   component: 'NotionTriageApp',
@@ -522,27 +925,53 @@ export const notionTriagePlugin: AppPlugin = {
       key: 'filterStatus',
       label: 'Filter by Status',
       type: 'select',
-      default: '',
-      description: 'Only show cards with this status',
-      options: [],  // Populated dynamically
+      default: 'Backlog',
+      description: 'Only show cards with this status (cards needing triage)',
+      options: [],  // Populated dynamically from database
     },
     {
-      key: 'triageStatuses',
-      label: 'Triage Status Options',
-      type: 'multiselect',
-      default: ['Backlog', 'To Do', 'Blocked', 'Won\'t Do'],
-      description: 'Status options to show during triage',
+      key: 'readyStatus',
+      label: 'Ready Status',
+      type: 'string',
+      default: 'Ready for Dev',
+      description: 'Status to set when card is fully triaged',
+    },
+    {
+      key: 'completenessThreshold',
+      label: 'Completeness Threshold',
+      type: 'number',
+      default: 80,
+      description: 'Minimum % completeness to mark card as ready (0-100)',
+    },
+    {
+      key: 'writeBackMode',
+      label: 'Write-Back Mode',
+      type: 'select',
+      default: 'both',
+      description: 'How to save triage results to Notion',
+      options: [
+        { label: 'Content + Comment', value: 'both' },
+        { label: 'Content only', value: 'content' },
+        { label: 'Comment only', value: 'comment' },
+      ],
     },
   ],
 
   async activate(context) {
-    context.logger.info('Notion Triage plugin activated')
+    context.logger.info('Card Triage plugin activated')
 
-    // Check if Notion is configured
     const notionConfigured = await window.conveyor.notion.isConfigured()
+    const aiConfigured = await window.conveyor.ai.isConfigured()
+
     if (!notionConfigured) {
       context.api.showNotification(
-        'Please configure Notion API key in Settings → Integrations',
+        'Configure Notion API key in Settings → Integrations',
+        'warning'
+      )
+    }
+    if (!aiConfigured) {
+      context.api.showNotification(
+        'Configure AI provider in Settings → Integrations',
         'warning'
       )
     }
@@ -550,237 +979,550 @@ export const notionTriagePlugin: AppPlugin = {
 }
 ```
 
-### Main App Component
+### Core Types
 
-```tsx
-// lib/plugins/notion-triage/components/TriageApp.tsx
+```typescript
+// lib/plugins/notion-triage/types.ts
 
-import React, { useState, useEffect } from 'react'
-import type { PluginAppProps } from '@/lib/plugins/plugin-types'
-import { SetupPanel } from './SetupPanel'
-import { CardViewer } from './CardViewer'
-import { AIInsights } from './AIInsights'
-import { TriageActions } from './TriageActions'
-
-interface NotionCard {
+export interface TriageCard {
   id: string
   title: string
   properties: Record<string, unknown>
   content: string
   url: string
+  createdTime: string
 }
 
+export interface TriageSession {
+  cardId: string
+  startedAt: Date
+  questions: TriageQuestion[]
+  answers: TriageAnswer[]
+  completeness: CompletenessScore
+  status: 'in-progress' | 'ready' | 'skipped' | 'needs-more'
+}
+
+export interface TriageQuestion {
+  id: string
+  question: string
+  type: 'single-choice' | 'multi-choice' | 'scale'
+  options: QuestionOption[]
+  dimension: TriageDimension
+  context?: string  // Why AI is asking this
+}
+
+export interface QuestionOption {
+  id: string
+  label: string
+  implication?: string  // What choosing this means for the spec
+}
+
+export interface TriageAnswer {
+  questionId: string
+  selectedOptions: string[]
+  timestamp: Date
+}
+
+export interface CompletenessScore {
+  overall: number  // 0-100
+  dimensions: {
+    problemDefinition: number
+    acceptanceCriteria: number
+    technicalContext: number
+    priorityUrgency: number
+    scopeBoundaries: number
+  }
+  missingElements: string[]
+  readyForAgent: boolean
+}
+
+export type TriageDimension =
+  | 'problem-definition'
+  | 'acceptance-criteria'
+  | 'technical-context'
+  | 'priority-urgency'
+  | 'scope-boundaries'
+
+export interface TriageWriteBack {
+  cardId: string
+  contentAddendum: string    // Markdown to append to card
+  comment: string            // Comment to add
+  propertyUpdates: Record<string, unknown>  // Properties to update
+}
+```
+
+### Main Encounter Screen
+
+```tsx
+// lib/plugins/notion-triage/components/TriageApp.tsx
+
+import React, { useState, useEffect, useReducer } from 'react'
+import type { PluginAppProps } from '@/lib/plugins/plugin-types'
+import { SetupWizard } from './SetupWizard'
+import { EncounterCard } from './EncounterCard'
+import { QuestionPanel } from './QuestionPanel'
+import { CompletenessBar } from './CompletenessBar'
+import { TriageActions } from './TriageActions'
+import { SessionSummary } from './SessionSummary'
+import { useTriage } from '../hooks/useTriage'
+import type { TriageCard, TriageSession, CompletenessScore } from '../types'
+
+type TriagePhase = 'loading' | 'setup' | 'encounter' | 'questioning' | 'review' | 'complete' | 'empty'
+
 export function NotionTriageApp({ context }: PluginAppProps) {
-  const [isSetup, setIsSetup] = useState(false)
-  const [cards, setCards] = useState<NotionCard[]>([])
-  const [currentIndex, setCurrentIndex] = useState(0)
-  const [aiSummary, setAiSummary] = useState<string | null>(null)
-  const [triageQuestions, setTriageQuestions] = useState<string[]>([])
-  const [loading, setLoading] = useState(true)
+  const {
+    phase,
+    currentCard,
+    session,
+    completeness,
+    currentQuestion,
+    questionIndex,
+    totalQuestions,
+    cardsRemaining,
+    sessionStats,
+    // Actions
+    startSession,
+    answerQuestion,
+    skipQuestion,
+    skipCard,
+    catchCard,
+    runAway,
+    finishSession,
+  } = useTriage(context)
 
-  const currentCard = cards[currentIndex]
-
-  // Load settings and cards on mount
-  useEffect(() => {
-    async function init() {
-      const databaseId = await context.storage.get<string>('databaseId')
-      if (!databaseId) {
-        setLoading(false)
-        return
-      }
-
-      setIsSetup(true)
-      await loadCards(databaseId)
-    }
-    init()
-  }, [])
-
-  // Generate AI insights when card changes
-  useEffect(() => {
-    if (currentCard) {
-      generateInsights(currentCard)
-    }
-  }, [currentCard?.id])
-
-  async function loadCards(databaseId: string) {
-    setLoading(true)
-    const filterStatus = await context.storage.get<string>('filterStatus')
-    const statusColumn = await context.storage.get<string>('statusColumn') || 'Status'
-
-    const result = await window.conveyor.notion.queryCards(databaseId, {
-      filter: filterStatus ? {
-        property: statusColumn,
-        type: 'status',
-        value: filterStatus,
-      } : undefined,
-      sorts: [{ property: 'Created', direction: 'descending' }],
-    })
-
-    if (result.success && result.cards) {
-      setCards(result.cards)
-    }
-    setLoading(false)
-  }
-
-  async function generateInsights(card: NotionCard) {
-    setAiSummary(null)
-    setTriageQuestions([])
-
-    // Build context from card
-    const cardContext = `
-Title: ${card.title}
-
-Properties:
-${Object.entries(card.properties)
-  .map(([k, v]) => `- ${k}: ${JSON.stringify(v)}`)
-  .join('\n')}
-
-Content:
-${card.content}
-    `.trim()
-
-    // Get AI summary
-    const summaryResult = await window.conveyor.ai.summarize(cardContext, 200)
-    if (summaryResult.success) {
-      setAiSummary(summaryResult.summary)
-    }
-
-    // Get triage questions
-    const questionsResult = await window.conveyor.ai.generateQuestions(
-      cardContext,
-      'triage and prioritization'
-    )
-    if (questionsResult.success) {
-      setTriageQuestions(questionsResult.questions || [])
-    }
-  }
-
-  async function handleStatusChange(newStatus: string) {
-    if (!currentCard) return
-
-    const statusColumn = await context.storage.get<string>('statusColumn') || 'Status'
-
-    await window.conveyor.notion.updateCardProperty(
-      currentCard.id,
-      statusColumn,
-      newStatus
-    )
-
-    // Move to next card
-    if (currentIndex < cards.length - 1) {
-      setCurrentIndex(currentIndex + 1)
-    } else {
-      // Reload to get fresh list
-      const databaseId = await context.storage.get<string>('databaseId')
-      if (databaseId) await loadCards(databaseId)
-    }
-  }
-
-  function handleSkip() {
-    if (currentIndex < cards.length - 1) {
-      setCurrentIndex(currentIndex + 1)
-    }
-  }
-
-  function handlePrevious() {
-    if (currentIndex > 0) {
-      setCurrentIndex(currentIndex - 1)
-    }
-  }
-
-  if (loading) {
-    return <div className="triage-loading">Loading...</div>
-  }
-
-  if (!isSetup) {
-    return <SetupPanel context={context} onComplete={() => setIsSetup(true)} />
-  }
-
-  if (cards.length === 0) {
+  // Loading state
+  if (phase === 'loading') {
     return (
-      <div className="triage-empty">
-        <h2>No cards to triage</h2>
-        <p>All cards have been processed or the filter returned no results.</p>
+      <div className="triage-loading">
+        <div className="pokeball-spinner" />
+        <p>Searching for wild cards...</p>
       </div>
     )
   }
 
+  // First-time setup
+  if (phase === 'setup') {
+    return <SetupWizard context={context} onComplete={startSession} />
+  }
+
+  // No cards to triage
+  if (phase === 'empty') {
+    return (
+      <div className="triage-empty">
+        <div className="empty-pokeball" />
+        <h2>No wild cards appeared!</h2>
+        <p>All cards have been triaged or none match your filter.</p>
+        <button onClick={startSession}>Search Again</button>
+      </div>
+    )
+  }
+
+  // Session complete
+  if (phase === 'complete') {
+    return (
+      <SessionSummary
+        stats={sessionStats}
+        onNewSession={startSession}
+        onClose={() => context.api.navigateToApp('home')}
+      />
+    )
+  }
+
+  // Main encounter screen
   return (
-    <div className="notion-triage-app">
-      <header className="triage-header">
-        <h1>Notion Triage</h1>
-        <span className="triage-progress">
-          Card {currentIndex + 1} of {cards.length}
+    <div className="notion-triage-app pokemon-theme">
+      {/* Header */}
+      <header className="encounter-header">
+        <span className="cards-remaining">
+          {cardsRemaining} wild card{cardsRemaining !== 1 ? 's' : ''} remaining
         </span>
+        <button className="end-session-btn" onClick={finishSession}>
+          End Session
+        </button>
       </header>
 
-      <main className="triage-content">
-        <CardViewer card={currentCard} />
+      {/* Encounter announcement */}
+      {phase === 'encounter' && (
+        <div className="encounter-announcement">
+          A wild CARD appeared!
+        </div>
+      )}
 
-        <AIInsights
-          summary={aiSummary}
-          questions={triageQuestions}
-          loading={!aiSummary}
-        />
+      {/* Card display */}
+      <EncounterCard
+        card={currentCard}
+        completeness={completeness}
+        isActive={phase === 'encounter' || phase === 'questioning'}
+      />
 
-        <TriageActions
-          onStatusChange={handleStatusChange}
-          onSkip={handleSkip}
-          onPrevious={handlePrevious}
-          hasPrevious={currentIndex > 0}
-          hasNext={currentIndex < cards.length - 1}
-          context={context}
+      {/* Completeness bar (HP style) */}
+      <CompletenessBar
+        score={completeness}
+        threshold={80}
+        showDimensions={phase === 'review'}
+      />
+
+      {/* Question panel */}
+      {phase === 'questioning' && currentQuestion && (
+        <QuestionPanel
+          question={currentQuestion}
+          questionNumber={questionIndex + 1}
+          totalQuestions={totalQuestions}
+          onAnswer={answerQuestion}
+          onSkip={skipQuestion}
         />
-      </main>
+      )}
+
+      {/* Review panel */}
+      {phase === 'review' && (
+        <div className="review-panel">
+          <h3>Card Assessment</h3>
+          {completeness.readyForAgent ? (
+            <div className="ready-status success">
+              ✅ This card is ready for an AI agent to implement!
+            </div>
+          ) : (
+            <div className="ready-status warning">
+              ⚠️ Card needs more detail. Missing: {completeness.missingElements.join(', ')}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Action buttons */}
+      <TriageActions
+        phase={phase}
+        completeness={completeness}
+        onCatch={catchCard}
+        onRun={runAway}
+        onSkip={skipCard}
+        onStartQuestions={() => {/* transitions to questioning */}}
+      />
     </div>
   )
 }
 ```
 
-### AI Insights Component
+### Question Panel Component
 
 ```tsx
-// lib/plugins/notion-triage/components/AIInsights.tsx
+// lib/plugins/notion-triage/components/QuestionPanel.tsx
 
-import React from 'react'
+import React, { useState } from 'react'
+import type { TriageQuestion } from '../types'
 
-interface AIInsightsProps {
-  summary: string | null
-  questions: string[]
-  loading: boolean
+interface QuestionPanelProps {
+  question: TriageQuestion
+  questionNumber: number
+  totalQuestions: number
+  onAnswer: (selectedOptions: string[]) => void
+  onSkip: () => void
 }
 
-export function AIInsights({ summary, questions, loading }: AIInsightsProps) {
-  if (loading) {
-    return (
-      <div className="ai-insights loading">
-        <div className="ai-summary-skeleton" />
-        <div className="ai-questions-skeleton" />
-      </div>
-    )
+export function QuestionPanel({
+  question,
+  questionNumber,
+  totalQuestions,
+  onAnswer,
+  onSkip,
+}: QuestionPanelProps) {
+  const [selected, setSelected] = useState<string[]>([])
+
+  const handleOptionClick = (optionId: string) => {
+    if (question.type === 'single-choice') {
+      setSelected([optionId])
+    } else {
+      setSelected(prev =>
+        prev.includes(optionId)
+          ? prev.filter(id => id !== optionId)
+          : [...prev, optionId]
+      )
+    }
+  }
+
+  const handleSubmit = () => {
+    if (selected.length > 0) {
+      onAnswer(selected)
+      setSelected([])
+    }
   }
 
   return (
-    <div className="ai-insights">
-      {summary && (
-        <section className="ai-summary">
-          <h3>AI Summary</h3>
-          <p>{summary}</p>
-        </section>
-      )}
+    <div className="question-panel">
+      <div className="question-header">
+        <span className="question-number">
+          Question {questionNumber} of {totalQuestions}
+        </span>
+        <span className="question-dimension">
+          {formatDimension(question.dimension)}
+        </span>
+      </div>
 
-      {questions.length > 0 && (
-        <section className="ai-questions">
-          <h3>Triage Questions</h3>
-          <ul>
-            {questions.map((q, i) => (
-              <li key={i}>{q}</li>
-            ))}
-          </ul>
-        </section>
-      )}
+      <div className="question-content">
+        <h3>{question.question}</h3>
+        {question.context && (
+          <p className="question-context">{question.context}</p>
+        )}
+      </div>
+
+      <div className="question-options">
+        {question.options.map(option => (
+          <button
+            key={option.id}
+            className={`option-btn ${selected.includes(option.id) ? 'selected' : ''}`}
+            onClick={() => handleOptionClick(option.id)}
+          >
+            <span className="option-radio">
+              {selected.includes(option.id) ? '●' : '○'}
+            </span>
+            <span className="option-label">{option.label}</span>
+            {option.implication && (
+              <span className="option-implication">{option.implication}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      <div className="question-actions">
+        <button className="skip-btn" onClick={onSkip}>
+          Skip Question
+        </button>
+        <button
+          className="answer-btn"
+          onClick={handleSubmit}
+          disabled={selected.length === 0}
+        >
+          Answer & Continue →
+        </button>
+      </div>
+
+      <div className="question-progress">
+        <div
+          className="progress-fill"
+          style={{ width: `${(questionNumber / totalQuestions) * 100}%` }}
+        />
+      </div>
     </div>
   )
+}
+
+function formatDimension(dim: string): string {
+  return dim.split('-').map(w => w[0].toUpperCase() + w.slice(1)).join(' ')
+}
+```
+
+### Write-Back Hook
+
+```typescript
+// lib/plugins/notion-triage/hooks/useNotionWriteBack.ts
+
+import { useCallback } from 'react'
+import type { TriageSession, TriageCard, TriageWriteBack } from '../types'
+
+export function useNotionWriteBack() {
+  /**
+   * Synthesize triage answers into a structured addendum
+   */
+  const synthesizeResults = useCallback(async (
+    card: TriageCard,
+    session: TriageSession
+  ): Promise<TriageWriteBack> => {
+    // Use AI to synthesize answers into structured content
+    const synthesisPrompt = buildSynthesisPrompt(card, session)
+    const result = await window.conveyor.ai.generateJSON(
+      synthesisPrompt,
+      writeBackSchema
+    )
+
+    return {
+      cardId: card.id,
+      contentAddendum: formatContentAddendum(result, session),
+      comment: formatComment(result, session),
+      propertyUpdates: result.propertyUpdates || {},
+    }
+  }, [])
+
+  /**
+   * Write triage results back to Notion
+   */
+  const writeBack = useCallback(async (
+    writeBackData: TriageWriteBack,
+    mode: 'both' | 'content' | 'comment'
+  ): Promise<void> => {
+    const { cardId, contentAddendum, comment, propertyUpdates } = writeBackData
+
+    // Append content to card body
+    if (mode === 'both' || mode === 'content') {
+      await window.conveyor.notion.appendToPage(cardId, contentAddendum)
+    }
+
+    // Add comment
+    if (mode === 'both' || mode === 'comment') {
+      await window.conveyor.notion.addComment(cardId, comment)
+    }
+
+    // Update properties (status, priority, etc.)
+    for (const [property, value] of Object.entries(propertyUpdates)) {
+      await window.conveyor.notion.updateCardProperty(cardId, property, value)
+    }
+  }, [])
+
+  return { synthesizeResults, writeBack }
+}
+
+function formatContentAddendum(result: SynthesisResult, session: TriageSession): string {
+  const date = new Date().toISOString().split('T')[0]
+
+  return `
+---
+## Triage Notes (${date})
+
+${result.platformsAffected ? `**Platforms Affected:** ${result.platformsAffected}` : ''}
+${result.severity ? `**Severity:** ${result.severity}` : ''}
+${result.rootCauseHypothesis ? `**Root Cause Hypothesis:** ${result.rootCauseHypothesis}` : ''}
+
+### Acceptance Criteria
+${result.acceptanceCriteria?.map(ac => `- [ ] ${ac}`).join('\n') || '_None specified_'}
+
+### Technical Notes
+${result.technicalNotes || '_None_'}
+
+### Out of Scope
+${result.outOfScope?.map(item => `- ${item}`).join('\n') || '_Not specified_'}
+
+---
+**Agent Readiness:** ${session.completeness.readyForAgent ? '✅ Ready for implementation' : '⚠️ Needs more detail'}
+**Completeness Score:** ${session.completeness.overall}%
+`.trim()
+}
+
+function formatComment(result: SynthesisResult, session: TriageSession): string {
+  const stats = [
+    `${session.answers.length} questions answered`,
+    `Completeness: ${session.completeness.overall}%`,
+  ]
+
+  if (session.completeness.missingElements.length > 0) {
+    stats.push(`Missing: ${session.completeness.missingElements.join(', ')}`)
+  }
+
+  return `🤖 **Triage completed via Ledger**
+- ${stats.join('\n- ')}
+- ${session.completeness.readyForAgent ? 'Card is ready for sprint planning' : 'Card needs additional refinement'}
+`
+}
+```
+
+### Completeness Evaluation
+
+```typescript
+// lib/plugins/notion-triage/hooks/useCardCompleteness.ts
+
+import { useState, useCallback } from 'react'
+import type { TriageCard, TriageSession, CompletenessScore, TriageAnswer } from '../types'
+
+const DIMENSION_WEIGHTS = {
+  'problem-definition': 0.25,
+  'acceptance-criteria': 0.30,
+  'technical-context': 0.20,
+  'priority-urgency': 0.15,
+  'scope-boundaries': 0.10,
+}
+
+export function useCardCompleteness() {
+  const [completeness, setCompleteness] = useState<CompletenessScore>({
+    overall: 0,
+    dimensions: {
+      problemDefinition: 0,
+      acceptanceCriteria: 0,
+      technicalContext: 0,
+      priorityUrgency: 0,
+      scopeBoundaries: 0,
+    },
+    missingElements: [],
+    readyForAgent: false,
+  })
+
+  /**
+   * Evaluate initial completeness of a card (before questions)
+   */
+  const evaluateInitial = useCallback(async (card: TriageCard): Promise<CompletenessScore> => {
+    const result = await window.conveyor.ai.analyze(
+      buildCardContext(card),
+      'card-completeness'
+    ) as CompletenessScore
+
+    setCompleteness(result)
+    return result
+  }, [])
+
+  /**
+   * Update completeness based on answered questions
+   */
+  const updateFromAnswers = useCallback((
+    answers: TriageAnswer[],
+    questions: TriageQuestion[]
+  ): CompletenessScore => {
+    // Calculate new scores based on questions answered per dimension
+    const dimensionAnswers = new Map<string, number>()
+
+    for (const answer of answers) {
+      const question = questions.find(q => q.id === answer.questionId)
+      if (question && answer.selectedOptions.length > 0) {
+        const current = dimensionAnswers.get(question.dimension) || 0
+        dimensionAnswers.set(question.dimension, current + 1)
+      }
+    }
+
+    // Recalculate scores (this is simplified - real impl would use AI)
+    const newDimensions = { ...completeness.dimensions }
+    const dimMap: Record<string, keyof typeof newDimensions> = {
+      'problem-definition': 'problemDefinition',
+      'acceptance-criteria': 'acceptanceCriteria',
+      'technical-context': 'technicalContext',
+      'priority-urgency': 'priorityUrgency',
+      'scope-boundaries': 'scopeBoundaries',
+    }
+
+    for (const [dim, count] of dimensionAnswers) {
+      const key = dimMap[dim]
+      if (key) {
+        // Each answered question adds ~15-20% to dimension score
+        newDimensions[key] = Math.min(100, newDimensions[key] + count * 18)
+      }
+    }
+
+    // Calculate weighted overall
+    const overall = Math.round(
+      newDimensions.problemDefinition * 0.25 +
+      newDimensions.acceptanceCriteria * 0.30 +
+      newDimensions.technicalContext * 0.20 +
+      newDimensions.priorityUrgency * 0.15 +
+      newDimensions.scopeBoundaries * 0.10
+    )
+
+    // Determine missing elements
+    const missingElements: string[] = []
+    if (newDimensions.problemDefinition < 60) missingElements.push('problem definition')
+    if (newDimensions.acceptanceCriteria < 60) missingElements.push('acceptance criteria')
+    if (newDimensions.technicalContext < 50) missingElements.push('technical context')
+
+    const newCompleteness: CompletenessScore = {
+      overall,
+      dimensions: newDimensions,
+      missingElements,
+      readyForAgent: overall >= 80 && missingElements.length === 0,
+    }
+
+    setCompleteness(newCompleteness)
+    return newCompleteness
+  }, [completeness])
+
+  return {
+    completeness,
+    evaluateInitial,
+    updateFromAnswers,
+  }
 }
 ```
 
