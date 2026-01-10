@@ -49,10 +49,35 @@ class AIService {
   private onSettingsChange?: (settings: AISettings) => void
 
   /**
+   * Normalize settings to preserve invariants.
+   * Invariant: defaults.models must belong to defaults.provider.
+   */
+  private normalizeSettings(settings: AISettings): AISettings {
+    const provider = settings.defaults.provider
+    const models = { ...settings.defaults.models }
+
+    ;(['quick', 'balanced', 'powerful'] as const).forEach((tier) => {
+      const modelId = models[tier]
+      const model = modelId ? getModel(modelId) : undefined
+      if (!model || model.provider !== provider) {
+        models[tier] = DEFAULT_MODELS[provider][tier]
+      }
+    })
+
+    return {
+      ...settings,
+      defaults: {
+        ...settings.defaults,
+        models,
+      },
+    }
+  }
+
+  /**
    * Initialize the service with settings and optional change callback
    */
   initialize(settings: AISettings, onSettingsChange?: (settings: AISettings) => void): void {
-    this.settings = { ...DEFAULT_AI_SETTINGS, ...settings }
+    this.settings = this.normalizeSettings({ ...DEFAULT_AI_SETTINGS, ...settings })
     this.onSettingsChange = onSettingsChange
 
     // Configure providers with stored API keys
@@ -89,7 +114,7 @@ class AIService {
    * Update settings
    */
   updateSettings(settings: Partial<AISettings>): void {
-    this.settings = { ...this.settings, ...settings }
+    this.settings = this.normalizeSettings({ ...this.settings, ...settings })
     this.configureProviders()
     this.onSettingsChange?.(this.settings)
   }
@@ -179,43 +204,8 @@ class AIService {
       // Otherwise, fall through to fallback logic
     }
 
-    // If explicit provider is provided, use default model for that provider
-    if (options.provider) {
-      if (options.provider === 'openrouter') {
-        return { modelId: DEFAULT_MODELS.openrouter.balanced, provider: 'openrouter' }
-      }
-      // Check if the explicit provider is available
-      if (this.isProviderAvailable(options.provider)) {
-        const modelId = this.settings.defaults.models.balanced
-        return { modelId, provider: options.provider }
-      }
-      // Otherwise, fall through to fallback logic
-    }
-
-    // Check if the default provider is available
-    const defaultProvider = this.settings.defaults.provider
-    if (this.isProviderAvailable(defaultProvider)) {
-      return {
-        modelId: this.settings.defaults.models.balanced,
-        provider: defaultProvider,
-      }
-    }
-
-    // Fall back to any configured provider (including OpenRouter if configured)
-    const configuredProviders = this.getConfiguredProviders()
-    if (configuredProviders.length > 0) {
-      const fallbackProvider = configuredProviders[0]
-      return {
-        modelId: DEFAULT_MODELS[fallbackProvider].balanced,
-        provider: fallbackProvider,
-      }
-    }
-
-    // Ultimate fallback: OpenRouter free tier (always available)
-    return {
-      modelId: DEFAULT_MODELS.openrouter.balanced,
-      provider: 'openrouter',
-    }
+    // Otherwise, pick the balanced-tier model respecting provider override + fallbacks
+    return this.getModelForTier('balanced', options.provider)
   }
 
   /**

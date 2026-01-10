@@ -173,7 +173,7 @@ Features:
 
 **Provider Status:**
 - `ai:get-configured-providers` - List providers with valid credentials
-- `ai:is-provider-configured` - Check specific provider availability
+- `ai:is-provider-available` - Check specific provider availability
 
 **Model Information:**
 - `ai:get-models` - Retrieve full model registry

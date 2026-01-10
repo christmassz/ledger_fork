@@ -157,7 +157,7 @@ export const aiIpcSchema = {
     args: z.tuple([]),
     return: z.array(AIProviderSchema),
   },
-  'ai:is-provider-configured': {
+  'ai:is-provider-available': {
     args: z.tuple([AIProviderSchema]),
     return: z.boolean(),
   },
