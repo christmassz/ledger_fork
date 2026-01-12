@@ -25,6 +25,7 @@ import type {
 import './styles/app.css'
 import { useWindowContext } from './components/window'
 import { useCanvas, useCanvasNavigation, useCanvasPersistence, CanvasRenderer, type CanvasData, type CanvasSelection, type CanvasHandlers, type CanvasUIState } from './components/canvas'
+import { formatRelativeTime, formatShortDate } from '@/app/utils/time'
 import {
   DiffPanel,
   CommitCreatePanel,
@@ -245,6 +246,7 @@ export default function App() {
       <button
         key="settings"
         className={`panel-toggle-btn ${isSettingsActive ? 'active' : ''}`}
+        data-testid="settings-button"
         onClick={() => {
           if (isSettingsActive) {
             // Already showing settings in Focus - toggle back to history
@@ -1316,27 +1318,7 @@ export default function App() {
   }, [canvasState.editorState.historyIndex])
 
   // Filter graph commits based on history panel filters
-  const formatDate = (dateStr?: string) => {
-    if (!dateStr) return ''
-    const date = new Date(dateStr)
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })
-  }
-
-  const formatRelativeTime = (dateStr: string) => {
-    if (!dateStr) return ''
-    const date = new Date(dateStr)
-    if (isNaN(date.getTime())) return ''
-
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-
-    if (diffDays === 0) return 'today'
-    if (diffDays === 1) return 'yesterday'
-    if (diffDays < 7) return `${diffDays}d ago`
-    if (diffDays < 30) return `${Math.floor(diffDays / 7)}w ago`
-    return `${Math.floor(diffDays / 30)}mo ago`
-  }
+  const formatDate = formatShortDate
 
   const menuItems = getMenuItems()
 
@@ -1452,6 +1434,12 @@ export default function App() {
           }}
           onOpenMailmap={() => {
             setSidebarFocus({ type: 'mailmap', data: null })
+          }}
+          onBranchClick={(branchName) => {
+            const branch = branches.find((b) => b.name === branchName)
+            if (branch) {
+              handleSidebarFocus(branch.isRemote ? 'remote' : 'branch', branch)
+            }
           }}
         />
       )
