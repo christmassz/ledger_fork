@@ -502,6 +502,7 @@ Location: `tests/validation.spec.ts`
 - Clear history action available
 
 **Statistics View:**
+- Visible when any provider is enabled (including OpenRouter free tier)
 - Total requests made
 - Total tokens consumed (input/output)
 - Total estimated cost
