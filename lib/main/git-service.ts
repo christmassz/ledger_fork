@@ -1,10 +1,65 @@
 import { simpleGit, SimpleGit } from 'simple-git'
-import { exec } from 'child_process'
+import { exec, spawn } from 'child_process'
 import { promisify } from 'util'
 import * as fs from 'fs'
 import * as path from 'path'
+import { shell } from 'electron'
 
 const execAsync = promisify(exec)
+
+/**
+ * Safe logger that won't throw EPIPE errors when stdout/stderr pipes are broken
+ * (e.g., during app shutdown or when terminal disconnects).
+ */
+function safeLog(...args: unknown[]): void {
+  try {
+    console.error(...args)
+  } catch {
+    // Ignore EPIPE and other write errors
+  }
+}
+
+/**
+ * Execute a command safely using spawn (no shell interpolation).
+ * This prevents command injection vulnerabilities.
+ */
+function spawnAsync(
+  command: string,
+  args: string[],
+  options?: { cwd?: string }
+): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(command, args, {
+      cwd: options?.cwd,
+      shell: false, // Critical: disable shell to prevent injection
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
+
+    let stdout = ''
+    let stderr = ''
+
+    proc.stdout.on('data', (data) => {
+      stdout += data.toString()
+    })
+
+    proc.stderr.on('data', (data) => {
+      stderr += data.toString()
+    })
+
+    proc.on('close', (code) => {
+      if (code === 0) {
+        resolve({ stdout, stderr })
+      } else {
+        const error = new Error(stderr || `Command failed with exit code ${code}`)
+        reject(error)
+      }
+    })
+
+    proc.on('error', (err) => {
+      reject(err)
+    })
+  })
+}
 const statAsync = promisify(fs.stat)
 
 let git: SimpleGit | null = null
@@ -1248,7 +1303,8 @@ export async function getPullRequests(): Promise<{ prs: PullRequest[]; error?: s
 // Open a PR in the browser
 export async function openPullRequest(url: string): Promise<{ success: boolean; message: string }> {
   try {
-    await execAsync(`open "${url}"`)
+    // Use shell.openExternal for safe URL opening (prevents command injection)
+    await shell.openExternal(url)
     return { success: true, message: 'Opened PR in browser' }
   } catch (error) {
     return { success: false, message: (error as Error).message }
@@ -1276,16 +1332,9 @@ export async function createPullRequest(options: {
       return { success: false, message: `Failed to push branch: ${pushResult.message}` }
     }
 
-    const args = ['pr', 'create']
-
-    // Escape single quotes in title and body for shell
-    const escapeForShell = (str: string) => str.replace(/'/g, "'\\''")
-
-    args.push('--title', `'${escapeForShell(options.title)}'`)
-
-    // Always provide body (required for non-interactive mode)
-    const body = options.body || ''
-    args.push('--body', `'${escapeForShell(body)}'`)
+    // Use spawnAsync with array arguments to prevent command injection
+    // No shell escaping needed - arguments are passed directly to the process
+    const args = ['pr', 'create', '--title', options.title, '--body', options.body || '']
 
     if (options.headBranch) {
       args.push('--head', options.headBranch)
@@ -1302,11 +1351,11 @@ export async function createPullRequest(options: {
     if (options.web) {
       // Open in browser for full editing
       args.push('--web')
-      await execAsync(`gh ${args.join(' ')}`, { cwd: repoPath })
+      await spawnAsync('gh', args, { cwd: repoPath })
       return { success: true, message: 'Opened PR creation in browser' }
     }
 
-    const { stdout } = await execAsync(`gh ${args.join(' ')}`, { cwd: repoPath })
+    const { stdout } = await spawnAsync('gh', args, { cwd: repoPath })
     const url = stdout.trim()
 
     return {
@@ -1341,6 +1390,7 @@ export async function mergePullRequest(
     return { success: false, message: 'No repository selected' }
   }
 
+  // Use spawnAsync with array arguments to prevent command injection
   const args = ['pr', 'merge', prNumber.toString()]
 
   // Add merge method (providing this explicitly avoids interactive prompts)
@@ -1353,7 +1403,7 @@ export async function mergePullRequest(
   }
 
   const runMerge = async () => {
-    await execAsync(`gh ${args.join(' ')}`, { cwd: repoPath! })
+    await spawnAsync('gh', args, { cwd: repoPath! })
   }
 
   try {
@@ -1558,7 +1608,7 @@ export async function getPRDetail(prNumber: number): Promise<PRDetail | null> {
       })),
     }
   } catch (error) {
-    console.error('Error fetching PR detail:', error)
+    safeLog('Error fetching PR detail:', error)
     return null
   }
 }
@@ -1578,7 +1628,8 @@ export async function getPRReviewComments(prNumber: number): Promise<PRReviewCom
 
     const [, owner, repo] = match
 
-    const { stdout } = await execAsync(`gh api /repos/${owner}/${repo}/pulls/${prNumber}/comments`, { cwd: repoPath })
+    // Use spawnAsync with array arguments to prevent command injection
+    const { stdout } = await spawnAsync('gh', ['api', `/repos/${owner}/${repo}/pulls/${prNumber}/comments`], { cwd: repoPath })
 
     const comments = JSON.parse(stdout)
 
@@ -1597,7 +1648,7 @@ export async function getPRReviewComments(prNumber: number): Promise<PRReviewCom
       url: c.html_url,
     }))
   } catch (error) {
-    console.error('Error fetching PR review comments:', error)
+    safeLog('Error fetching PR review comments:', error)
     return []
   }
 }
@@ -1608,10 +1659,8 @@ export async function getPRFileDiff(prNumber: number, filePath: string): Promise
 
   try {
     // gh pr diff doesn't support file filtering, so get full diff and parse
-    const { stdout: fullDiff } = await execAsync(
-      `gh pr diff ${prNumber}`,
-      { cwd: repoPath, maxBuffer: 10 * 1024 * 1024 } // 10MB buffer for large diffs
-    )
+    // Use spawnAsync with array arguments to prevent command injection
+    const { stdout: fullDiff } = await spawnAsync('gh', ['pr', 'diff', prNumber.toString()], { cwd: repoPath })
 
     // Parse the unified diff to extract just the file we want
     const lines = fullDiff.split('\n')
@@ -1637,7 +1686,7 @@ export async function getPRFileDiff(prNumber: number, filePath: string): Promise
 
     return result.length > 0 ? result.join('\n') : null
   } catch (error) {
-    console.error('Error fetching PR file diff:', error)
+    safeLog('Error fetching PR file diff:', error)
     return null
   }
 }
@@ -1654,7 +1703,7 @@ export async function getPRFileDiffParsed(prNumber: number, filePath: string): P
     // Parse the diff using the same parser as staging
     return parseDiff(rawDiff, filePath)
   } catch (error) {
-    console.error('Error fetching parsed PR file diff:', error)
+    safeLog('Error fetching parsed PR file diff:', error)
     return null
   }
 }
@@ -1666,10 +1715,9 @@ export async function commentOnPR(prNumber: number, body: string): Promise<{ suc
   }
 
   try {
-    // Escape the body for shell
-    const escapedBody = body.replace(/"/g, '\\"').replace(/`/g, '\\`').replace(/\$/g, '\\$')
-
-    await execAsync(`gh pr comment ${prNumber} --body "${escapedBody}"`, { cwd: repoPath })
+    // Use spawnAsync with array arguments to prevent command injection
+    // No shell escaping needed - arguments are passed directly to the process
+    await spawnAsync('gh', ['pr', 'comment', prNumber.toString(), '--body', body], { cwd: repoPath })
 
     return { success: true, message: 'Comment added' }
   } catch (error) {
@@ -1723,9 +1771,10 @@ export async function openBranchInGitHub(branchName: string): Promise<{ success:
 
     // Clean up branch name (remove remotes/origin/ prefix if present)
     const cleanBranch = branchName.replace(/^remotes\/origin\//, '').replace(/^origin\//, '')
-    const url = `${baseUrl}/tree/${cleanBranch}`
+    const url = `${baseUrl}/tree/${encodeURIComponent(cleanBranch)}`
 
-    await execAsync(`open "${url}"`)
+    // Use shell.openExternal for safe URL opening (prevents command injection)
+    await shell.openExternal(url)
     return { success: true, message: `Opened ${cleanBranch} in browser` }
   } catch (error) {
     return { success: false, message: (error as Error).message }
@@ -1878,7 +1927,7 @@ export async function getUncommittedFiles(): Promise<UncommittedFile[]> {
 
     return files
   } catch (error) {
-    console.error('Error getting uncommitted files:', error)
+    safeLog('Error getting uncommitted files:', error)
     return []
   }
 }
@@ -2142,7 +2191,7 @@ export async function getCommitDetails(commitHash: string): Promise<CommitDetail
       totalDeletions,
     }
   } catch (error) {
-    console.error('Error getting commit details:', error)
+    safeLog('Error getting commit details:', error)
     return null
   }
 }
@@ -2520,7 +2569,8 @@ export async function checkoutPRBranch(
 
     // Use gh pr checkout which handles fork PRs automatically
     // This is the key insight: gh knows how to fetch from the contributor's fork
-    await execAsync(`gh pr checkout ${prNumber}`, { cwd: repoPath })
+    // Use spawnAsync with array arguments to prevent command injection
+    await spawnAsync('gh', ['pr', 'checkout', prNumber.toString()], { cwd: repoPath })
 
     return {
       success: true,
@@ -3105,7 +3155,7 @@ export async function getContributorStats(
       bucketSize,
     }
   } catch (error) {
-    console.error('Error getting contributor stats:', error)
+    safeLog('Error getting contributor stats:', error)
     return {
       contributors: [],
       startDate: '',
@@ -3766,7 +3816,7 @@ export async function getBranchDiff(branchName: string, diffType: BranchDiffType
       commitCount,
     }
   } catch (error) {
-    console.error('Error getting branch diff:', error)
+    safeLog('Error getting branch diff:', error)
     return null
   }
 }
@@ -3832,7 +3882,7 @@ async function getBranchMergePreview(branchName: string, baseBranch: string, com
     }
     return result
   } catch (error) {
-    console.error('Error getting merge preview:', error)
+    safeLog('Error getting merge preview:', error)
     return null
   }
 }
@@ -4828,7 +4878,7 @@ export async function getFileContent(filePath: string): Promise<string | null> {
     const resolvedPath = path.resolve(fullPath)
     const resolvedRepo = path.resolve(repoPath)
     if (!resolvedPath.startsWith(resolvedRepo + path.sep)) {
-      console.error('Security: attempted to read file outside repository')
+      safeLog('Security: attempted to read file outside repository')
       return null
     }
 
@@ -4840,7 +4890,7 @@ export async function getFileContent(filePath: string): Promise<string | null> {
     const content = await fs.promises.readFile(fullPath, 'utf-8')
     return content
   } catch (error) {
-    console.error('Error reading file content:', error)
+    safeLog('Error reading file content:', error)
     return null
   }
 }
@@ -4975,7 +5025,7 @@ export async function getFileDiff(filePath: string, staged: boolean): Promise<St
     // Parse the diff output
     return parseDiff(diffOutput, filePath)
   } catch (error) {
-    console.error('Error getting file diff:', error)
+    safeLog('Error getting file diff:', error)
     return null
   }
 }
@@ -5191,7 +5241,7 @@ export async function getWorktreeWorkingStatus(worktreePath: string): Promise<Wo
       deletions,
     }
   } catch (error) {
-    console.error('Error getting worktree working status:', error)
+    safeLog('Error getting worktree working status:', error)
     return { hasChanges: false, files: [], stagedCount: 0, unstagedCount: 0, additions: 0, deletions: 0 }
   }
 }
@@ -5314,7 +5364,7 @@ export async function getFileDiffInWorktree(
 
     return parseDiff(diffOutput, filePath)
   } catch (error) {
-    console.error('Error getting worktree file diff:', error)
+    safeLog('Error getting worktree file diff:', error)
     return null
   }
 }
@@ -5584,7 +5634,7 @@ export async function getSiblingRepos(): Promise<RepoInfo[]> {
 
     return repos
   } catch (error) {
-    console.error('Error scanning sibling repos:', error)
+    safeLog('Error scanning sibling repos:', error)
     return []
   }
 }
