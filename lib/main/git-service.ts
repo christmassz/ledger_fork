@@ -1,11 +1,52 @@
-import { simpleGit, SimpleGit } from 'simple-git'
-import { exec, spawn } from 'child_process'
+import { simpleGit, SimpleGit, SimpleGitOptions } from 'simple-git'
+import { exec, spawn, execSync } from 'child_process'
 import { promisify } from 'util'
 import * as fs from 'fs'
 import * as path from 'path'
 import { shell } from 'electron'
 
 const execAsync = promisify(exec)
+
+/**
+ * Get the full path to the git binary.
+ * On macOS, GUI apps don't inherit shell PATH, so we need to find git explicitly.
+ */
+function getGitBinaryPath(): string {
+  // Common locations for git on macOS
+  const commonPaths = [
+    '/opt/homebrew/bin/git', // Apple Silicon Homebrew
+    '/usr/local/bin/git', // Intel Homebrew
+    '/usr/bin/git', // Xcode Command Line Tools
+  ]
+
+  for (const gitPath of commonPaths) {
+    if (fs.existsSync(gitPath)) {
+      return gitPath
+    }
+  }
+
+  // Fallback: try to find git using shell
+  try {
+    const result = execSync('/bin/sh -l -c "which git"', { encoding: 'utf-8' })
+    return result.trim()
+  } catch {
+    // Last resort: return 'git' and hope it's in PATH
+    return 'git'
+  }
+}
+
+const gitBinaryPath = getGitBinaryPath()
+
+/**
+ * Create a simple-git instance with the correct binary path.
+ */
+function createGitInstance(baseDir: string): SimpleGit {
+  const options: Partial<SimpleGitOptions> = {
+    baseDir,
+    binary: gitBinaryPath,
+  }
+  return simpleGit(options)
+}
 
 /**
  * Safe logger that won't throw EPIPE errors when stdout/stderr pipes are broken
@@ -67,7 +108,7 @@ let repoPath: string | null = null
 
 export function setRepoPath(path: string) {
   repoPath = path
-  git = simpleGit(path)
+  git = createGitInstance(path)
 }
 
 export function getRepoPath(): string | null {
@@ -85,7 +126,7 @@ export async function initializeGlobalStateSync(): Promise<void> {
   manager.setGlobalStateSyncCallback((path: string | null) => {
     if (path) {
       repoPath = path
-      git = simpleGit(path)
+      git = createGitInstance(path)
     } else {
       repoPath = null
       git = null
@@ -4321,7 +4362,7 @@ export async function applyStashToBranch(
     
     if (existingWorktree) {
       // Apply stash to existing worktree
-      const worktreeGit = simpleGit(existingWorktree.path)
+      const worktreeGit = createGitInstance(existingWorktree.path)
       await worktreeGit.raw(['stash', 'apply', stashRef])
       
       return {
@@ -4345,7 +4386,7 @@ export async function applyStashToBranch(
       await git.raw(['worktree', 'add', worktreePath, targetBranch])
       
       // Apply stash in the worktree
-      const worktreeGit = simpleGit(worktreePath)
+      const worktreeGit = createGitInstance(worktreePath)
       await worktreeGit.raw(['stash', 'apply', stashRef])
       
       // Stage all changes
@@ -5164,7 +5205,7 @@ function parseDiff(diffOutput: string, filePath: string): StagingFileDiff {
 // Get working status for a specific worktree
 export async function getWorktreeWorkingStatus(worktreePath: string): Promise<WorkingStatus> {
   try {
-    const worktreeGit = simpleGit(worktreePath)
+    const worktreeGit = createGitInstance(worktreePath)
     const status = await worktreeGit.status()
 
     const files: UncommittedFile[] = []
@@ -5252,7 +5293,7 @@ export async function stageFileInWorktree(
   filePath: string
 ): Promise<{ success: boolean; message: string }> {
   try {
-    const worktreeGit = simpleGit(worktreePath)
+    const worktreeGit = createGitInstance(worktreePath)
     await worktreeGit.add(filePath)
     return { success: true, message: `Staged ${filePath}` }
   } catch (error) {
@@ -5266,7 +5307,7 @@ export async function unstageFileInWorktree(
   filePath: string
 ): Promise<{ success: boolean; message: string }> {
   try {
-    const worktreeGit = simpleGit(worktreePath)
+    const worktreeGit = createGitInstance(worktreePath)
     await worktreeGit.raw(['restore', '--staged', filePath])
     return { success: true, message: `Unstaged ${filePath}` }
   } catch (error) {
@@ -5277,7 +5318,7 @@ export async function unstageFileInWorktree(
 // Stage all changes in a worktree
 export async function stageAllInWorktree(worktreePath: string): Promise<{ success: boolean; message: string }> {
   try {
-    const worktreeGit = simpleGit(worktreePath)
+    const worktreeGit = createGitInstance(worktreePath)
     await worktreeGit.add('-A')
     return { success: true, message: 'Staged all changes' }
   } catch (error) {
@@ -5288,7 +5329,7 @@ export async function stageAllInWorktree(worktreePath: string): Promise<{ succes
 // Unstage all changes in a worktree
 export async function unstageAllInWorktree(worktreePath: string): Promise<{ success: boolean; message: string }> {
   try {
-    const worktreeGit = simpleGit(worktreePath)
+    const worktreeGit = createGitInstance(worktreePath)
     await worktreeGit.raw(['restore', '--staged', '.'])
     return { success: true, message: 'Unstaged all changes' }
   } catch (error) {
@@ -5303,7 +5344,7 @@ export async function getFileDiffInWorktree(
   staged: boolean
 ): Promise<StagingFileDiff | null> {
   try {
-    const worktreeGit = simpleGit(worktreePath)
+    const worktreeGit = createGitInstance(worktreePath)
     const args = staged ? ['diff', '--staged', '--', filePath] : ['diff', '--', filePath]
     const diffOutput = await worktreeGit.raw(args)
 
@@ -5376,7 +5417,7 @@ export async function commitInWorktree(
   description?: string
 ): Promise<{ success: boolean; message: string }> {
   try {
-    const worktreeGit = simpleGit(worktreePath)
+    const worktreeGit = createGitInstance(worktreePath)
 
     // Check if there are staged changes
     const status = await worktreeGit.status()
@@ -5397,7 +5438,7 @@ export async function commitInWorktree(
 // Push the worktree's branch to origin
 export async function pushWorktreeBranch(worktreePath: string): Promise<{ success: boolean; message: string }> {
   try {
-    const worktreeGit = simpleGit(worktreePath)
+    const worktreeGit = createGitInstance(worktreePath)
     const branchInfo = await worktreeGit.branchLocal()
     const currentBranch = branchInfo.current
 

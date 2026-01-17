@@ -10,12 +10,40 @@ import * as fs from 'fs'
 import * as path from 'path'
 import * as https from 'https'
 import * as http from 'http'
-import simpleGit from 'simple-git'
+import simpleGit, { SimpleGitOptions } from 'simple-git'
+import { execSync } from 'child_process'
 import { safeExec, isValidNpmPackageName } from '@/lib/utils/safe-exec'
 
 // Plugin storage directory
 const PLUGINS_DIR = 'plugins'
 const REGISTRY_FILE = 'plugin-registry.json'
+
+/**
+ * Get the full path to the git binary.
+ * On macOS, GUI apps don't inherit shell PATH, so we need to find git explicitly.
+ */
+function getGitBinaryPath(): string {
+  const commonPaths = [
+    '/opt/homebrew/bin/git',
+    '/usr/local/bin/git',
+    '/usr/bin/git',
+  ]
+
+  for (const gitPath of commonPaths) {
+    if (fs.existsSync(gitPath)) {
+      return gitPath
+    }
+  }
+
+  try {
+    const result = execSync('/bin/sh -l -c "which git"', { encoding: 'utf-8' })
+    return result.trim()
+  } catch {
+    return 'git'
+  }
+}
+
+const gitBinaryPath = getGitBinaryPath()
 
 export interface PluginSource {
   type: 'builtin' | 'local' | 'git' | 'url' | 'npm'
@@ -196,7 +224,8 @@ export async function cloneRepository(
     }
 
     // Use simple-git for safe cloning (no shell interpolation)
-    const git = simpleGit()
+    const options: Partial<SimpleGitOptions> = { binary: gitBinaryPath }
+    const git = simpleGit(options)
     await git.clone(gitUrl, fullPath, ['--depth', '1'])
     return { success: true, message: 'Repository cloned successfully' }
   } catch (error) {
